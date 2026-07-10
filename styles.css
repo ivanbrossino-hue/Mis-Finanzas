@@ -168,10 +168,13 @@ input { font-family: inherit; }
 }
 
 /* Páginas dentro del canvas: solo una visible a la vez.
-   display:contents hace que sus hijos hereden el gap del flex de .canvas
-   como si no hubiera un wrapper de por medio. */
-.page-view { display: contents; }
+   Antes usaba display:contents (sin caja propia, no se puede animar). Ahora es su
+   propio flex-column con el mismo gap que tenía .canvas, así el layout no cambia
+   pero la página SÍ tiene una caja real sobre la que animar la entrada. */
+.page-view { display: flex; flex-direction: column; gap: 22px; }
 .page-view.view-hidden { display: none; }
+@keyframes pageIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.page-view.page-entrando { animation: pageIn .4s cubic-bezier(.2,.7,.3,1); }
 
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .page-head h2 { margin: 0 0 4px; font-size: 23px; font-weight: 750; letter-spacing: -.3px; }
@@ -554,6 +557,18 @@ input { font-family: inherit; }
 .deudas-table tr.flash { animation: flashPrimary 1.2s ease; }
 .k-val.bump { animation: popIn .35s ease; }
 .evo path.evo-line { transition: stroke-dashoffset .9s ease; }
+
+/* Anillo que "late" alrededor de una sección cuando saltás a ella desde el sidebar */
+@keyframes seccionPulse {
+  0% { box-shadow: 0 0 0 0 rgba(112,0,255,.55); }
+  70% { box-shadow: 0 0 0 10px rgba(112,0,255,0); }
+  100% { box-shadow: 0 0 0 0 rgba(112,0,255,0); }
+}
+.seccion-destacada { animation: seccionPulse 1s ease; }
+
+/* Indicador activo del sidebar: entra con un pequeño "pop" además del color */
+@keyframes navPop { 0% { transform: scale(.97); } 60% { transform: scale(1.015); } 100% { transform: scale(1); } }
+.side-nav a.active { animation: navPop .28s ease; }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 

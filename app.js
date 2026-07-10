@@ -348,7 +348,15 @@
     vistaActual = nombre;
     PAGINAS.forEach(function (n) {
       var el = document.getElementById('vista' + n.charAt(0).toUpperCase() + n.slice(1));
-      if (el) el.classList.toggle('view-hidden', n !== nombre);
+      if (!el) return;
+      var esNueva = n === nombre;
+      el.classList.toggle('view-hidden', !esNueva);
+      if (esNueva) {
+        // reinicia la animación de entrada aunque ya tuviera la clase de una vez anterior
+        el.classList.remove('page-entrando');
+        void el.offsetWidth;
+        el.classList.add('page-entrando');
+      }
     });
     if (nombre === 'historial') renderHistorial();
     else if (nombre === 'analiticas') renderAnaliticas();
@@ -1061,7 +1069,12 @@
       mostrarPagina('resumen');
       document.querySelectorAll('.side-nav a').forEach(function (a) { a.classList.toggle('active', a.getAttribute('data-scroll') === 'deudas'); });
       var sec = document.getElementById('deudas');
-      if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (sec) {
+        sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        sec.classList.remove('seccion-destacada');
+        void sec.offsetWidth;
+        sec.classList.add('seccion-destacada');
+      }
     });
   }
 
@@ -1569,11 +1582,16 @@
     scrollLinks.forEach(function (a) {
       a.addEventListener('click', function (e) {
         e.preventDefault();
-        if (vistaActual === 'historial') mostrarPagina('resumen'); // volver al dashboard primero
+        if (vistaActual !== 'resumen') mostrarPagina('resumen'); // volver al dashboard primero
         pageLinks.forEach(function (p) { p.classList.remove('active'); });
         navLinks.forEach(function (x) { x.classList.toggle('active', x === a); });
         var sec = document.getElementById(a.getAttribute('data-scroll'));
-        if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (sec) {
+          sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          sec.classList.remove('seccion-destacada');
+          void sec.offsetWidth;
+          sec.classList.add('seccion-destacada');
+        }
         abrirMenu(false);
       });
     });
@@ -1588,7 +1606,7 @@
 
     if ('IntersectionObserver' in window) {
       var obs = new IntersectionObserver(function (entries) {
-        if (vistaActual === 'historial') return; // no resaltar el dashboard mientras se ve Historial
+        if (vistaActual !== 'resumen') return; // no resaltar el dashboard si se está viendo otra página
         entries.forEach(function (en) {
           if (en.isIntersecting) {
             scrollLinks.forEach(function (a) { a.classList.toggle('active', a.getAttribute('data-scroll') === en.target.id); });
