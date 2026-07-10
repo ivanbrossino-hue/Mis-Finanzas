@@ -1,0 +1,62 @@
+💸  MIS FINANZAS  —  Cómo usar
+=====================================
+
+PARA ABRIR EL PROGRAMA
+----------------------
+Hacé doble clic en el archivo:  index.html
+Se abre en tu navegador (Chrome / Edge). No necesitás internet ni instalar nada.
+
+CONSEJO: para tenerlo a mano, abrí index.html y guardá la página en
+favoritos, o hacé clic derecho sobre index.html > "Enviar a" > "Escritorio
+(crear acceso directo)".
+
+
+QUÉ PODÉS HACER
+---------------
+• Arriba a la derecha cambiás de mes con las flechas ‹ ›.
+• "＋ Nuevo mes" crea el mes siguiente copiando los gastos e ingresos del
+  último mes (así no cargás de nuevo el alquiler, la luz, el monotributo, etc.).
+  Después solo ajustás lo que cambió.
+• Las tarjetas de arriba se calculan solas: cuánto entra, cuánto gastás,
+  cuánto te queda y cuánta deuda tenés.
+• El gráfico "En qué se va la plata" muestra tus gastos por categoría.
+• "Evolución mensual" compara ingresos vs. gastos de los últimos meses.
+  (Podés hacer clic en una barra para ir a ese mes.)
+
+CARGAR GASTOS E INGRESOS
+------------------------
+• En "Gastos del mes", cada categoría se abre/cierra al hacerle clic.
+• Escribí el concepto y el monto. Se guarda solo mientras escribís.
+• "＋ Agregar en <categoría>" suma una línea nueva.
+• La ✕ elimina una línea.
+
+DEUDAS Y CUOTAS
+---------------
+• Abajo de todo está la tabla de deudas (ya cargada desde tu Excel).
+• "Registrar pago" resta la cuota del saldo y avanza el contador
+  (ej: 2/5 pasa a 3/5). Cuando llega a la última, la marca como saldada. 🎉
+• "＋ Agregar deuda" para sumar una tarjeta o préstamo nuevo.
+
+
+IMPORTANTE: LA COPIA DE SEGURIDAD
+---------------------------------
+Tus datos se guardan solos DENTRO de este navegador, en esta computadora.
+Si formateás la PC, cambiás de navegador o borrás los datos de navegación,
+se pierden. Por eso, de vez en cuando:
+
+  Botón "Respaldar datos" (en el panel de arriba) o el ícono de descarga
+  (arriba a la derecha)  >  "⬇️ Descargar copia"
+
+Eso baja un archivo .json con todo. Guardalo en OneDrive o donde quieras.
+Para recuperarlo en otra compu:  Respaldar datos  >  "⬆️ Restaurar copia".
+
+
+ARCHIVOS DE ESTA CARPETA (no los borres)
+----------------------------------------
+  index.html ............ el programa (este es el que abrís)
+  styles.css ............ el diseño
+  app.js ................ la lógica y los cálculos
+  datos-iniciales.js .... tus datos precargados del Excel
+  LÉEME - Cómo usar.txt . este archivo
+
+Cualquier cosa que quieras cambiar o agregar, avisame. 🙂

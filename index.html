@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mis Finanzas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- ===== Barra lateral ===== -->
+  <aside class="sidebar">
+    <div class="side-brand">
+      <span class="side-logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 2 L14.2 9.8 L22 12 L14.2 14.2 L12 22 L9.8 14.2 L2 12 L9.8 9.8 Z" fill="currentColor"/></svg>
+      </span>
+      <div>
+        <h1>Mis Finanzas</h1>
+        <p>PERSONAL</p>
+      </div>
+    </div>
+
+    <nav class="side-nav">
+      <a href="#resumen" data-scroll="resumen" class="active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+        <span>Resumen</span>
+      </a>
+      <a href="#gastos" data-scroll="gastos">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+        <span>Gastos</span>
+      </a>
+      <a href="#ingresos" data-scroll="ingresos">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+        <span>Ingresos</span>
+      </a>
+      <a href="#deudas" data-scroll="deudas">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+        <span>Deudas</span>
+      </a>
+      <a href="#historial" data-page="historial">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l3 3"/></svg>
+        <span>Historial</span>
+      </a>
+      <a href="#analiticas" data-page="analiticas">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span>Analíticas</span>
+      </a>
+    </nav>
+
+    <div class="side-foot">
+      <button class="btn-primary side-cta" id="nuevoMesBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="18" height="18"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Nuevo mes
+      </button>
+    </div>
+  </aside>
+
+  <div class="side-backdrop" id="sideBackdrop"></div>
+
+  <!-- ===== Barra superior ===== -->
+  <header class="topbar">
+    <button class="icon-btn mobile-menu-btn" id="menuToggle" title="Menú" aria-label="Menú">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="19" height="19"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <div class="month-nav">
+      <button id="prevMonth" title="Mes anterior">‹</button>
+      <span class="month-label" id="monthLabel">—</span>
+      <button id="nextMonth" title="Mes siguiente">›</button>
+    </div>
+    <div class="topbar-right">
+      <button class="icon-btn" id="menuBtn" title="Copia de seguridad">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="19" height="19"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </button>
+      <div class="user-chip">
+        <div class="user-text"><b>Iván</b><span>Cuenta personal</span></div>
+        <div class="avatar">IB</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===== Contenido ===== -->
+  <main class="main">
+    <div class="canvas">
+    <div id="vistaResumen" class="page-view">
+
+      <!-- Hero: balance del mes + evolución -->
+      <section class="hero glass glow" id="resumen">
+        <div class="hero-left">
+          <span class="eyebrow" id="heroBalLabel">Te queda este mes</span>
+          <h2 class="hero-num" id="heroBalVal" data-raw="0">$ 0</h2>
+          <div class="hero-delta" id="heroBalDelta"></div>
+          <div class="hero-actions">
+            <button class="btn-primary" id="heroAddGasto">＋ Agregar gasto</button>
+            <button class="btn-glass" id="heroBackup">Respaldar datos</button>
+          </div>
+        </div>
+        <div class="hero-right">
+          <div class="hero-chart-head">
+            <span class="mono-label">EVOLUCIÓN — INGRESOS VS GASTOS</span>
+            <div class="chart-controls">
+              <div class="evo-toggle" id="evoToggle">
+                <button data-modo="semanal">Semanal</button>
+                <button data-modo="mensual" class="active">Mensual</button>
+                <button data-modo="anual">Anual</button>
+              </div>
+              <div class="chart-legend">
+                <span><i class="dot-ing"></i>Ingresos</span>
+                <span><i class="dot-gas"></i>Gastos</span>
+              </div>
+            </div>
+          </div>
+          <div id="evoBody" class="evo"></div>
+        </div>
+      </section>
+
+      <!-- Tarjetas de métricas -->
+      <section class="kpis" id="kpis"></section>
+
+      <!-- Gastos + (Distribución / Ingresos) -->
+      <div class="grid-main">
+        <section class="glass panel" id="gastos">
+          <div class="panel-head">
+            <h3>Gastos del mes</h3>
+            <span class="badge" id="gastosTotal"></span>
+          </div>
+          <div class="panel-body" id="gastosBody"></div>
+        </section>
+
+        <div class="col-side">
+          <section class="glass panel">
+            <div class="panel-head">
+              <h3>En qué se va la plata</h3>
+              <span class="badge" id="donutTotal"></span>
+            </div>
+            <div class="panel-body" id="donutBody"></div>
+          </section>
+
+          <section class="glass panel" id="ingresos">
+            <div class="panel-head">
+              <h3>Ingresos</h3>
+              <span class="badge" id="ingresosTotal"></span>
+            </div>
+            <div class="panel-body" id="ingresosBody"></div>
+          </section>
+        </div>
+      </div>
+
+      <!-- Deudas -->
+      <section class="glass panel" id="deudas">
+        <div class="panel-head">
+          <h3>Deudas y cuotas</h3>
+          <button class="btn-glass btn-sm" id="addDeudaBtn">＋ Agregar deuda</button>
+        </div>
+        <div class="panel-body" id="deudasBody"></div>
+      </section>
+
+      <p class="footer-note">
+        Tus datos se guardan solos en este navegador (en tu compu). Usá <b>Respaldar datos</b> cada tanto para bajar una copia.
+      </p>
+    </div>
+
+    <!-- Página de Historial (independiente del dashboard) -->
+    <div id="vistaHistorial" class="page-view view-hidden">
+      <div class="page-head">
+        <div>
+          <h2>📜 Historial</h2>
+          <p>Todos los movimientos que fuiste cargando, mes a mes.</p>
+        </div>
+      </div>
+
+      <div class="hist-toolbar glass">
+        <input type="text" id="histBuscar" placeholder="Buscar por nota, fila o producto…">
+        <select id="histFiltroMes"><option value="">Todos los meses</option></select>
+        <select id="histFiltroCat"><option value="">Todas las categorías</option></select>
+      </div>
+
+      <section class="glass panel">
+        <div class="panel-head">
+          <h3>Movimientos</h3>
+          <span class="badge" id="historialTotal"></span>
+        </div>
+        <div class="panel-body" id="historialBody"></div>
+      </section>
+    </div>
+
+    <!-- Página de Analíticas (gráficos avanzados) -->
+    <div id="vistaAnaliticas" class="page-view view-hidden">
+      <div class="page-head">
+        <div>
+          <h2>📊 Analíticas</h2>
+          <p>Cómo se mueve tu plata: flujo mensual, presupuestos y proyecciones.</p>
+        </div>
+        <button class="btn-glass btn-sm" id="exportarAnaliticasBtn">⬇ Exportar datos</button>
+      </div>
+
+      <section class="glass panel">
+        <div class="panel-head">
+          <h3>Flujo de caja mensual</h3>
+          <span class="badge" id="flujoBadge"></span>
+        </div>
+        <div class="panel-body" id="flujoBody"></div>
+      </section>
+
+      <div class="grid-main">
+        <section class="glass panel">
+          <div class="panel-head">
+            <h3>Presupuesto por categoría</h3>
+            <span class="badge" id="presupuestosBadge"></span>
+          </div>
+          <div class="panel-body" id="presupuestosBody"></div>
+        </section>
+
+        <div class="col-side">
+          <section class="glass panel">
+            <div class="panel-head">
+              <h3>Simulador de inversión</h3>
+            </div>
+            <div class="panel-body" id="simuladorBody"></div>
+          </section>
+
+          <section class="glass panel">
+            <div class="panel-head">
+              <h3>Últimos movimientos</h3>
+              <button class="btn-glass btn-sm" id="verHistorialBtn">Ver historial →</button>
+            </div>
+            <div class="panel-body" id="ultimosMovsBody"></div>
+          </section>
+        </div>
+      </div>
+
+      <div class="mini-grid">
+        <section class="glass panel mini-card">
+          <div class="panel-head"><h3>Gastos recurrentes</h3></div>
+          <div class="panel-body" id="recurrentesBody"></div>
+        </section>
+        <section class="glass panel mini-card" id="eficienciaCard">
+          <div class="panel-body eficiencia-body" id="eficienciaBody"></div>
+        </section>
+        <section class="glass panel mini-card">
+          <div class="panel-head"><h3>Cuotas pendientes</h3></div>
+          <div class="panel-body" id="pendientesBody"></div>
+        </section>
+      </div>
+    </div>
+    </div>
+  </main>
+
+  <!-- Modal -->
+  <div class="modal-back" id="modalBack">
+    <div class="modal glass" id="modal"></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <input type="file" id="importFile" accept="application/json" style="display:none">
+
+  <script src="datos-iniciales.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

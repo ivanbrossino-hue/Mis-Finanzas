@@ -1,0 +1,6 @@
+# Notas internas para trabajar con Claude Code (contexto técnico, no hace falta publicarlas)
+.claude/
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
