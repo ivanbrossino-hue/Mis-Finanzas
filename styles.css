@@ -90,9 +90,9 @@ input { font-family: inherit; }
 .side-brand { display: flex; align-items: center; gap: 11px; padding: 0 22px 30px; }
 .side-logo {
   width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center;
-  color: #fff; background: linear-gradient(150deg, var(--primary), #b23bff);
-  box-shadow: 0 6px 18px rgba(112, 0, 255, .4);
+  flex: none;
 }
+.side-logo img { width: 26px; height: 26px; object-fit: contain; filter: drop-shadow(0 2px 6px rgba(0,0,0,.35)); }
 .side-brand h1 { font-size: 18px; margin: 0; font-weight: 700; letter-spacing: -.2px; }
 .side-brand p { margin: 2px 0 0; font-family: var(--mono); font-size: 10px; letter-spacing: .22em; color: var(--text-faint); }
 
