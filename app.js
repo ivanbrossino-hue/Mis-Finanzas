@@ -409,6 +409,13 @@
           miProps = { proyecto_id: r2.data.proyecto_id, rol: r2.data.rol };
           toast('¡Te sumaste a un proyecto compartido! 🎉');
         } else {
+          // DEBUG temporal: comparar auth.uid() (visto por el mismo cliente que
+          // usa la app) contra el user.id local, justo antes del insert que falla.
+          try {
+            var dbg = await sbClient.rpc('debug_mi_uid');
+            console.log('[DEBUG] auth.uid() vs user.id', dbg.data, dbg.error, '| user.id local:', user.id);
+          } catch (eDbg) { console.log('[DEBUG] fallo el rpc de diagnóstico', eDbg); }
+
           var datosInvitado = invitadoTieneDatosPropios() ? estado : null;
           var r4 = await sbClient.from('proyectos').insert(
             datosInvitado ? { dueno_id: user.id, data: datosInvitado } : { dueno_id: user.id }
