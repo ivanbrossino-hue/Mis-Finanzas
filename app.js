@@ -327,6 +327,25 @@
     sbClient.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + window.location.pathname } });
   }
 
+  // Link de invitación (?invite=token en la URL): lo guardamos apenas se
+  // detecta, para que sobreviva el ida-y-vuelta del login con Google.
+  function capturarInviteLinkDeUrl() {
+    try {
+      var params = new URLSearchParams(location.search);
+      var tokenUrl = params.get('invite');
+      if (tokenUrl) localStorage.setItem('misFinanzas_inviteToken', tokenUrl);
+    } catch (e) {}
+  }
+  function hayInviteLinkPendiente() {
+    try { return !!localStorage.getItem('misFinanzas_inviteToken'); } catch (e) { return false; }
+  }
+  function tomarInviteLinkPendiente() {
+    var t = null;
+    try { t = localStorage.getItem('misFinanzas_inviteToken'); } catch (e) {}
+    try { localStorage.removeItem('misFinanzas_inviteToken'); } catch (e) {}
+    return t;
+  }
+
   // Compara el estado actual (ignorando ids autogenerados) contra una semilla
   // recién construida, para saber si un invitado realmente cargó datos propios
   // o si todavía está mirando los datos de ejemplo sin haberlos tocado —
@@ -360,6 +379,19 @@
         .eq('user_id', user.id).eq('estado', 'aceptado').maybeSingle();
       if (r1.error) throw r1.error;
       var miProps = r1.data;
+
+      // Si vino de un link de invitación (?invite=token, compartido por WhatsApp
+      // o cualquier otro medio), lo canjeamos antes que nada — ahí el rol y el
+      // proyecto ya están definidos por el dueño, sin importar con qué mail
+      // se haya logueado.
+      if (!miProps && hayInviteLinkPendiente()) {
+        var tokenInvite = tomarInviteLinkPendiente();
+        var rJoin = await sbClient.functions.invoke('unirse-por-link', { body: { token: tokenInvite } });
+        if (rJoin.error) throw rJoin.error;
+        if (rJoin.data && rJoin.data.error) throw new Error(rJoin.data.error);
+        miProps = { proyecto_id: rJoin.data.proyectoId, rol: rJoin.data.rol };
+        toast('¡Te sumaste al proyecto compartido! 🎉');
+      }
 
       if (!miProps) {
         var mail = (user.email || '').toLowerCase();
@@ -485,8 +517,11 @@
       '</div>' +
       '<div>' +
         '<div class="modal-actions" style="justify-content:flex-start;margin-top:-4px;flex-wrap:wrap">' +
-          '<button class="btn btn-primary btn-sm" id="cuInviteBtn">✉️ Enviar invitación</button>' +
-          '<button class="btn btn-sm" id="cuInviteWhatsapp">📱 Compartir por WhatsApp</button>' +
+          '<button class="btn btn-primary btn-sm" id="cuInviteBtn">✉️ Enviar invitación a ese mail</button>' +
+        '</div>' +
+        '<p class="sub" style="margin:10px 0 6px">O generá un link con el permiso de arriba y compartilo vos — quien lo abra elige la cuenta de Google que quiera.</p>' +
+        '<div class="modal-actions" style="justify-content:flex-start;margin-top:0">' +
+          '<button class="btn btn-sm" id="cuInviteLink">🔗 Generar link para WhatsApp</button>' +
         '</div>' +
         '<p class="sub" id="cuInviteMsg" style="min-height:16px;margin:6px 0 0"></p>' +
         '<div id="cuMiembros" style="margin-top:6px;font-size:13px;color:var(--text-mute)">Cargando compañeros…</div>' +
@@ -526,23 +561,21 @@
         });
       };
 
-      document.getElementById('cuInviteWhatsapp').onclick = function () {
-        var datos = leerDatosInvitacion(); if (!datos) return;
+      document.getElementById('cuInviteLink').onclick = function () {
+        var rol = rolEl.value;
         // Hay que abrir la pestaña YA, en el mismo click — si se abre recién
         // después de esperar la respuesta del servidor, el navegador la bloquea.
         var ventana = window.open('', '_blank');
-        msg.style.color = 'var(--text-mute)'; msg.textContent = 'Preparando invitación…';
-        crearInvitacionMiembro(datos.mail, datos.rol, false).then(function () {
+        msg.style.color = 'var(--text-mute)'; msg.textContent = 'Generando link…';
+        generarLinkInvitacion(rol).then(function (token) {
           msg.style.color = 'var(--cyan)'; msg.textContent = '¡Listo! Elegí el contacto en WhatsApp para mandarle el link.';
-          mailEl.value = '';
-          cargarMiembrosModal();
-          var link = location.origin + location.pathname;
-          var texto = 'Te invité a ver Mis Finanzas conmigo 💜 Entrá con tu cuenta de Google (' + datos.mail + ') acá: ' + link;
+          var link = location.origin + location.pathname + '?invite=' + token;
+          var texto = 'Te invité a ver Mis Finanzas conmigo 💜 Entrá acá y elegí con qué cuenta de Google conectarte: ' + link;
           if (ventana) ventana.location.href = 'https://wa.me/?text=' + encodeURIComponent(texto);
         }).catch(function (e) {
           if (ventana) ventana.close();
           msg.style.color = 'var(--danger)';
-          msg.textContent = 'No se pudo preparar la invitación (' + (e && e.message ? e.message : 'error') + ')';
+          msg.textContent = 'No se pudo generar el link (' + (e && e.message ? e.message : 'error') + ')';
         });
       };
     }
@@ -553,6 +586,18 @@
       if (res.error) throw res.error;
       if (res.data && res.data.error) throw new Error(res.data.error);
       return res.data;
+    });
+  }
+
+  // El link no requiere el mail del invitado: elige su propia cuenta de
+  // Google al abrirlo, así que esto solo necesita crear el token con el
+  // rol ya definido (inserción directa, sin pasar por una Edge Function).
+  function generarLinkInvitacion(rol) {
+    return sbClient.from('invitaciones_link').insert({
+      proyecto_id: miProyectoId, rol: rol, creado_por: miUsuario.id
+    }).select('token').single().then(function (res) {
+      if (res.error) throw res.error;
+      return res.data.token;
     });
   }
 
@@ -581,11 +626,18 @@
   // cliente de Supabase (cargado por CDN) está disponible.
   function iniciarAuth() {
     if (!esHosteado() || !window.supabase) return;
+    capturarInviteLinkDeUrl();
     var yaEligioInvitado = false;
     try { yaEligioInvitado = localStorage.getItem('misFinanzas_invitado') === '1'; } catch (e) {}
+    var tieneInviteLink = hayInviteLinkPendiente();
+    if (tieneInviteLink) {
+      var msgEl = document.getElementById('loginGateMsg');
+      if (msgEl) msgEl.textContent = 'Te invitaron a un proyecto compartido — elegí con qué cuenta de Google querés conectarte.';
+    }
     // Si ya había elegido "invitado" antes, no tapamos el dashboard de nuevo —
-    // solo lo hacemos mientras no sepamos si hay sesión real o no.
-    if (!yaEligioInvitado) mostrarLoginGate(true);
+    // salvo que ahora venga con un link de invitación, ahí preferimos mostrarle
+    // el login para que pueda unirse al proyecto compartido.
+    if (!yaEligioInvitado || tieneInviteLink) mostrarLoginGate(true);
     sbClient = window.supabase.createClient(CUENTA_URL, CUENTA_ANON_KEY);
 
     sbClient.auth.onAuthStateChange(function (event, session) {
@@ -609,7 +661,7 @@
         mostrarLoginGate(false);
         actualizarChipUsuario(session.user);
         bootstrapProyecto(session.user);
-      } else if (yaEligioInvitado) {
+      } else if (yaEligioInvitado && !tieneInviteLink) {
         mostrarLoginGate(false);
         mostrarBotonVincular(true);
       } else {
