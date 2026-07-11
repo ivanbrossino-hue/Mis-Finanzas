@@ -22,7 +22,8 @@
         <svg viewBox="0 0 24 24" width="18" height="18"><path fill="#4285F4" d="M23.52 12.27c0-.85-.08-1.66-.22-2.45H12v4.63h6.48c-.28 1.5-1.13 2.78-2.4 3.63v3.02h3.89c2.28-2.1 3.55-5.2 3.55-8.83z"/><path fill="#34A853" d="M12 24c3.24 0 5.96-1.08 7.94-2.9l-3.89-3.02c-1.08.72-2.45 1.15-4.05 1.15-3.12 0-5.76-2.1-6.7-4.93H1.28v3.1C3.25 21.3 7.28 24 12 24z"/><path fill="#FBBC05" d="M5.3 14.3c-.24-.72-.38-1.49-.38-2.3s.14-1.58.38-2.3V6.6H1.28C.47 8.24 0 10.06 0 12s.47 3.76 1.28 5.4z"/><path fill="#EA4335" d="M12 4.77c1.76 0 3.34.6 4.58 1.79l3.44-3.44C17.95 1.19 15.24 0 12 0 7.28 0 3.25 2.7 1.28 6.6l4.02 3.1C6.24 6.87 8.88 4.77 12 4.77z"/></svg>
         Iniciar sesión con Google
       </button>
-      <p class="login-note">Se guarda solo tras iniciar sesión — sin contraseñas que recordar.</p>
+      <button class="btn-invitado" id="loginInvitadoBtn" type="button">Continuar como invitado</button>
+      <p class="login-note">Con Google, tus datos siguen a cualquier dispositivo. Como invitado quedan solo en este — podés vincularlos a tu cuenta más adelante.</p>
     </div>
   </div>
 
@@ -90,6 +91,7 @@
       <button class="icon-btn" id="menuBtn" title="Copia de seguridad">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="19" height="19"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       </button>
+      <button class="btn-conectar-google" id="conectarGoogleBtn" type="button" style="display:none">Vincular con Google</button>
       <div class="user-chip" id="userChip">
         <div class="user-text"><b id="userNombre">Invitado</b><span id="userSub">Modo local</span></div>
         <div class="avatar" id="userAvatar">?</div>

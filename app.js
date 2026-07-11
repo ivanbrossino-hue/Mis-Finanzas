@@ -313,6 +313,42 @@
     var g = document.getElementById('loginGate');
     if (g) g.style.display = mostrar ? 'flex' : 'none';
   }
+  function mostrarBotonVincular(mostrar) {
+    var b = document.getElementById('conectarGoogleBtn');
+    if (b) b.style.display = mostrar ? '' : 'none';
+  }
+  function entrarComoInvitado() {
+    try { localStorage.setItem('misFinanzas_invitado', '1'); } catch (e) {}
+    mostrarLoginGate(false);
+    mostrarBotonVincular(true);
+  }
+  function iniciarLoginGoogle() {
+    sbClient.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + window.location.pathname } });
+  }
+
+  // Compara el estado actual (ignorando ids autogenerados) contra una semilla
+  // recién construida, para saber si un invitado realmente cargó datos propios
+  // o si todavía está mirando los datos de ejemplo sin haberlos tocado —
+  // así al vincular con Google no le mandamos datos de muestra a su cuenta real.
+  function huellaEstado(st) {
+    var claves = Object.keys(st.meses || {}).sort();
+    return JSON.stringify({
+      meses: claves.map(function (k) {
+        var m = st.meses[k] || {};
+        return {
+          k: k,
+          ingresos: (m.ingresos || []).map(function (i) { return [i.nombre, i.monto]; }),
+          gastos: (m.gastos || []).map(function (g) { return [g.categoria, g.nombre, g.monto]; })
+        };
+      }),
+      deudas: (st.deudas || []).map(function (d) {
+        return [d.nombre, d.saldo, d.cuotaActual, d.cuotaTotal, d.cuotaMensual, d.activa];
+      })
+    });
+  }
+  function invitadoTieneDatosPropios() {
+    return huellaEstado(estado) !== huellaEstado(construirDesdeSemilla());
+  }
 
   // Decide a qué proyecto pertenece este usuario (el propio, uno al que lo
   // invitaron, o le crea uno nuevo si es la primera vez que entra) y carga
@@ -337,13 +373,17 @@
           miProps = { proyecto_id: r2.data.proyecto_id, rol: r2.data.rol };
           toast('¡Te sumaste a un proyecto compartido! 🎉');
         } else {
-          var r4 = await sbClient.from('proyectos').insert({ dueno_id: user.id }).select('id').single();
+          var datosInvitado = invitadoTieneDatosPropios() ? estado : null;
+          var r4 = await sbClient.from('proyectos').insert(
+            datosInvitado ? { dueno_id: user.id, data: datosInvitado } : { dueno_id: user.id }
+          ).select('id').single();
           if (r4.error) throw r4.error;
           var r5 = await sbClient.from('miembros').insert({
             proyecto_id: r4.data.id, user_id: user.id, email: mail, rol: 'dueno', estado: 'aceptado'
           });
           if (r5.error) throw r5.error;
           miProps = { proyecto_id: r4.data.id, rol: 'dueno' };
+          if (datosInvitado) toast('Tus datos de invitado se vincularon a tu cuenta ✅');
         }
       }
 
@@ -404,7 +444,12 @@
     var meta = user.user_metadata || {};
     var nombre = meta.full_name || meta.name || (user.email || '').split('@')[0] || 'Usuario';
     var avatarUrl = meta.avatar_url || meta.picture;
-    var rolTxt = miRol === 'dueno' ? 'Dueño del proyecto' : (miRol === 'editor' ? 'Colaborador (edición)' : 'Colaborador (solo lectura)');
+    // Mientras no sepamos el rol (bootstrapProyecto todavía no terminó, o falló),
+    // mostramos un texto genérico — igual confirma que la sesión de Google está activa.
+    var rolTxt = miRol === 'dueno' ? 'Dueño del proyecto'
+      : miRol === 'editor' ? 'Colaborador (edición)'
+      : miRol === 'lector' ? 'Colaborador (solo lectura)'
+      : 'Cuenta Google';
     var elNombre = document.getElementById('userNombre'); if (elNombre) elNombre.textContent = nombre;
     var elSub = document.getElementById('userSub'); if (elSub) elSub.textContent = rolTxt;
     var avatarEl = document.getElementById('userAvatar');
@@ -417,6 +462,7 @@
   }
 
   function cerrarSesionCuenta() {
+    try { localStorage.removeItem('misFinanzas_invitado'); } catch (e) {}
     sbClient.auth.signOut().then(function () { location.reload(); });
   }
 
@@ -424,13 +470,20 @@
   // cliente de Supabase (cargado por CDN) está disponible.
   function iniciarAuth() {
     if (!esHosteado() || !window.supabase) return;
-    mostrarLoginGate(true); // tapamos el dashboard hasta confirmar si hay sesión
+    var yaEligioInvitado = false;
+    try { yaEligioInvitado = localStorage.getItem('misFinanzas_invitado') === '1'; } catch (e) {}
+    // Si ya había elegido "invitado" antes, no tapamos el dashboard de nuevo —
+    // solo lo hacemos mientras no sepamos si hay sesión real o no.
+    if (!yaEligioInvitado) mostrarLoginGate(true);
     sbClient = window.supabase.createClient(CUENTA_URL, CUENTA_ANON_KEY);
 
     sbClient.auth.onAuthStateChange(function (event, session) {
       if (event === 'SIGNED_IN' && session && !modoCuenta) {
         modoCuenta = true;
+        try { localStorage.removeItem('misFinanzas_invitado'); } catch (e) {}
         mostrarLoginGate(false);
+        mostrarBotonVincular(false);
+        actualizarChipUsuario(session.user);
         bootstrapProyecto(session.user);
       } else if (event === 'SIGNED_OUT') {
         modoCuenta = false;
@@ -443,16 +496,22 @@
       if (session) {
         modoCuenta = true;
         mostrarLoginGate(false);
+        actualizarChipUsuario(session.user);
         bootstrapProyecto(session.user);
+      } else if (yaEligioInvitado) {
+        mostrarLoginGate(false);
+        mostrarBotonVincular(true);
       } else {
         mostrarLoginGate(true);
       }
     });
 
     var loginBtn = document.getElementById('loginGoogleBtn');
-    if (loginBtn) loginBtn.onclick = function () {
-      sbClient.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + window.location.pathname } });
-    };
+    if (loginBtn) loginBtn.onclick = iniciarLoginGoogle;
+    var invitadoBtn = document.getElementById('loginInvitadoBtn');
+    if (invitadoBtn) invitadoBtn.onclick = entrarComoInvitado;
+    var vincularBtn = document.getElementById('conectarGoogleBtn');
+    if (vincularBtn) vincularBtn.onclick = iniciarLoginGoogle;
     var salirBtn = document.getElementById('cerrarSesionBtn');
     if (salirBtn) salirBtn.onclick = cerrarSesionCuenta;
   }

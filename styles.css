@@ -625,6 +625,18 @@ input { font-family: inherit; }
 }
 .btn-google:hover { filter: brightness(.96); }
 .btn-google:active { transform: translateY(1px); }
+.btn-invitado {
+  width: 100%; margin-top: 10px; background: transparent; color: var(--text-soft);
+  font-weight: 600; font-size: 13.5px; border: 1px solid var(--border); border-radius: 10px;
+  padding: 11px 18px; transition: background .15s, border-color .15s;
+}
+.btn-invitado:hover { background: var(--panel-2); border-color: var(--rim); }
 .login-error { color: var(--neg); font-size: 12.5px; margin-top: 12px; min-height: 16px; }
 
 #cerrarSesionBtn { margin-left: 4px; }
+.btn-conectar-google {
+  background: var(--primary-soft); color: var(--primary-lite); font-weight: 650; font-size: 12.5px;
+  border: 1px solid rgba(112, 0, 255, .35); border-radius: 999px; padding: 7px 14px;
+  white-space: nowrap; transition: background .15s;
+}
+.btn-conectar-google:hover { background: rgba(112, 0, 255, .26); }
