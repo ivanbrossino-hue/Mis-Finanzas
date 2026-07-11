@@ -54,6 +54,20 @@
   var guardandoNube = false;
   var guardarNubeTimer = null;
 
+  // ---- Cuenta con Google (login real, un proyecto por persona) ----
+  // Solo se activa en la versión hosteada (http/https) — el archivo local
+  // (file://) sigue funcionando como siempre, con la nube manual de arriba.
+  const CUENTA_URL = 'https://iivjrpfkwkxgxzgyzrvq.supabase.co';
+  const CUENTA_ANON_KEY = 'sb_publishable_T4yeLPNAAbleawDltkBKBg_Qu25uS4i';
+  var sbClient = null;
+  var modoCuenta = false;           // true si estamos logueados con Google
+  var miProyectoId = null;
+  var miRol = null;                 // 'dueno' | 'editor' | 'lector'
+  var cuentaRev = -1;
+  var cuentaPollTimer = null;
+  var guardandoCuenta = false;
+  var guardarCuentaTimer = null;
+
   // ---------- Utilidades ----------
   function uid() { return 'id' + Math.floor((performance.now() * 1000) % 1e9) + '' + (uid._c = (uid._c || 0) + 1); }
 
@@ -145,7 +159,11 @@
   function guardar() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(estado)); }
     catch (e) { console.error('No se pudo guardar', e); }
-    if (nubeActiva()) {
+    if (modoCuenta) {
+      if (miRol === 'lector') return; // solo lectura: nunca escribe al proyecto compartido
+      clearTimeout(guardarCuentaTimer);
+      guardarCuentaTimer = setTimeout(guardarEnProyecto, 800);
+    } else if (nubeActiva()) {
       clearTimeout(guardarNubeTimer);
       guardarNubeTimer = setTimeout(nubeGuardar, 800); // subida con leve retraso
     }
@@ -281,6 +299,162 @@
   function actualizarIndicadorNube(ok) {
     var b = document.getElementById('menuBtn');
     if (b) b.classList.toggle('conectado', nubeActiva() && ok !== false);
+  }
+
+  // ============================================================
+  //  CUENTA CON GOOGLE — login real, un proyecto compartido por persona
+  //  Solo corre en la versión hosteada (http/https). El archivo local
+  //  (file://) ignora todo esto y sigue funcionando como siempre.
+  // ============================================================
+  function esHosteado() {
+    return location.protocol === 'http:' || location.protocol === 'https:';
+  }
+  function mostrarLoginGate(mostrar) {
+    var g = document.getElementById('loginGate');
+    if (g) g.style.display = mostrar ? 'flex' : 'none';
+  }
+
+  // Decide a qué proyecto pertenece este usuario (el propio, uno al que lo
+  // invitaron, o le crea uno nuevo si es la primera vez que entra) y carga
+  // sus datos reales, reemplazando lo que hubiera local/de semilla.
+  async function bootstrapProyecto(user) {
+    try {
+      var r1 = await sbClient.from('miembros').select('proyecto_id,rol')
+        .eq('user_id', user.id).eq('estado', 'aceptado').maybeSingle();
+      if (r1.error) throw r1.error;
+      var miProps = r1.data;
+
+      if (!miProps) {
+        var mail = (user.email || '').toLowerCase();
+        var r2 = await sbClient.from('miembros').select('id,proyecto_id,rol')
+          .eq('email', mail).eq('estado', 'pendiente').is('user_id', null).maybeSingle();
+        if (r2.error) throw r2.error;
+
+        if (r2.data) {
+          var r3 = await sbClient.from('miembros')
+            .update({ user_id: user.id, estado: 'aceptado' }).eq('id', r2.data.id);
+          if (r3.error) throw r3.error;
+          miProps = { proyecto_id: r2.data.proyecto_id, rol: r2.data.rol };
+          toast('¡Te sumaste a un proyecto compartido! 🎉');
+        } else {
+          var r4 = await sbClient.from('proyectos').insert({ dueno_id: user.id }).select('id').single();
+          if (r4.error) throw r4.error;
+          var r5 = await sbClient.from('miembros').insert({
+            proyecto_id: r4.data.id, user_id: user.id, email: mail, rol: 'dueno', estado: 'aceptado'
+          });
+          if (r5.error) throw r5.error;
+          miProps = { proyecto_id: r4.data.id, rol: 'dueno' };
+        }
+      }
+
+      miProyectoId = miProps.proyecto_id;
+      miRol = miProps.rol;
+
+      var r6 = await sbClient.from('proyectos').select('data,rev').eq('id', miProyectoId).single();
+      if (r6.error) throw r6.error;
+
+      estado = r6.data.data;
+      if (!estado.deudas) estado.deudas = [];
+      if (!estado.catNombres) estado.catNombres = {};
+      if (!estado.presupuestos) estado.presupuestos = {};
+      cuentaRev = r6.data.rev;
+      mesActivo = asegurarMesActual();
+      render(true);
+      actualizarChipUsuario(user);
+      iniciarPollProyectoCuenta();
+    } catch (e) {
+      console.error('bootstrapProyecto', e);
+      toast('No se pudo cargar tu proyecto — recargá la página para reintentar.');
+    }
+  }
+
+  function guardarEnProyecto() {
+    if (!modoCuenta || !miProyectoId || guardandoCuenta || miRol === 'lector') return;
+    guardandoCuenta = true;
+    cuentaRev = (cuentaRev < 0 ? 0 : cuentaRev) + 1;
+    sbClient.from('proyectos').update({
+      data: estado, rev: cuentaRev, updated_by: 'app', updated_at: new Date().toISOString()
+    }).eq('id', miProyectoId).then(function (res) {
+      if (res.error) console.warn('guardarEnProyecto: no se pudo guardar', res.error);
+      guardandoCuenta = false;
+    });
+  }
+
+  function iniciarPollProyectoCuenta() {
+    if (cuentaPollTimer) clearInterval(cuentaPollTimer);
+    cuentaPollTimer = setInterval(function () {
+      if (!modoCuenta || !miProyectoId || guardandoCuenta) return;
+      sbClient.from('proyectos').select('rev').eq('id', miProyectoId).single().then(function (res) {
+        if (res.error || !res.data || res.data.rev <= cuentaRev) return;
+        var ae = document.activeElement;
+        if (ae && /INPUT|SELECT|TEXTAREA/.test(ae.tagName)) return;
+        sbClient.from('proyectos').select('data,rev').eq('id', miProyectoId).single().then(function (res2) {
+          if (res2.error || !res2.data) return;
+          estado = res2.data.data; cuentaRev = res2.data.rev;
+          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(estado)); } catch (e) {}
+          if (!estado.meses[mesActivo]) mesActivo = mesesOrdenados().slice(-1)[0];
+          render(true);
+          toast('Actualizado ☁️');
+        });
+      });
+    }, 5000);
+  }
+
+  function actualizarChipUsuario(user) {
+    var meta = user.user_metadata || {};
+    var nombre = meta.full_name || meta.name || (user.email || '').split('@')[0] || 'Usuario';
+    var avatarUrl = meta.avatar_url || meta.picture;
+    var rolTxt = miRol === 'dueno' ? 'Dueño del proyecto' : (miRol === 'editor' ? 'Colaborador (edición)' : 'Colaborador (solo lectura)');
+    var elNombre = document.getElementById('userNombre'); if (elNombre) elNombre.textContent = nombre;
+    var elSub = document.getElementById('userSub'); if (elSub) elSub.textContent = rolTxt;
+    var avatarEl = document.getElementById('userAvatar');
+    if (avatarEl) {
+      if (avatarUrl) avatarEl.innerHTML = '<img src="' + escapeAttr(avatarUrl) + '" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover">';
+      else avatarEl.textContent = nombre.slice(0, 2).toUpperCase();
+    }
+    var salirBtn = document.getElementById('cerrarSesionBtn');
+    if (salirBtn) salirBtn.style.display = '';
+  }
+
+  function cerrarSesionCuenta() {
+    sbClient.auth.signOut().then(function () { location.reload(); });
+  }
+
+  // Punto de entrada: arranca el login solo si la app corre hosteada y el
+  // cliente de Supabase (cargado por CDN) está disponible.
+  function iniciarAuth() {
+    if (!esHosteado() || !window.supabase) return;
+    mostrarLoginGate(true); // tapamos el dashboard hasta confirmar si hay sesión
+    sbClient = window.supabase.createClient(CUENTA_URL, CUENTA_ANON_KEY);
+
+    sbClient.auth.onAuthStateChange(function (event, session) {
+      if (event === 'SIGNED_IN' && session && !modoCuenta) {
+        modoCuenta = true;
+        mostrarLoginGate(false);
+        bootstrapProyecto(session.user);
+      } else if (event === 'SIGNED_OUT') {
+        modoCuenta = false;
+        mostrarLoginGate(true);
+      }
+    });
+
+    sbClient.auth.getSession().then(function (res) {
+      var session = res.data && res.data.session;
+      if (session) {
+        modoCuenta = true;
+        mostrarLoginGate(false);
+        bootstrapProyecto(session.user);
+      } else {
+        mostrarLoginGate(true);
+      }
+    });
+
+    var loginBtn = document.getElementById('loginGoogleBtn');
+    if (loginBtn) loginBtn.onclick = function () {
+      sbClient.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + window.location.pathname } });
+    };
+    var salirBtn = document.getElementById('cerrarSesionBtn');
+    if (salirBtn) salirBtn.onclick = cerrarSesionCuenta;
   }
 
   // ---------- Cálculos ----------
@@ -1626,6 +1800,8 @@
     });
     var histBuscar = document.getElementById('histBuscar');
     if (histBuscar) histBuscar.addEventListener('input', function () { renderHistorial(); });
+
+    iniciarAuth(); // no hace nada si es el archivo local (file://)
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
