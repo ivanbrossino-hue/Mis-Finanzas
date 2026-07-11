@@ -446,7 +446,7 @@
       iniciarPollProyectoCuenta();
     } catch (e) {
       console.error('bootstrapProyecto', e);
-      toast('No se pudo cargar tu proyecto — recargá la página para reintentar.');
+      toast((e && e.message) || 'No se pudo cargar tu proyecto — recargá la página para reintentar.');
     } finally {
       bootstrapEnCurso = false;
     }

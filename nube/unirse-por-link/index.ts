@@ -57,6 +57,40 @@ Deno.serve(async (req) => {
       return json({ error: "el link de invitación venció" }, 410);
     }
 
+    // El esquema solo permite un proyecto por persona (unique en miembros.user_id).
+    // Si esta cuenta ya tiene uno propio pero nunca lo llegó a usar (típico: entró
+    // "por las dudas" antes de recibir la invitación real), lo reemplazamos por el
+    // compartido en vez de bloquear la invitación con un error confuso.
+    const propioRes = await fetch(
+      `${SB_URL}/rest/v1/miembros?user_id=eq.${caller.id}&estado=eq.aceptado&select=id,proyecto_id,rol`,
+      { headers: headersServicio() },
+    );
+    const propios = propioRes.ok ? await propioRes.json() : [];
+    const propio = propios[0];
+    if (propio) {
+      if (propio.proyecto_id === link.proyecto_id) {
+        return json({ error: "ya formás parte de este proyecto" }, 400);
+      }
+      if (propio.rol !== "dueno") {
+        return json({ error: "ya sos colaborador de otro proyecto — salí de ese primero para poder unirte a este" }, 409);
+      }
+      const viejoRes = await fetch(
+        `${SB_URL}/rest/v1/proyectos?id=eq.${propio.proyecto_id}&select=rev`,
+        { headers: headersServicio() },
+      );
+      const viejos = viejoRes.ok ? await viejoRes.json() : [];
+      const untocado = viejos[0] && viejos[0].rev === 0;
+      if (!untocado) {
+        return json({ error: "ya tenés tu propio proyecto con datos cargados — no te podés unir a otro sin perderlos" }, 409);
+      }
+      // Proyecto propio nunca usado: lo borramos (cascada se lleva la fila de miembros)
+      // y seguimos con la invitación como si fuera la primera vez.
+      await fetch(`${SB_URL}/rest/v1/proyectos?id=eq.${propio.proyecto_id}`, {
+        method: "DELETE",
+        headers: headersServicio(),
+      });
+    }
+
     // Sumarlo como miembro del proyecto con el rol que definió el dueño.
     const miembroRes = await fetch(`${SB_URL}/rest/v1/miembros`, {
       method: "POST",
@@ -71,7 +105,6 @@ Deno.serve(async (req) => {
     });
     if (!miembroRes.ok) {
       const t = await miembroRes.text();
-      // El esquema solo permite un proyecto por usuario (unique en user_id).
       if (/duplicate key|unique/i.test(t)) {
         return json({ error: "esa cuenta de Google ya pertenece a otro proyecto de Mis Finanzas" }, 409);
       }
