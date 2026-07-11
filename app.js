@@ -1939,7 +1939,11 @@
   function init() {
     cargar();
     cargarNubeCfg();
-    if (nubeActiva()) {
+    // La nube manual (para el bot de Telegram) es cosa de la app de escritorio
+    // (file://) — en la versión hosteada todo pasa por la cuenta de Google, así
+    // que ignoramos cualquier config de nube vieja para no mezclar datos de un
+    // registro compartido con los de cada cuenta.
+    if (nubeActiva() && !esHosteado()) {
       // con nube: mostramos el mes actual provisorio y dejamos que nubeConectar
       // baje los datos reales antes de crear/guardar nada (para no pisar la nube)
       mesActivo = mesActualKey();
