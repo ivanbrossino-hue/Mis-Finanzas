@@ -413,7 +413,8 @@
           // usa la app) contra el user.id local, justo antes del insert que falla.
           try {
             var dbg = await sbClient.rpc('debug_mi_uid');
-            console.log('[DEBUG] auth.uid() vs user.id', dbg.data, dbg.error, '| user.id local:', user.id);
+            var dbgUid = dbg.data && dbg.data.auth_uid;
+            console.log('[DEBUG] auth_uid=' + dbgUid + ' | user.id=' + user.id + ' | coinciden=' + (dbgUid === user.id) + ' | rpc_error=' + JSON.stringify(dbg.error));
           } catch (eDbg) { console.log('[DEBUG] fallo el rpc de diagnóstico', eDbg); }
 
           var datosInvitado = invitadoTieneDatosPropios() ? estado : null;
