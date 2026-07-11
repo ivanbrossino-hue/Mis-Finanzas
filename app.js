@@ -373,7 +373,10 @@
   // Decide a qué proyecto pertenece este usuario (el propio, uno al que lo
   // invitaron, o le crea uno nuevo si es la primera vez que entra) y carga
   // sus datos reales, reemplazando lo que hubiera local/de semilla.
+  var bootstrapEnCurso = false;
   async function bootstrapProyecto(user) {
+    if (bootstrapEnCurso) return; // ya se está resolviendo, evita crear proyectos duplicados
+    bootstrapEnCurso = true;
     try {
       var r1 = await sbClient.from('miembros').select('proyecto_id,rol')
         .eq('user_id', user.id).eq('estado', 'aceptado').maybeSingle();
@@ -438,6 +441,8 @@
     } catch (e) {
       console.error('bootstrapProyecto', e);
       toast('No se pudo cargar tu proyecto — recargá la página para reintentar.');
+    } finally {
+      bootstrapEnCurso = false;
     }
   }
 
@@ -656,11 +661,17 @@
 
     sbClient.auth.getSession().then(function (res) {
       var session = res.data && res.data.session;
-      if (session) {
+      // El evento SIGNED_IN de arriba puede haber llegado primero y ya haber
+      // arrancado todo esto — sin este chequeo, bootstrapProyecto se dispara
+      // dos veces en simultáneo justo después del login y las dos peticiones
+      // de creación de proyecto se pisan entre sí.
+      if (session && !modoCuenta) {
         modoCuenta = true;
         mostrarLoginGate(false);
         actualizarChipUsuario(session.user);
         bootstrapProyecto(session.user);
+      } else if (session) {
+        // ya se está resolviendo por el otro camino, no hacer nada
       } else if (yaEligioInvitado && !tieneInviteLink) {
         mostrarLoginGate(false);
         mostrarBotonVincular(true);
