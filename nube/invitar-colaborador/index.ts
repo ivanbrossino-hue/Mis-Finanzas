@@ -49,6 +49,11 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const email = String(body.email || "").trim().toLowerCase();
     const rol = String(body.rol || "editor");
+    // Por mail (default) manda el mail real de invitación. Por WhatsApp
+    // (enviarMail:false) solo deja la fila pendiente lista — el link lo
+    // comparte el propio dueño y el mail solo sirve para identificar con
+    // qué cuenta de Google tiene que entrar el invitado.
+    const enviarMail = body.enviarMail !== false;
     if (!email || !["editor", "lector"].includes(rol)) {
       return json({ error: "faltan datos (email y rol válido: editor|lector)" }, 400);
     }
@@ -77,26 +82,29 @@ Deno.serve(async (req) => {
       return json({ error: "no se pudo crear la invitación", detalle: t }, 500);
     }
 
-    // Mandar el mail de invitación real (Supabase Auth Admin API).
-    const inviteRes = await fetch(`${SB_URL}/auth/v1/invite`, {
-      method: "POST",
-      headers: headersServicio(),
-      body: JSON.stringify({
-        email,
-        data: { invitado_a_proyecto: proyectoId, rol },
-      }),
-    });
-    if (!inviteRes.ok) {
-      const t = await inviteRes.text();
-      // Si ya existe como usuario (invite falla con "already registered"), no es un
-      // error real: esa persona ya tiene cuenta y va a ver la invitación pendiente
-      // apenas inicie sesión normalmente.
-      if (!/already/i.test(t)) {
-        console.error("invite fallo:", inviteRes.status, t);
+    // Mandar el mail de invitación real (Supabase Auth Admin API) — se
+    // salta cuando la invitación se va a compartir por otro medio (WhatsApp).
+    if (enviarMail) {
+      const inviteRes = await fetch(`${SB_URL}/auth/v1/invite`, {
+        method: "POST",
+        headers: headersServicio(),
+        body: JSON.stringify({
+          email,
+          data: { invitado_a_proyecto: proyectoId, rol },
+        }),
+      });
+      if (!inviteRes.ok) {
+        const t = await inviteRes.text();
+        // Si ya existe como usuario (invite falla con "already registered"), no es un
+        // error real: esa persona ya tiene cuenta y va a ver la invitación pendiente
+        // apenas inicie sesión normalmente.
+        if (!/already/i.test(t)) {
+          console.error("invite fallo:", inviteRes.status, t);
+        }
       }
     }
 
-    return json({ ok: true, proyectoId, email, rol });
+    return json({ ok: true, proyectoId, email, rol, enviarMail });
   } catch (e) {
     console.error(e);
     return json({ error: String(e) }, 500);

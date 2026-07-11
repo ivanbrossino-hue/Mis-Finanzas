@@ -484,8 +484,9 @@
         '</select></div>' +
       '</div>' +
       '<div>' +
-        '<div class="modal-actions" style="justify-content:flex-start;margin-top:-4px">' +
+        '<div class="modal-actions" style="justify-content:flex-start;margin-top:-4px;flex-wrap:wrap">' +
           '<button class="btn btn-primary btn-sm" id="cuInviteBtn">✉️ Enviar invitación</button>' +
+          '<button class="btn btn-sm" id="cuInviteWhatsapp">📱 Compartir por WhatsApp</button>' +
         '</div>' +
         '<p class="sub" id="cuInviteMsg" style="min-height:16px;margin:6px 0 0"></p>' +
         '<div id="cuMiembros" style="margin-top:6px;font-size:13px;color:var(--text-mute)">Cargando compañeros…</div>' +
@@ -502,17 +503,21 @@
 
     if (miRol === 'dueno') {
       cargarMiembrosModal();
-      document.getElementById('cuInviteBtn').onclick = function () {
-        var mailEl = document.getElementById('cuInviteMail');
+      var mailEl = document.getElementById('cuInviteMail');
+      var rolEl = document.getElementById('cuInviteRol');
+      var msg = document.getElementById('cuInviteMsg');
+
+      function leerDatosInvitacion() {
         var mail = mailEl.value.trim().toLowerCase();
-        var rol = document.getElementById('cuInviteRol').value;
-        var msg = document.getElementById('cuInviteMsg');
-        if (!mail || mail.indexOf('@') < 0) { msg.style.color = 'var(--danger)'; msg.textContent = 'Ingresá un mail válido.'; return; }
+        if (!mail || mail.indexOf('@') < 0) { msg.style.color = 'var(--danger)'; msg.textContent = 'Ingresá un mail válido.'; return null; }
+        return { mail: mail, rol: rolEl.value };
+      }
+
+      document.getElementById('cuInviteBtn').onclick = function () {
+        var datos = leerDatosInvitacion(); if (!datos) return;
         msg.style.color = 'var(--text-mute)'; msg.textContent = 'Enviando invitación…';
-        sbClient.functions.invoke('invitar-colaborador', { body: { email: mail, rol: rol } }).then(function (res) {
-          if (res.error) throw res.error;
-          if (res.data && res.data.error) throw new Error(res.data.error);
-          msg.style.color = 'var(--cyan)'; msg.textContent = '¡Invitación enviada a ' + mail + '!';
+        crearInvitacionMiembro(datos.mail, datos.rol, true).then(function () {
+          msg.style.color = 'var(--cyan)'; msg.textContent = '¡Invitación enviada a ' + datos.mail + '!';
           mailEl.value = '';
           cargarMiembrosModal();
         }).catch(function (e) {
@@ -520,7 +525,35 @@
           msg.textContent = 'No se pudo invitar (' + (e && e.message ? e.message : 'error') + ')';
         });
       };
+
+      document.getElementById('cuInviteWhatsapp').onclick = function () {
+        var datos = leerDatosInvitacion(); if (!datos) return;
+        // Hay que abrir la pestaña YA, en el mismo click — si se abre recién
+        // después de esperar la respuesta del servidor, el navegador la bloquea.
+        var ventana = window.open('', '_blank');
+        msg.style.color = 'var(--text-mute)'; msg.textContent = 'Preparando invitación…';
+        crearInvitacionMiembro(datos.mail, datos.rol, false).then(function () {
+          msg.style.color = 'var(--cyan)'; msg.textContent = '¡Listo! Elegí el contacto en WhatsApp para mandarle el link.';
+          mailEl.value = '';
+          cargarMiembrosModal();
+          var link = location.origin + location.pathname;
+          var texto = 'Te invité a ver Mis Finanzas conmigo 💜 Entrá con tu cuenta de Google (' + datos.mail + ') acá: ' + link;
+          if (ventana) ventana.location.href = 'https://wa.me/?text=' + encodeURIComponent(texto);
+        }).catch(function (e) {
+          if (ventana) ventana.close();
+          msg.style.color = 'var(--danger)';
+          msg.textContent = 'No se pudo preparar la invitación (' + (e && e.message ? e.message : 'error') + ')';
+        });
+      };
     }
+  }
+
+  function crearInvitacionMiembro(mail, rol, enviarMail) {
+    return sbClient.functions.invoke('invitar-colaborador', { body: { email: mail, rol: rol, enviarMail: enviarMail } }).then(function (res) {
+      if (res.error) throw res.error;
+      if (res.data && res.data.error) throw new Error(res.data.error);
+      return res.data;
+    });
   }
 
   function cargarMiembrosModal() {
