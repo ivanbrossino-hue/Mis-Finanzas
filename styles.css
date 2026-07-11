@@ -147,6 +147,8 @@ input { font-family: inherit; }
   box-shadow: 0 0 8px var(--cyan);
 }
 .user-chip { display: flex; align-items: center; gap: 11px; }
+.user-chip.clickable { cursor: pointer; border-radius: 10px; padding: 4px 8px; margin: -4px -8px; transition: background .15s; }
+.user-chip.clickable:hover { background: var(--panel-2); }
 .user-text { text-align: right; line-height: 1.2; }
 .user-text b { font-size: 13.5px; display: block; }
 .user-text span { font-size: 11px; color: var(--text-faint); }

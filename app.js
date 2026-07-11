@@ -61,6 +61,7 @@
   const CUENTA_ANON_KEY = 'sb_publishable_T4yeLPNAAbleawDltkBKBg_Qu25uS4i';
   var sbClient = null;
   var modoCuenta = false;           // true si estamos logueados con Google
+  var miUsuario = null;             // objeto user de Supabase Auth (nombre, mail, avatar)
   var miProyectoId = null;
   var miRol = null;                 // 'dueno' | 'editor' | 'lector'
   var cuentaRev = -1;
@@ -441,6 +442,7 @@
   }
 
   function actualizarChipUsuario(user) {
+    miUsuario = user;
     var meta = user.user_metadata || {};
     var nombre = meta.full_name || meta.name || (user.email || '').split('@')[0] || 'Usuario';
     var avatarUrl = meta.avatar_url || meta.picture;
@@ -459,6 +461,82 @@
     }
     var salirBtn = document.getElementById('cerrarSesionBtn');
     if (salirBtn) salirBtn.style.display = '';
+    var chipEl = document.getElementById('userChip');
+    if (chipEl) { chipEl.classList.add('clickable'); chipEl.onclick = modalCuenta; }
+  }
+
+  // Modal de cuenta: quién sos, tu rol, invitar colaboradores (solo el dueño) y cerrar sesión.
+  function modalCuenta() {
+    if (!modoCuenta || !miUsuario) return;
+    var meta = miUsuario.user_metadata || {};
+    var nombre = meta.full_name || meta.name || (miUsuario.email || '').split('@')[0] || 'Usuario';
+    var rolTxt = miRol === 'dueno' ? 'Dueño del proyecto'
+      : miRol === 'editor' ? 'Colaborador (edición)'
+      : miRol === 'lector' ? 'Colaborador (solo lectura)'
+      : 'Cuenta Google';
+
+    var htmlInvitar = miRol === 'dueno' ?
+      '<div class="field-row">' +
+        '<div class="field" style="flex:2"><label>Invitar por mail</label><input id="cuInviteMail" placeholder="mail@ejemplo.com"></div>' +
+        '<div class="field" style="flex:1"><label>Permiso</label><select id="cuInviteRol">' +
+          '<option value="editor">Puede editar</option>' +
+          '<option value="lector">Solo lectura</option>' +
+        '</select></div>' +
+      '</div>' +
+      '<div>' +
+        '<div class="modal-actions" style="justify-content:flex-start;margin-top:-4px">' +
+          '<button class="btn btn-primary btn-sm" id="cuInviteBtn">✉️ Enviar invitación</button>' +
+        '</div>' +
+        '<p class="sub" id="cuInviteMsg" style="min-height:16px;margin:6px 0 0"></p>' +
+        '<div id="cuMiembros" style="margin-top:6px;font-size:13px;color:var(--text-mute)">Cargando compañeros…</div>' +
+      '</div>' : '';
+
+    abrirModal('<h3>Tu cuenta</h3>' +
+      '<p class="sub"><b>' + escapeHtml(nombre) + '</b><br>' + escapeHtml(miUsuario.email || '') + '<br>' + rolTxt + '</p>' +
+      htmlInvitar +
+      '<div class="modal-actions"><button class="btn btn-ghost" id="mCancel">Cerrar</button>' +
+      '<button class="btn" id="cuSalir" style="color:var(--danger)">Cerrar sesión</button></div>');
+
+    document.getElementById('mCancel').onclick = cerrarModal;
+    document.getElementById('cuSalir').onclick = function () { cerrarModal(); cerrarSesionCuenta(); };
+
+    if (miRol === 'dueno') {
+      cargarMiembrosModal();
+      document.getElementById('cuInviteBtn').onclick = function () {
+        var mailEl = document.getElementById('cuInviteMail');
+        var mail = mailEl.value.trim().toLowerCase();
+        var rol = document.getElementById('cuInviteRol').value;
+        var msg = document.getElementById('cuInviteMsg');
+        if (!mail || mail.indexOf('@') < 0) { msg.style.color = 'var(--danger)'; msg.textContent = 'Ingresá un mail válido.'; return; }
+        msg.style.color = 'var(--text-mute)'; msg.textContent = 'Enviando invitación…';
+        sbClient.functions.invoke('invitar-colaborador', { body: { email: mail, rol: rol } }).then(function (res) {
+          if (res.error) throw res.error;
+          if (res.data && res.data.error) throw new Error(res.data.error);
+          msg.style.color = 'var(--cyan)'; msg.textContent = '¡Invitación enviada a ' + mail + '!';
+          mailEl.value = '';
+          cargarMiembrosModal();
+        }).catch(function (e) {
+          msg.style.color = 'var(--danger)';
+          msg.textContent = 'No se pudo invitar (' + (e && e.message ? e.message : 'error') + ')';
+        });
+      };
+    }
+  }
+
+  function cargarMiembrosModal() {
+    if (!miProyectoId) return;
+    sbClient.from('miembros').select('email,rol,estado').eq('proyecto_id', miProyectoId).order('rol').then(function (res) {
+      var cont = document.getElementById('cuMiembros'); // el modal pudo haberse cerrado mientras tanto
+      if (!cont || res.error) return;
+      var filas = (res.data || []).filter(function (m) { return m.rol !== 'dueno'; });
+      if (!filas.length) { cont.textContent = 'Todavía no invitaste a nadie.'; return; }
+      cont.innerHTML = filas.map(function (m) {
+        var rolTxt2 = m.rol === 'editor' ? 'Edición' : 'Solo lectura';
+        var estTxt = m.estado === 'aceptado' ? '✅ activo' : '⏳ pendiente';
+        return '<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0">' +
+          '<span>' + escapeHtml(m.email) + '</span><span>' + rolTxt2 + ' · ' + estTxt + '</span></div>';
+      }).join('');
+    });
   }
 
   function cerrarSesionCuenta() {
