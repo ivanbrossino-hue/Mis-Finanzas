@@ -44,7 +44,7 @@
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; }
+html, body { margin: 0; padding: 0; overflow-x: hidden; }
 body {
   font-family: var(--sans);
   color: var(--text);
@@ -349,8 +349,8 @@ input { font-family: inherit; }
 .cat-items { padding: 2px 8px 10px 52px; overflow: hidden; max-height: 3000px; opacity: 1; transition: max-height .32s ease, opacity .25s ease, padding .25s ease; }
 .cat-group.collapsed .cat-items { max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; }
 
-.item-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-radius: 8px; }
-.item-row input.i-name { flex: 1; border: 1px solid transparent; background: transparent; padding: 8px 10px; border-radius: 8px; font-size: 13.5px; color: var(--text); }
+.item-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-radius: 8px; min-width: 0; }
+.item-row input.i-name { flex: 1; min-width: 0; border: 1px solid transparent; background: transparent; padding: 8px 10px; border-radius: 8px; font-size: 13.5px; color: var(--text); }
 .item-row input.i-name:hover { background: rgba(255,255,255,.04); }
 .item-row input.i-name:focus { background: var(--bg-2); border-color: var(--primary); outline: none; }
 .item-row .i-amount-box { display: flex; align-items: center; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 0 9px; transition: border-color .15s; }
@@ -384,6 +384,10 @@ input { font-family: inherit; }
 /* ============================================================
    Tabla de deudas
    ============================================================ */
+/* En pantallas angostas la tabla no entra con sus 4 columnas — que se
+   deslice ella sola adentro de su tarjeta, en vez de forzar ancho de
+   página (nadie tiene que arrastrar todo el dashboard al costado). */
+#deudasBody { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .deudas-table { width: 100%; border-collapse: collapse; }
 .deudas-table th {
   text-align: left; font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .1em;
