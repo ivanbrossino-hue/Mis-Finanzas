@@ -587,16 +587,54 @@ input { font-family: inherit; }
 .mobile-menu-btn { display: none; }
 .side-backdrop { display: none; }
 
+/* En mobile la barra lateral deja de ser un cajón y pasa a ser una barra de
+   navegación fija abajo (íconos + etiqueta, con indicador arriba del activo) —
+   mismos links, mismos data-scroll/data-page, mismo JS de siempre; solo cambia
+   cómo se ve. "Nuevo mes" se convierte en un botón flotante circular arriba de
+   la barra, ya que ese espacio ahora lo ocupa la navegación. */
 @media (max-width: 760px) {
-  :root { --side-w: 0px; }
-  .sidebar { width: 236px; transform: translateX(-100%); transition: transform .25s ease; z-index: 130; }
-  .sidebar.open { transform: none; box-shadow: 0 0 60px rgba(0,0,0,.7); }
-  .side-backdrop.show { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 120; }
-  .mobile-menu-btn { display: grid; }
+  :root { --side-w: 0px; --bottom-nav-h: 60px; }
+
+  .sidebar {
+    width: 100%; height: auto; top: auto; bottom: 0;
+    flex-direction: row; align-items: stretch; padding: 0;
+    background: rgba(14, 14, 16, .92); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border-right: none; border-top: 1px solid var(--border);
+    transform: none; transition: none; z-index: 130;
+  }
+  .side-brand { display: none; }
+  .mobile-menu-btn, .side-backdrop { display: none !important; }
+
+  .side-nav {
+    flex-direction: row; flex: 1; gap: 0; padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+  }
+  .side-nav a {
+    flex: 1; flex-direction: column; justify-content: center; gap: 3px;
+    padding: 6px 2px; border-radius: 12px; border-right: none;
+    font-size: 10px; text-align: center; white-space: nowrap;
+  }
+  .side-nav a svg { width: 20px; height: 20px; }
+  .side-nav a.active { position: relative; background: transparent; border-right-color: transparent; }
+  .side-nav a.active::before {
+    content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: 18px; height: 3px; border-radius: 999px; background: var(--primary);
+  }
+
+  .side-foot {
+    position: fixed; left: auto; right: 16px; bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom) + 14px);
+    padding: 0; width: auto; z-index: 140;
+  }
+  #nuevoMesBtn {
+    width: 54px; height: 54px; border-radius: 50%; padding: 0;
+    box-shadow: 0 10px 26px rgba(112, 0, 255, .5);
+  }
+  #nuevoMesBtn span { display: none; }
+  #nuevoMesBtn svg { width: 22px; height: 22px; }
+
   .topbar { width: 100%; padding: 0 14px; gap: 10px; }
   .month-label { min-width: 0; font-size: 15px; }
-  .toast { left: 50%; }
-  .canvas { padding: 20px 16px 80px; }
+  .toast { left: 50%; bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom) + 16px); }
+  .canvas { padding: 20px 16px calc(var(--bottom-nav-h) + env(safe-area-inset-bottom) + 24px); }
   .hero { padding: 24px 20px; }
   .user-text { display: none; }
 }
