@@ -252,7 +252,7 @@
   function nubeIniciarPoll() {
     if (nubePollTimer) clearInterval(nubePollTimer);
     nubePollTimer = setInterval(function () {
-      if (!nubeActiva() || guardandoNube) return;
+      if (!nubeActiva() || guardandoNube || modoCuenta) return;
       fetch(nubeUrl('finanzas?id=eq.' + FILA_ID + '&select=rev'), { headers: nubeHeaders() })
         .then(function (r) { return r.ok ? r.json() : []; })
         .then(function (rows) {
@@ -654,6 +654,7 @@
     sbClient.auth.onAuthStateChange(function (event, session) {
       if (event === 'SIGNED_IN' && session && !modoCuenta) {
         modoCuenta = true;
+        if (nubePollTimer) clearInterval(nubePollTimer); // la cuenta de Google manda, no la nube manual vieja
         try { localStorage.removeItem('misFinanzas_invitado'); } catch (e) {}
         mostrarLoginGate(false);
         mostrarBotonVincular(false);
@@ -673,6 +674,7 @@
       // de creación de proyecto se pisan entre sí.
       if (session && !modoCuenta) {
         modoCuenta = true;
+        if (nubePollTimer) clearInterval(nubePollTimer); // la cuenta de Google manda, no la nube manual vieja
         mostrarLoginGate(false);
         actualizarChipUsuario(session.user);
         bootstrapProyecto(session.user);
