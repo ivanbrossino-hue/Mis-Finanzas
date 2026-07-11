@@ -409,24 +409,22 @@
           miProps = { proyecto_id: r2.data.proyecto_id, rol: r2.data.rol };
           toast('¡Te sumaste a un proyecto compartido! 🎉');
         } else {
-          // DEBUG temporal: comparar auth.uid() (visto por el mismo cliente que
-          // usa la app) contra el user.id local, justo antes del insert que falla.
-          try {
-            var dbg = await sbClient.rpc('debug_mi_uid');
-            var dbgUid = dbg.data && dbg.data.auth_uid;
-            console.log('[DEBUG] auth_uid=' + dbgUid + ' | user.id=' + user.id + ' | coinciden=' + (dbgUid === user.id) + ' | rpc_error=' + JSON.stringify(dbg.error));
-          } catch (eDbg) { console.log('[DEBUG] fallo el rpc de diagnóstico', eDbg); }
-
+          // Generamos el id acá mismo: pedirle a Supabase que nos devuelva el id
+          // recién creado (.select()) no funciona todavía en este punto, porque
+          // la política de lectura de "proyectos" exige una fila en "miembros"
+          // que recién se crea en el siguiente paso — sin esto, el insert se
+          // rechaza igual (RLS) aunque los datos sean correctos.
+          var nuevoProyectoId = crypto.randomUUID();
           var datosInvitado = invitadoTieneDatosPropios() ? estado : null;
-          var r4 = await sbClient.from('proyectos').insert(
-            datosInvitado ? { dueno_id: user.id, data: datosInvitado } : { dueno_id: user.id }
-          ).select('id').single();
+          var insertProyecto = { id: nuevoProyectoId, dueno_id: user.id };
+          if (datosInvitado) insertProyecto.data = datosInvitado;
+          var r4 = await sbClient.from('proyectos').insert(insertProyecto);
           if (r4.error) throw r4.error;
           var r5 = await sbClient.from('miembros').insert({
-            proyecto_id: r4.data.id, user_id: user.id, email: mail, rol: 'dueno', estado: 'aceptado'
+            proyecto_id: nuevoProyectoId, user_id: user.id, email: mail, rol: 'dueno', estado: 'aceptado'
           });
           if (r5.error) throw r5.error;
-          miProps = { proyecto_id: r4.data.id, rol: 'dueno' };
+          miProps = { proyecto_id: nuevoProyectoId, rol: 'dueno' };
           if (datosInvitado) toast('Tus datos de invitado se vincularon a tu cuenta ✅');
         }
       }
