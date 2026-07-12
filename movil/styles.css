@@ -503,25 +503,71 @@ input, select { font-family: inherit; }
 .login-error { color: var(--error); font-size: 12.5px; margin-top: 12px; min-height: 16px; }
 
 /* ============================================================
-   Pantallas grandes (PC) — el uso principal sigue siendo el celular,
-   esto solo agrega un "marco" tipo teléfono centrado en pantallas
-   anchas. Todo va adentro de @media (min-width:768px), así que nada
-   de esto se aplica ni afecta el celular.
+   Pantallas grandes (PC) — el uso principal sigue siendo el celular
+   (nada de acá se aplica por debajo de 900px, así que el celular queda
+   intacto). Acá en vez de un "marco" de teléfono centrado, la nav de
+   abajo pasa a ser una barra lateral fija y cada página usa grillas para
+   aprovechar el ancho, parecido a como se veía la versión de escritorio
+   vieja — mismas páginas y mismos widgets de siempre, solo reordenados.
    ============================================================ */
-@media (min-width: 768px) {
-  body { display: flex; justify-content: center; }
-  #appRoot {
-    max-width: 560px; width: 100%; min-height: 100vh; position: relative;
-    background: rgba(255,255,255,.55);
-    border-left: 1px solid var(--outline-variant); border-right: 1px solid var(--outline-variant);
-    box-shadow: 0 0 90px rgba(0,54,26,.14);
+@media (min-width: 900px) {
+  body { display: block; }
+  #appRoot { max-width: none; width: 100%; min-height: 100vh; background: none; border: none; box-shadow: none; }
+
+  /* ---- Nav inferior → barra lateral fija ---- */
+  .side-brand { display: none; }
+  .bottom-nav {
+    position: fixed; left: 0; top: 0; right: auto; bottom: 0; z-index: 130;
+    width: 232px; height: 100vh;
+    flex-direction: column; align-items: stretch; justify-content: flex-start;
+    gap: 3px; padding: 22px 14px 20px;
+    border-top: none; border-right: 1px solid var(--outline-variant);
+    border-radius: 0; box-shadow: none;
   }
-  header { position: sticky !important; width: 100% !important; }
-  .bottom-nav { position: sticky !important; width: 100% !important; }
-  /* el FAB sigue con position:fixed (relativo al viewport, no al marco),
-     así que hay que calcular dónde cae el borde derecho del marco de
-     560px centrado en vez de usar un "right" fijo desde el borde real
-     de la pantalla. */
-  .fab-wrap { right: calc(50vw - 264px); }
-  main { max-width: none; }
+  .bottom-nav .side-brand {
+    display: flex; align-items: center; gap: 10px; padding: 4px 10px 22px;
+    font-weight: 800; font-size: 16.5px; color: var(--primary); letter-spacing: -.2px;
+  }
+  .bottom-nav a {
+    flex: none; flex-direction: row; justify-content: flex-start; gap: 12px;
+    padding: 11px 12px; margin: 0; border-radius: 12px; font-size: 13.5px;
+  }
+  .bottom-nav a .material-symbols-outlined { font-size: 21px; }
+
+  /* ---- Barra superior: arranca después de la sidebar ---- */
+  header { left: 232px !important; width: calc(100% - 232px) !important; }
+
+  /* ---- Contenido: ya no hay marco angosto, usa el ancho real ---- */
+  main {
+    margin-left: 232px !important; max-width: none !important;
+    padding-left: clamp(20px, 2.6vw, 40px) !important; padding-right: clamp(20px, 2.6vw, 40px) !important;
+  }
+  .canvas { max-width: 1280px; margin: 0 auto; }
+
+  /* ---- FAB y toast: ya no hay que esquivar la nav de abajo ---- */
+  .fab-wrap { right: 32px; bottom: 32px; }
+  .toast { bottom: 32px; }
+
+  /* ---- Resumen: hero arriba, KPIs en fila, evolución + donut lado a lado ----
+     :not(.view-hidden) importa: #id le gana en especificidad a .page-view.view-hidden,
+     así que sin esto la página quedaría "display:grid" (visible) aunque no sea la activa. */
+  #vistaResumen:not(.view-hidden) {
+    display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; align-items: start;
+  }
+  #heroCard, #kpis, .footer-note { grid-column: 1 / -1; }
+
+  /* ---- Gastos: ingresos y gastos lado a lado ---- */
+  #vistaGastos:not(.view-hidden) { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  #vistaGastos > .page-head { grid-column: 1 / -1; }
+
+  /* ---- Deudas: tarjetas en grilla en vez de una columna larga ---- */
+  #deudasBody { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; align-items: start; }
+  #deudasBody .deuda-card { margin-bottom: 0; }
+  #deudasBody .deuda-total-row { grid-column: 1 / -1; }
+
+  /* ---- Analíticas: flujo de caja ancho arriba, el resto de a pares ---- */
+  #vistaAnaliticas:not(.view-hidden) { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  #vistaAnaliticas > .page-head, #flujoCard { grid-column: 1 / -1; }
+
+  /* ---- Historial: se deja en una columna, pero ya aprovecha el .canvas ancho ---- */
 }

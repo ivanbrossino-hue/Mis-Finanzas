@@ -164,7 +164,7 @@
 
       <!-- ============ RESUMEN ============ -->
       <div id="vistaResumen" class="page-view">
-        <section class="glass-card rounded-xl p-lg relative overflow-hidden animate-fade-in-up">
+        <section class="glass-card rounded-xl p-lg relative overflow-hidden animate-fade-in-up" id="heroCard">
           <div class="absolute -top-12 -right-12 w-48 h-48 bg-secondary-container/30 blur-3xl rounded-full pointer-events-none"></div>
           <div class="relative z-10 space-y-xs">
             <span class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest" id="heroBalLabel">Te queda este mes</span>
@@ -181,7 +181,7 @@
 
         <section class="kpis" id="kpis"></section>
 
-        <section class="glass-card rounded-xl p-lg animate-fade-in-up">
+        <section class="glass-card rounded-xl p-lg animate-fade-in-up" id="evoCard">
           <div class="flex justify-between items-center mb-md">
             <h3 class="font-title-md text-title-md text-primary flex items-center gap-2">
               <span class="material-symbols-outlined text-secondary">show_chart</span>Evolución
@@ -199,7 +199,7 @@
           <div id="evoBody" class="evo"></div>
         </section>
 
-        <section class="glass-card rounded-xl p-lg animate-fade-in-up">
+        <section class="glass-card rounded-xl p-lg animate-fade-in-up" id="donutCard">
           <div class="flex justify-between items-center mb-md">
             <h3 class="font-title-md text-title-md text-primary flex items-center gap-2">
               <span class="material-symbols-outlined text-secondary">donut_large</span>En qué se va la plata
@@ -290,7 +290,7 @@
           </button>
         </div>
 
-        <section class="glass-card rounded-xl p-lg">
+        <section class="glass-card rounded-xl p-lg" id="flujoCard">
           <div class="flex justify-between items-center mb-md">
             <h3 class="font-title-md text-title-md text-primary">Flujo de caja mensual</h3>
             <span class="badge" id="flujoBadge"></span>
@@ -298,7 +298,7 @@
           <div class="panel-body" id="flujoBody"></div>
         </section>
 
-        <section class="glass-card rounded-xl p-lg">
+        <section class="glass-card rounded-xl p-lg" id="presupuestosCard">
           <div class="flex justify-between items-center mb-md">
             <h3 class="font-title-md text-title-md text-primary">Presupuesto por categoría</h3>
             <span class="badge" id="presupuestosBadge"></span>
@@ -306,12 +306,12 @@
           <div class="panel-body" id="presupuestosBody"></div>
         </section>
 
-        <section class="glass-card rounded-xl p-lg">
+        <section class="glass-card rounded-xl p-lg" id="simuladorCard">
           <h3 class="font-title-md text-title-md text-primary mb-md">Simulador de inversión</h3>
           <div class="panel-body" id="simuladorBody"></div>
         </section>
 
-        <section class="glass-card rounded-xl p-lg">
+        <section class="glass-card rounded-xl p-lg" id="ultimosMovsCard">
           <div class="flex justify-between items-center mb-md">
             <h3 class="font-title-md text-title-md text-primary">Últimos movimientos</h3>
             <button class="btn-stitch-ghost btn-sm" id="verHistorialBtn">Ver todo →</button>
@@ -319,7 +319,7 @@
           <div class="panel-body" id="ultimosMovsBody"></div>
         </section>
 
-        <section class="glass-card rounded-xl p-lg">
+        <section class="glass-card rounded-xl p-lg" id="recurrentesCard">
           <h3 class="font-title-md text-title-md text-primary mb-md">Gastos recurrentes</h3>
           <div class="panel-body" id="recurrentesBody"></div>
         </section>
@@ -328,7 +328,7 @@
           <div class="panel-body eficiencia-body" id="eficienciaBody"></div>
         </section>
 
-        <section class="glass-card rounded-xl p-lg">
+        <section class="glass-card rounded-xl p-lg" id="pendientesCard">
           <h3 class="font-title-md text-title-md text-primary mb-md">Cuotas pendientes</h3>
           <div class="panel-body" id="pendientesBody"></div>
         </section>
@@ -339,6 +339,10 @@
 
   <!-- ===== BottomNavBar ===== -->
   <nav class="bottom-nav">
+    <div class="side-brand">
+      <img src="logo.png" alt="" width="26" height="26">
+      <span>Mis Finanzas</span>
+    </div>
     <a href="#resumen" data-page="resumen" class="active">
       <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">dashboard</span>
       <span class="font-label-caps text-label-caps">Inicio</span>
