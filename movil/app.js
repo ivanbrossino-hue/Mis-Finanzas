@@ -348,6 +348,23 @@
     return t;
   }
 
+  // sbClient.functions.invoke() envuelve cualquier respuesta no-2xx en un error
+  // genérico ("Edge Function returned a non-2xx status code") y esconde el
+  // mensaje real que mandó la función (ej: "ya tenés tu proyecto con datos").
+  // El texto real vive en error.context, que es la Response cruda — hay que
+  // leerla a mano para mostrar algo útil en vez del genérico.
+  function errorDeEdgeFunction(error) {
+    return (async function () {
+      try {
+        if (error && error.context && typeof error.context.json === 'function') {
+          var body = await error.context.json();
+          if (body && body.error) return new Error(body.error);
+        }
+      } catch (e) {}
+      return error;
+    })();
+  }
+
   // Compara el estado actual (ignorando ids autogenerados) contra una semilla
   // recién construida, para saber si un invitado realmente cargó datos propios
   // o si todavía está mirando los datos de ejemplo sin haberlos tocado —
@@ -398,7 +415,7 @@
       if (hayInviteLinkPendiente()) {
         var tokenInvite = tomarInviteLinkPendiente();
         var rJoin = await sbClient.functions.invoke('unirse-por-link', { body: { token: tokenInvite } });
-        if (rJoin.error) throw rJoin.error;
+        if (rJoin.error) throw await errorDeEdgeFunction(rJoin.error);
         if (rJoin.data && rJoin.data.error) throw new Error(rJoin.data.error);
         miProps = { proyecto_id: rJoin.data.proyectoId, rol: rJoin.data.rol };
         toast('¡Te sumaste al proyecto compartido! 🎉');
