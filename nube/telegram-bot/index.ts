@@ -3,6 +3,13 @@
 //  "Carrito": vas mandando productos, te lleva la cuenta,
 //  confirmás el total, elegís categoría y en qué FILA sumarlo
 //  (una existente o una nueva), y le podés poner una nota.
+//
+//  Cada chat de Telegram está vinculado a UN proyecto de la app
+//  (tabla bot_vinculos). La vinculación se hace con un link
+//  t.me/tu_bot?start=CODIGO que la app genera — al abrirlo, Telegram
+//  manda "/start CODIGO" acá y quedamos conectados sin pegar ninguna
+//  clave a mano.
+//
 //  Secrets: TELEGRAM_TOKEN, WEBHOOK_SECRET
 // ============================================================
 
@@ -46,17 +53,52 @@ function sesionVacia(): Sesion {
 function sbHeaders(extra: Record<string, string> = {}) {
   return { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, "Content-Type": "application/json", ...extra };
 }
-async function readState(): Promise<{ data: any; rev: number }> {
-  const r = await fetch(`${SB_URL}/rest/v1/finanzas?id=eq.main&select=data,rev`, { headers: sbHeaders() });
+
+// A qué proyecto está vinculado este chat (null = todavía no vinculó nada).
+async function resolverProyecto(chatId: number): Promise<string | null> {
+  const r = await fetch(`${SB_URL}/rest/v1/bot_vinculos?chat_id=eq.${chatId}&select=proyecto_id`, { headers: sbHeaders() });
+  if (!r.ok) return null;
+  const rows = await r.json();
+  return rows[0] ? rows[0].proyecto_id : null;
+}
+
+// Canjea un código generado por la app (bot_codigos_vinculo) y vincula
+// este chat al proyecto de quien lo generó.
+async function vincularConCodigo(chat: number, codigo: string): Promise<string> {
+  const codRes = await fetch(
+    `${SB_URL}/rest/v1/bot_codigos_vinculo?codigo=eq.${encodeURIComponent(codigo)}&usado=eq.false&select=proyecto_id,creado_por,expira_en`,
+    { headers: sbHeaders() },
+  );
+  const cods = codRes.ok ? await codRes.json() : [];
+  const cod = cods[0];
+  if (!cod) return "⚠️ Ese link ya se usó o no es válido. Generá uno nuevo desde la app (menú ⤓ → Conectar Telegram).";
+  if (new Date(cod.expira_en).getTime() < Date.now()) {
+    return "⚠️ Ese link venció (duran 15 minutos). Generá uno nuevo desde la app.";
+  }
+  await fetch(`${SB_URL}/rest/v1/bot_vinculos`, {
+    method: "POST",
+    headers: sbHeaders({ Prefer: "resolution=merge-duplicates,return=minimal" }),
+    body: JSON.stringify([{ chat_id: chat, proyecto_id: cod.proyecto_id, vinculado_por: cod.creado_por }]),
+  });
+  await fetch(`${SB_URL}/rest/v1/bot_codigos_vinculo?codigo=eq.${encodeURIComponent(codigo)}`, {
+    method: "PATCH",
+    headers: sbHeaders(),
+    body: JSON.stringify({ usado: true }),
+  });
+  return "✅ ¡Listo! Este chat quedó conectado a tu proyecto de <b>Mis Finanzas</b>.\n\nMandame lo que vas comprando:\n<code>2000 arroz</code>\n<code>2300 azúcar, 5000 aceite</code>";
+}
+
+async function readState(proyectoId: string): Promise<{ data: any; rev: number }> {
+  const r = await fetch(`${SB_URL}/rest/v1/proyectos?id=eq.${proyectoId}&select=data,rev`, { headers: sbHeaders() });
   const rows = await r.json();
   if (rows[0]) return { data: rows[0].data ?? {}, rev: rows[0].rev ?? 0 };
   return { data: { version: 1, meses: {}, deudas: [], catNombres: {} }, rev: 0 };
 }
-async function writeState(data: any, rev: number) {
-  const r = await fetch(`${SB_URL}/rest/v1/finanzas`, {
-    method: "POST",
-    headers: sbHeaders({ Prefer: "resolution=merge-duplicates,return=minimal" }),
-    body: JSON.stringify([{ id: "main", data, rev: rev + 1, updated_by: "bot", updated_at: new Date().toISOString() }]),
+async function writeState(proyectoId: string, data: any, rev: number) {
+  const r = await fetch(`${SB_URL}/rest/v1/proyectos?id=eq.${proyectoId}`, {
+    method: "PATCH",
+    headers: sbHeaders({ Prefer: "return=minimal" }),
+    body: JSON.stringify({ data, rev: rev + 1, updated_by: "bot", updated_at: new Date().toISOString() }),
   });
   if (!r.ok) console.error("writeState fallo:", r.status, await r.text());
 }
@@ -83,6 +125,7 @@ async function tg(method: string, body: unknown): Promise<any> {
   try { return await r.json(); } catch { return {}; }
 }
 const money = (n: number) => "$ " + Math.round(n).toLocaleString("es-AR");
+const SIN_VINCULAR = "👋 Todavía no conectaste este chat con tu cuenta.\n\nAbrí la app Mis Finanzas → menú (⤓) → <b>Conectar Telegram</b> y tocá el botón: te trae para acá y queda conectado solo, sin escribir nada.";
 
 // ---------- Fechas (hora Argentina) ----------
 const p2 = (n: number) => String(n).padStart(2, "0");
@@ -188,8 +231,8 @@ async function mostrarCategorias(chat: number, mid: number, s: Sesion) {
 }
 
 // paso 3: elegir fila dentro de la categoría
-async function mostrarFilas(chat: number, mid: number, s: Sesion, catId: string) {
-  const st = await readState();
+async function mostrarFilas(chat: number, mid: number, s: Sesion, catId: string, proyectoId: string) {
+  const st = await readState(proyectoId);
   const key = mesActualKey();
   const filas = (st.data.meses?.[key]?.gastos || []).filter((g: any) => g.categoria === catId);
   s.catElegida = catId;
@@ -224,6 +267,13 @@ Deno.serve(async (req) => {
       const chat = q.message.chat.id;
       const mid = q.message.message_id;
       const data = q.data as string;
+
+      const proyectoId = await resolverProyecto(chat);
+      if (!proyectoId) {
+        await tg("answerCallbackQuery", { callback_query_id: q.id, text: "Conectá el chat desde la app primero", show_alert: true });
+        return new Response("ok");
+      }
+
       const s = await getSesion(chat);
 
       if (data === "cancelar") {
@@ -255,7 +305,7 @@ Deno.serve(async (req) => {
           await tg("answerCallbackQuery", { callback_query_id: q.id, text: "El carrito está vacío" });
           return new Response("ok");
         }
-        await mostrarFilas(chat, mid, s, data.slice(2));
+        await mostrarFilas(chat, mid, s, data.slice(2), proyectoId);
         await tg("answerCallbackQuery", { callback_query_id: q.id });
         return new Response("ok");
       }
@@ -282,7 +332,7 @@ Deno.serve(async (req) => {
         const idx = parseInt(data.slice(4), 10);
         const filaId = s.filaIds[idx];
         const total = totalCarrito(s);
-        const st = await readState();
+        const st = await readState(proyectoId);
         const key = mesActualKey();
         const m = st.data.meses?.[key];
         const fila = m && (m.gastos || []).find((g: any) => g.id === filaId);
@@ -297,7 +347,7 @@ Deno.serve(async (req) => {
           id: movId, fecha: isoHoy(), categoria: s.catElegida, filaId: fila.id, fila: fila.nombre,
           monto: total, nota: s.nota || null, items: s.items.length > 1 ? s.items : null,
         });
-        await writeState(st.data, st.rev);
+        await writeState(proyectoId, st.data, st.rev);
         const cat = CAT_MAP[s.catElegida];
         await tg("editMessageText", {
           chat_id: chat, message_id: mid, parse_mode: "HTML",
@@ -316,26 +366,52 @@ Deno.serve(async (req) => {
     if (!msg || !msg.text) return new Response("ok");
     const chat = msg.chat.id;
     const text = (msg.text as string).trim();
-    const s = await getSesion(chat);
 
-    // --- comandos ---
-    if (/^\/start/i.test(text) || /^\/help/i.test(text) || /^\/ayuda/i.test(text)) {
+    // --- /start (con o sin código de vinculación) — funciona SIEMPRE,
+    // incluso si el chat todavía no está conectado a ningún proyecto,
+    // porque es justamente el mecanismo para conectarlo. ---
+    const mStart = text.match(/^\/start(?:\s+(\S+))?/i);
+    if (mStart) {
+      if (mStart[1]) {
+        await tg("sendMessage", { chat_id: chat, parse_mode: "HTML", text: await vincularConCodigo(chat, mStart[1]) });
+        return new Response("ok");
+      }
+      const proyectoIdYaVinculado = await resolverProyecto(chat);
+      if (!proyectoIdYaVinculado) {
+        await tg("sendMessage", { chat_id: chat, parse_mode: "HTML", text: SIN_VINCULAR });
+        return new Response("ok");
+      }
       await tg("sendMessage", { chat_id: chat, parse_mode: "HTML", text:
         "👋 <b>Mis Finanzas</b>\n\nMandame lo que vas comprando y te llevo la cuenta:\n<code>2000 arroz</code>\n<code>2300 azúcar, 5000 aceite</code>\n\nPodés seguir agregando en varios mensajes. Cuando termines tocás <b>Sumar al total</b>, elegís la <b>categoría</b> y después en qué <b>fila</b> lo sumo (una que ya tengas, ej. \"Almacén\", o una nueva). Opcional: ponele una <b>nota</b> (ej: Chino de casa).\n\nComandos:\n/historial — tus últimos gastos del mes\n/nota — agregarle una nota al último gasto\n/cancelar — descartar la compra en curso" });
       return new Response("ok");
     }
+
+    if (/^\/help/i.test(text) || /^\/ayuda/i.test(text)) {
+      await tg("sendMessage", { chat_id: chat, parse_mode: "HTML", text:
+        "Mandame lo que vas comprando:\n<code>2000 arroz</code>\n<code>2300 azúcar, 5000 aceite</code>\n\n/historial — tus últimos gastos del mes\n/nota — agregarle una nota al último gasto\n/cancelar — descartar la compra en curso" });
+      return new Response("ok");
+    }
+
+    // A partir de acá, todo requiere un chat ya conectado a un proyecto.
+    const proyectoId = await resolverProyecto(chat);
+    if (!proyectoId) {
+      await tg("sendMessage", { chat_id: chat, parse_mode: "HTML", text: SIN_VINCULAR });
+      return new Response("ok");
+    }
+    const s = await getSesion(chat);
+
     if (/^\/cancelar/i.test(text)) {
       await clearSesion(chat);
       await tg("sendMessage", { chat_id: chat, text: "🗑️ Compra en curso descartada." });
       return new Response("ok");
     }
     if (/^\/resumen/i.test(text) || /^\/saldo/i.test(text)) {
-      const st = await readState();
+      const st = await readState(proyectoId);
       await tg("sendMessage", { chat_id: chat, parse_mode: "HTML", text: `📅 <b>${mesActualKey()}</b>\n` + resumenMes(st.data, mesActualKey()) });
       return new Response("ok");
     }
     if (/^\/historial/i.test(text)) {
-      const st = await readState();
+      const st = await readState(proyectoId);
       const key = mesActualKey();
       const movs = (st.data.meses?.[key]?.movimientos || []).slice(-15).reverse();
       if (!movs.length) { await tg("sendMessage", { chat_id: chat, text: "Todavía no hay movimientos este mes." }); return new Response("ok"); }
@@ -370,7 +446,7 @@ Deno.serve(async (req) => {
         return new Response("ok");
       }
       const total = totalCarrito(s);
-      const st = await readState();
+      const st = await readState(proyectoId);
       const key = mesActualKey();
       if (!st.data.meses) st.data.meses = {};
       if (!st.data.meses[key]) st.data.meses[key] = { ingresos: [], gastos: [] };
@@ -384,7 +460,7 @@ Deno.serve(async (req) => {
         id: movId, fecha: isoHoy(), categoria: s.catElegida, filaId: gid, fila: nombre,
         monto: total, nota: s.nota || null, items: s.items.length > 1 ? s.items : null,
       });
-      await writeState(st.data, st.rev);
+      await writeState(proyectoId, st.data, st.rev);
       const cat = CAT_MAP[s.catElegida];
       await tg("sendMessage", {
         chat_id: chat, parse_mode: "HTML",
@@ -396,10 +472,10 @@ Deno.serve(async (req) => {
 
     // --- esperando la nota de un gasto ya cargado (/nota) ---
     if (s.await === "notaGasto") {
-      const st = await readState();
+      const st = await readState(proyectoId);
       const ug = s.ultimoGasto!;
       const mv = (st.data.meses?.[ug.mes]?.movimientos || []).find((x: any) => x.id === ug.movId);
-      if (mv) { mv.nota = text; await writeState(st.data, st.rev); }
+      if (mv) { mv.nota = text; await writeState(proyectoId, st.data, st.rev); }
       s.await = null; await setSesion(chat, s);
       await tg("sendMessage", { chat_id: chat, parse_mode: "HTML", text: `📝 Nota agregada: <b>${text}</b>` });
       return new Response("ok");

@@ -653,7 +653,12 @@
     // salvo que ahora venga con un link de invitación, ahí preferimos mostrarle
     // el login para que pueda unirse al proyecto compartido.
     if (!yaEligioInvitado || tieneInviteLink) mostrarLoginGate(true);
-    sbClient = window.supabase.createClient(CUENTA_URL, CUENTA_ANON_KEY);
+    // persistSession/autoRefreshToken ya son el default, pero los dejamos
+    // explícitos: así la sesión sobrevive a cerrar y reabrir el navegador
+    // (se guarda en localStorage y se refresca sola en vez de pedir login).
+    sbClient = window.supabase.createClient(CUENTA_URL, CUENTA_ANON_KEY, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storage: window.localStorage }
+    });
 
     sbClient.auth.onAuthStateChange(function (event, session) {
       if (event === 'SIGNED_IN' && session && !modoCuenta) {

@@ -59,6 +59,8 @@
   // (file://) sigue funcionando como siempre, con la nube manual de arriba.
   const CUENTA_URL = 'https://iivjrpfkwkxgxzgyzrvq.supabase.co';
   const CUENTA_ANON_KEY = 'sb_publishable_T4yeLPNAAbleawDltkBKBg_Qu25uS4i';
+  // Usuario del bot de Telegram (sin @), el que te dio @BotFather al crearlo.
+  const TELEGRAM_BOT_USERNAME = 'misfinanzas_ivan_bot';
   var sbClient = null;
   var modoCuenta = false;           // true si estamos logueados con Google
   var miUsuario = null;             // objeto user de Supabase Auth (nombre, mail, avatar)
@@ -616,6 +618,19 @@
     });
   }
 
+  // Link para conectar el bot de Telegram sin pegar ninguna clave a mano:
+  // al abrirlo, Telegram le manda "/start CODIGO" al bot, que lo canjea y
+  // vincula ese chat a este proyecto (ver nube/telegram-bot/index.ts).
+  function generarLinkTelegram() {
+    var codigo = crypto.randomUUID();
+    return sbClient.from('bot_codigos_vinculo').insert({
+      codigo: codigo, proyecto_id: miProyectoId, creado_por: miUsuario.id
+    }).then(function (res) {
+      if (res.error) throw res.error;
+      return 'https://t.me/' + TELEGRAM_BOT_USERNAME + '?start=' + codigo;
+    });
+  }
+
   function cargarMiembrosModal() {
     if (!miProyectoId) return;
     sbClient.from('miembros').select('email,rol,estado').eq('proyecto_id', miProyectoId).order('rol').then(function (res) {
@@ -653,7 +668,12 @@
     // salvo que ahora venga con un link de invitación, ahí preferimos mostrarle
     // el login para que pueda unirse al proyecto compartido.
     if (!yaEligioInvitado || tieneInviteLink) mostrarLoginGate(true);
-    sbClient = window.supabase.createClient(CUENTA_URL, CUENTA_ANON_KEY);
+    // persistSession/autoRefreshToken ya son el default, pero los dejamos
+    // explícitos: así la sesión sobrevive a cerrar y reabrir el navegador
+    // (se guarda en localStorage y se refresca sola en vez de pedir login).
+    sbClient = window.supabase.createClient(CUENTA_URL, CUENTA_ANON_KEY, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storage: window.localStorage }
+    });
 
     sbClient.auth.onAuthStateChange(function (event, session) {
       if (event === 'SIGNED_IN' && session && !modoCuenta) {
@@ -1810,14 +1830,16 @@
   }
 
   function modalMenu() {
-    var estadoNube = nubeActiva()
-      ? '<span style="color:var(--cyan)">● Conectado a la nube</span>'
-      : '<span style="color:var(--text-mute)">○ Sin conectar</span>';
-    abrirModal('<h3>Datos y sincronización</h3><p class="sub">Tus datos se guardan en este navegador. Descargá una copia o conectá la nube para usar el bot de Telegram.</p>' +
-      '<div class="field"><label>Bot de Telegram / Nube</label>' +
+    var estadoNube = modoCuenta
+      ? '<span style="color:var(--text-mute)">Vinculá el chat para cargar gastos por Telegram</span>'
+      : (nubeActiva()
+        ? '<span style="color:var(--cyan)">● Conectado a la nube</span>'
+        : '<span style="color:var(--text-mute)">○ Sin conectar</span>');
+    abrirModal('<h3>Datos y sincronización</h3><p class="sub">Tus datos se guardan en este navegador. Descargá una copia o conectá el bot de Telegram.</p>' +
+      '<div class="field"><label>Bot de Telegram</label>' +
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">' +
         '<span style="font-size:13px">' + estadoNube + '</span>' +
-        '<button class="btn btn-primary btn-sm" id="mNube">☁️ Conectar Telegram</button></div></div>' +
+        '<button class="btn btn-primary btn-sm" id="mNube">🔗 Conectar Telegram</button></div></div>' +
       '<div class="field"><label>Copia de seguridad</label>' +
         '<div class="modal-actions" style="justify-content:flex-start;flex-wrap:wrap;margin-top:0">' +
         '<button class="btn" id="mExport">⬇️ Descargar copia</button>' +
@@ -1826,7 +1848,19 @@
         '</div></div>' +
       '<div class="modal-actions"><button class="btn btn-ghost" id="mCancel">Cerrar</button></div>');
     document.getElementById('mCancel').onclick = cerrarModal;
-    document.getElementById('mNube').onclick = modalNube;
+    document.getElementById('mNube').onclick = modoCuenta ? function () {
+      // Hay que abrir la pestaña YA, en el mismo click — si se abre recién
+      // después de esperar la respuesta del servidor, el navegador la bloquea.
+      var ventana = window.open('', '_blank');
+      toast('Generando link de Telegram…');
+      generarLinkTelegram().then(function (link) {
+        if (ventana) ventana.location.href = link; else location.href = link;
+        cerrarModal();
+      }).catch(function (e) {
+        if (ventana) ventana.close();
+        toast('No se pudo generar el link (' + (e && e.message ? e.message : 'error') + ')');
+      });
+    } : modalNube;
     document.getElementById('mExport').onclick = exportar;
     document.getElementById('mImport').onclick = function () { document.getElementById('importFile').click(); };
     document.getElementById('mReset').onclick = function () {
