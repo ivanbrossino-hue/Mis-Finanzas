@@ -386,17 +386,21 @@
       // Si vino de un link de invitación (?invite=token, compartido por WhatsApp
       // o cualquier otro medio), lo canjeamos antes que nada — ahí el rol y el
       // proyecto ya están definidos por el dueño, sin importar con qué mail
-      // se haya logueado.
-      if (!miProps && hayInviteLinkPendiente()) {
+      // se haya logueado. Esto corre SIEMPRE que haya un token pendiente, sin
+      // importar si la cuenta ya tiene membresía propia: si no lo hiciéramos así,
+      // alguien que ya entró antes (aunque sea de curioso, con un proyecto propio
+      // vacío) se quedaría viendo su proyecto viejo en vez de unirse al compartido,
+      // sin ningún error visible. La función del servidor ya sabe manejar ese caso
+      // (borra el proyecto propio si nunca se usó, o avisa con un error claro si
+      // tiene datos reales).
+      if (hayInviteLinkPendiente()) {
         var tokenInvite = tomarInviteLinkPendiente();
         var rJoin = await sbClient.functions.invoke('unirse-por-link', { body: { token: tokenInvite } });
         if (rJoin.error) throw rJoin.error;
         if (rJoin.data && rJoin.data.error) throw new Error(rJoin.data.error);
         miProps = { proyecto_id: rJoin.data.proyectoId, rol: rJoin.data.rol };
         toast('¡Te sumaste al proyecto compartido! 🎉');
-      }
-
-      if (!miProps) {
+      } else if (!miProps) {
         var mail = (user.email || '').toLowerCase();
         var r2 = await sbClient.from('miembros').select('id,proyecto_id,rol')
           .eq('email', mail).eq('estado', 'pendiente').is('user_id', null).maybeSingle();
