@@ -416,9 +416,25 @@
         var tokenInvite = tomarInviteLinkPendiente();
         var rJoin = await sbClient.functions.invoke('unirse-por-link', { body: { token: tokenInvite } });
         if (rJoin.error) throw await errorDeEdgeFunction(rJoin.error);
-        if (rJoin.data && rJoin.data.error) throw new Error(rJoin.data.error);
-        miProps = { proyecto_id: rJoin.data.proyectoId, rol: rJoin.data.rol };
-        toast('¡Te sumaste al proyecto compartido! 🎉');
+        if (rJoin.data && rJoin.data.requiereConfirmacion) {
+          // Ya tiene datos propios cargados: no los pisamos en silencio, le
+          // preguntamos primero y solo si confirma le pedimos a la función que
+          // borre su proyecto viejo y la sume al compartido (forzar:true).
+          var quiereForzar = await confirmarUnionForzada(rJoin.data.duenoEmail);
+          if (quiereForzar) {
+            var rJoin2 = await sbClient.functions.invoke('unirse-por-link', { body: { token: tokenInvite, forzar: true } });
+            if (rJoin2.error) throw await errorDeEdgeFunction(rJoin2.error);
+            if (rJoin2.data && rJoin2.data.error) throw new Error(rJoin2.data.error);
+            miProps = { proyecto_id: rJoin2.data.proyectoId, rol: rJoin2.data.rol };
+            toast('¡Te sumaste al proyecto compartido! 🎉');
+          }
+          // Si cancela, seguimos con miProps tal cual (su propio proyecto de siempre).
+        } else if (rJoin.data && rJoin.data.error) {
+          throw new Error(rJoin.data.error);
+        } else {
+          miProps = { proyecto_id: rJoin.data.proyectoId, rol: rJoin.data.rol };
+          toast('¡Te sumaste al proyecto compartido! 🎉');
+        }
       } else if (!miProps) {
         var mail = (user.email || '').toLowerCase();
         var r2 = await sbClient.from('miembros').select('id,proyecto_id,rol')
@@ -1764,6 +1780,22 @@
       '<button class="btn btn-primary" id="mOk">Sí, eliminar</button></div>');
     document.getElementById('mCancel').onclick = cerrarModal;
     document.getElementById('mOk').onclick = function () { cerrarModal(); onOk(); };
+  }
+
+  // Igual que confirmar(), pero como Promise<boolean> — hace falta poder
+  // "esperar" la decisión del usuario en medio de bootstrapProyecto (async)
+  // antes de decidir si se borran sus datos propios o no.
+  function confirmarUnionForzada(duenoEmail) {
+    return new Promise(function (resolve) {
+      var quien = duenoEmail ? '<b>' + escapeHtml(duenoEmail) + '</b>' : 'esa persona';
+      abrirModal('<h3>¿Unirte a este proyecto?</h3>' +
+        '<p class="sub">Ya tenés datos propios cargados en esta cuenta. Si entrás al proyecto compartido de ' + quien +
+        ', <b>vas a perder tus datos actuales</b> — no se pueden combinar los dos. Esta acción no se puede deshacer.</p>' +
+        '<div class="modal-actions"><button class="btn btn-ghost" id="mCancel">Cancelar, seguir con lo mío</button>' +
+        '<button class="btn btn-primary" id="mOk" style="background:var(--error)">Sí, borrar mis datos y unirme</button></div>');
+      document.getElementById('mCancel').onclick = function () { cerrarModal(); resolve(false); };
+      document.getElementById('mOk').onclick = function () { cerrarModal(); resolve(true); };
+    });
   }
 
   // Modal para agregar un gasto y mandarlo a la categoría elegida

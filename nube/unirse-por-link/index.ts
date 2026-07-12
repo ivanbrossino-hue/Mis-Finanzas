@@ -42,6 +42,7 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const inviteToken = String(body.token || "").trim();
+    const forzar = !!body.forzar;
     if (!inviteToken) return json({ error: "falta el token de invitación" }, 400);
 
     // Buscar el link (todavía no usado).
@@ -80,11 +81,20 @@ Deno.serve(async (req) => {
       );
       const viejos = viejoRes.ok ? await viejoRes.json() : [];
       const untocado = viejos[0] && viejos[0].rev === 0;
-      if (!untocado) {
-        return json({ error: "ya tenés tu propio proyecto con datos cargados — no te podés unir a otro sin perderlos" }, 409);
+      if (!untocado && !forzar) {
+        // No lo borramos todavía ni devolvemos un error terminal: le devolvemos a
+        // la app los datos para que le pregunte a la persona si de verdad quiere
+        // perder lo suyo. Si confirma, nos vuelve a llamar con forzar:true.
+        const duenoRes = await fetch(
+          `${SB_URL}/rest/v1/miembros?proyecto_id=eq.${link.proyecto_id}&rol=eq.dueno&select=email`,
+          { headers: headersServicio() },
+        );
+        const duenos = duenoRes.ok ? await duenoRes.json() : [];
+        return json({ requiereConfirmacion: true, duenoEmail: duenos[0] ? duenos[0].email : null });
       }
-      // Proyecto propio nunca usado: lo borramos (cascada se lleva la fila de miembros)
-      // y seguimos con la invitación como si fuera la primera vez.
+      // Proyecto propio nunca usado, o el usuario ya confirmó que quiere perder
+      // sus datos (forzar:true): lo borramos (cascada se lleva la fila de
+      // miembros) y seguimos con la invitación como si fuera la primera vez.
       await fetch(`${SB_URL}/rest/v1/proyectos?id=eq.${propio.proyecto_id}`, {
         method: "DELETE",
         headers: headersServicio(),
