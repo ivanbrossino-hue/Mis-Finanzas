@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Mis Finanzas</title>
+<link rel="icon" type="image/png" href="logo.png">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "on-background": "#1a1c1c", "surface-container-low": "#f3f3f4", "surface-dim": "#dadada",
+          "on-tertiary": "#ffffff", "on-error": "#ffffff", "secondary": "#4f6600", "on-secondary": "#ffffff",
+          "surface-container": "#eeeeee", "on-surface": "#1a1c1c", "primary": "#00361a",
+          "surface-container-lowest": "#ffffff", "primary-fixed-dim": "#9dd3aa", "surface-container-high": "#e8e8e8",
+          "primary-container": "#1a4d2e", "secondary-fixed": "#c8f24d", "tertiary": "#2b2f2e",
+          "on-secondary-container": "#556d00", "inverse-on-surface": "#f0f1f1", "background": "#f9f9f9",
+          "on-primary-fixed-variant": "#1d5031", "inverse-primary": "#9dd3aa", "secondary-container": "#c8f24d",
+          "on-secondary-fixed": "#161f00", "surface-bright": "#f9f9f9", "outline": "#717971",
+          "tertiary-fixed": "#e0e3e1", "on-primary-container": "#88bd95", "outline-variant": "#c1c9bf",
+          "on-error-container": "#93000a", "on-primary-fixed": "#00210e", "surface": "#f9f9f9",
+          "surface-container-highest": "#e2e2e2", "on-secondary-fixed-variant": "#3b4d00", "surface-variant": "#e2e2e2",
+          "surface-tint": "#366847", "on-tertiary-fixed-variant": "#434846", "primary-fixed": "#b8f0c5",
+          "tertiary-container": "#414544", "on-tertiary-container": "#afb2b0", "error": "#ba1a1a",
+          "on-primary": "#ffffff", "inverse-surface": "#2f3131", "secondary-fixed-dim": "#add531",
+          "error-container": "#ffdad6", "tertiary-fixed-dim": "#c4c7c5", "on-surface-variant": "#414942",
+          "on-tertiary-fixed": "#181c1b"
+        },
+        borderRadius: { DEFAULT: "0.25rem", lg: "0.5rem", xl: "0.75rem", full: "9999px" },
+        spacing: { xs: "4px", xxl: "64px", lg: "24px", md: "16px", xl: "32px", sm: "8px" },
+        fontFamily: {
+          "label-caps": ["Inter"], "headline-lg-mobile": ["Inter"], "body-sm": ["Inter"], "numeric-data": ["JetBrains Mono"],
+          "body-lg": ["Inter"], "title-md": ["Inter"], "display-lg": ["Inter"], "headline-lg": ["Inter"]
+        },
+        fontSize: {
+          "label-caps": ["12px", { lineHeight: "16px", letterSpacing: "0.05em", fontWeight: "700" }],
+          "headline-lg-mobile": ["24px", { lineHeight: "30px", fontWeight: "700" }],
+          "body-sm": ["14px", { lineHeight: "20px", fontWeight: "400" }],
+          "numeric-data": ["16px", { lineHeight: "24px", fontWeight: "600" }],
+          "body-lg": ["16px", { lineHeight: "24px", fontWeight: "400" }],
+          "title-md": ["18px", { lineHeight: "26px", fontWeight: "700" }],
+          "display-lg": ["38px", { lineHeight: "44px", letterSpacing: "-0.02em", fontWeight: "700" }],
+          "headline-lg": ["30px", { lineHeight: "38px", letterSpacing: "-0.01em", fontWeight: "600" }]
+        }
+      }
+    }
+  }
+</script>
+<style>
+  @keyframes fadeInUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+  .animate-fade-in-up { animation: fadeInUp .5s cubic-bezier(.22,1,.36,1) both; }
+  .glass-card {
+    background: rgba(255,255,255,.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(0,54,26,.08); box-shadow: 0 4px 20px rgba(26,77,46,.06);
+  }
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; vertical-align: middle; }
+  body { min-height: max(884px, 100dvh); font-family: 'Inter', sans-serif; }
+</style>
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+</head>
+<body class="bg-background text-on-surface font-body-lg min-h-screen overflow-x-hidden">
+
+<!-- ===== Fondo animado (shader) ===== -->
+<div class="fixed inset-0 z-0 pointer-events-none opacity-40">
+  <canvas id="shaderCanvas" style="display:block;width:100%;height:100%"></canvas>
+</div>
+<script>
+(function () {
+  var canvas = document.getElementById('shaderCanvas');
+  function syncSize() {
+    var w = canvas.clientWidth || 1280, h = canvas.clientHeight || 720;
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  }
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(syncSize).observe(canvas);
+  syncSize();
+  var gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+  if (!gl) return;
+  var vs = 'attribute vec2 a_position;varying vec2 v_texCoord;void main(){v_texCoord=a_position*0.5+0.5;gl_Position=vec4(a_position,0.0,1.0);}';
+  var fs = 'precision highp float;uniform float u_time;varying vec2 v_texCoord;' +
+    'void main(){vec2 uv=v_texCoord;vec3 color1=vec3(1.0,1.0,1.0);vec3 color2=vec3(0.10,0.30,0.18);vec3 color3=vec3(0.83,1.0,0.35);' +
+    'float noise=sin(uv.x*5.0+u_time*0.5)*cos(uv.y*3.0-u_time*0.3);' +
+    'float wave1=smoothstep(0.4,0.6,sin(uv.y*10.0+uv.x*5.0+u_time)*0.5+0.5+noise*0.2);' +
+    'float wave2=smoothstep(0.3,0.7,cos(uv.x*8.0-uv.y*4.0+u_time*0.7)*0.5+0.5+noise*0.3);' +
+    'vec3 finalColor=mix(color1,color2,wave1*0.1);finalColor=mix(finalColor,color3,wave2*0.05);gl_FragColor=vec4(finalColor,1.0);}';
+  function cs(type, src) { var s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; }
+  var prog = gl.createProgram();
+  gl.attachShader(prog, cs(gl.VERTEX_SHADER, vs));
+  gl.attachShader(prog, cs(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+  var buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  var pos = gl.getAttribLocation(prog, 'a_position');
+  gl.enableVertexAttribArray(pos);
+  gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
+  var uTime = gl.getUniformLocation(prog, 'u_time');
+  function render(t) {
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    if (uTime) gl.uniform1f(uTime, t * 0.001);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    requestAnimationFrame(render);
+  }
+  render(0);
+})();
+</script>
+
+<!-- ===== Pantalla de login ===== -->
+<div id="loginGate" class="login-gate" style="display:none">
+  <div class="login-card glass-card">
+    <img src="logo.png" alt="" width="64" height="64">
+    <h1>Mis Finanzas</h1>
+    <p id="loginGateMsg">Iniciá sesión para ver tus datos en cualquier dispositivo.</p>
+    <button class="btn-google" id="loginGoogleBtn">
+      <svg viewBox="0 0 24 24" width="18" height="18"><path fill="#4285F4" d="M23.52 12.27c0-.85-.08-1.66-.22-2.45H12v4.63h6.48c-.28 1.5-1.13 2.78-2.4 3.63v3.02h3.89c2.28-2.1 3.55-5.2 3.55-8.83z"/><path fill="#34A853" d="M12 24c3.24 0 5.96-1.08 7.94-2.9l-3.89-3.02c-1.08.72-2.45 1.15-4.05 1.15-3.12 0-5.76-2.1-6.7-4.93H1.28v3.1C3.25 21.3 7.28 24 12 24z"/><path fill="#FBBC05" d="M5.3 14.3c-.24-.72-.38-1.49-.38-2.3s.14-1.58.38-2.3V6.6H1.28C.47 8.24 0 10.06 0 12s.47 3.76 1.28 5.4z"/><path fill="#EA4335" d="M12 4.77c1.76 0 3.34.6 4.58 1.79l3.44-3.44C17.95 1.19 15.24 0 12 0 7.28 0 3.25 2.7 1.28 6.6l4.02 3.1C6.24 6.87 8.88 4.77 12 4.77z"/></svg>
+      Iniciar sesión con Google
+    </button>
+    <button class="btn-invitado" id="loginInvitadoBtn" type="button">Continuar como invitado</button>
+    <p class="login-note">Con Google, tus datos siguen a cualquier dispositivo. Como invitado quedan solo en este — podés vincularlos a tu cuenta más adelante.</p>
+  </div>
+</div>
+
+<div id="appRoot">
+
+  <!-- ===== TopAppBar ===== -->
+  <header class="fixed top-0 w-full z-40 bg-surface-container-lowest/90 backdrop-blur-xl border-b border-outline-variant/10 shadow-sm shadow-primary/5">
+    <div class="flex justify-between items-center px-md py-sm">
+      <div class="flex items-center gap-sm">
+        <div class="w-10 h-10 rounded-full overflow-hidden border border-outline-variant bg-white flex items-center justify-center flex-shrink-0">
+          <img class="w-7 h-7 object-contain" src="logo.png" alt="">
+        </div>
+        <h1 class="font-display-lg text-headline-lg-mobile text-primary tracking-tighter">Mis Finanzas</h1>
+      </div>
+      <div class="flex items-center gap-xs">
+        <button class="w-9 h-9 flex items-center justify-center rounded-full hover:bg-primary/5 transition-colors active:scale-95 text-on-surface-variant" id="menuBtn" title="Copia de seguridad">
+          <span class="material-symbols-outlined text-[20px]">cloud_download</span>
+        </button>
+        <button class="btn-conectar-google" id="conectarGoogleBtn" type="button" style="display:none">Vincular</button>
+        <div class="user-chip" id="userChip">
+          <div class="avatar" id="userAvatar">?</div>
+        </div>
+        <button class="w-9 h-9 flex items-center justify-center rounded-full hover:bg-primary/5 transition-colors active:scale-95 text-on-surface-variant" id="cerrarSesionBtn" title="Cerrar sesión" style="display:none">
+          <span class="material-symbols-outlined text-[20px]">logout</span>
+        </button>
+      </div>
+    </div>
+    <div class="flex items-center justify-center gap-2 pb-sm">
+      <button class="month-nav-btn" id="prevMonth" title="Mes anterior"><span class="material-symbols-outlined text-[18px]">chevron_left</span></button>
+      <span class="month-label" id="monthLabel">—</span>
+      <button class="month-nav-btn" id="nextMonth" title="Mes siguiente"><span class="material-symbols-outlined text-[18px]">chevron_right</span></button>
+    </div>
+  </header>
+
+  <!-- ===== Contenido ===== -->
+  <main class="relative z-10 pt-32 pb-32 px-md max-w-2xl mx-auto">
+    <div class="canvas">
+
+      <!-- ============ RESUMEN ============ -->
+      <div id="vistaResumen" class="page-view">
+        <section class="glass-card rounded-xl p-lg relative overflow-hidden animate-fade-in-up">
+          <div class="absolute -top-12 -right-12 w-48 h-48 bg-secondary-container/30 blur-3xl rounded-full pointer-events-none"></div>
+          <div class="relative z-10 space-y-xs">
+            <span class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest" id="heroBalLabel">Te queda este mes</span>
+            <h2 class="font-display-lg text-display-lg text-primary" id="heroBalVal" data-raw="0">$ 0</h2>
+            <div class="hero-delta" id="heroBalDelta"></div>
+            <div class="flex gap-sm mt-lg flex-wrap">
+              <button class="btn-stitch-primary" id="heroAddGasto">
+                <span class="material-symbols-outlined text-[18px]">add</span> Agregar gasto
+              </button>
+              <button class="btn-stitch-ghost" id="heroBackup">Respaldar</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="kpis" id="kpis"></section>
+
+        <section class="glass-card rounded-xl p-lg animate-fade-in-up">
+          <div class="flex justify-between items-center mb-md">
+            <h3 class="font-title-md text-title-md text-primary flex items-center gap-2">
+              <span class="material-symbols-outlined text-secondary">show_chart</span>Evolución
+            </h3>
+            <div class="evo-toggle" id="evoToggle">
+              <button data-modo="semanal">Sem</button>
+              <button data-modo="mensual" class="active">Mes</button>
+              <button data-modo="anual">Año</button>
+            </div>
+          </div>
+          <div class="chart-legend">
+            <span><i class="dot-ing"></i>Ingresos</span>
+            <span><i class="dot-gas"></i>Gastos</span>
+          </div>
+          <div id="evoBody" class="evo"></div>
+        </section>
+
+        <section class="glass-card rounded-xl p-lg animate-fade-in-up">
+          <div class="flex justify-between items-center mb-md">
+            <h3 class="font-title-md text-title-md text-primary flex items-center gap-2">
+              <span class="material-symbols-outlined text-secondary">donut_large</span>En qué se va la plata
+            </h3>
+            <span class="badge" id="donutTotal"></span>
+          </div>
+          <div class="panel-body" id="donutBody"></div>
+        </section>
+
+        <p class="footer-note">
+          Tus datos se guardan solos en este navegador. Usá <b>Respaldar</b> cada tanto para bajar una copia.
+        </p>
+      </div>
+
+      <!-- ============ GASTOS (con Ingresos arriba de todo) ============ -->
+      <div id="vistaGastos" class="page-view view-hidden">
+        <div class="page-head">
+          <div>
+            <h2><span class="material-symbols-outlined text-primary align-middle mr-1">shopping_cart</span>Gastos</h2>
+            <p>Tus ingresos y todo lo que se te fue este mes, por categoría.</p>
+          </div>
+        </div>
+        <section class="glass-card rounded-xl p-lg" id="ingresos">
+          <div class="flex justify-between items-center mb-md">
+            <h3 class="font-title-md text-title-md text-primary flex items-center gap-2">
+              <span class="material-symbols-outlined text-secondary">payments</span>Ingresos del mes
+            </h3>
+            <span class="badge" id="ingresosTotal"></span>
+          </div>
+          <div class="panel-body" id="ingresosBody"></div>
+        </section>
+        <section class="glass-card rounded-xl p-lg" id="gastos">
+          <div class="flex justify-between items-center mb-md">
+            <h3 class="font-title-md text-title-md text-primary">Gastos del mes</h3>
+            <span class="badge" id="gastosTotal"></span>
+          </div>
+          <div class="panel-body" id="gastosBody"></div>
+        </section>
+      </div>
+
+      <!-- ============ DEUDAS ============ -->
+      <div id="vistaDeudas" class="page-view view-hidden">
+        <div class="page-head">
+          <div>
+            <h2><span class="material-symbols-outlined text-primary align-middle mr-1">credit_card</span>Deudas</h2>
+            <p>Tarjetas, préstamos y cuotas pendientes.</p>
+          </div>
+          <button class="btn-stitch-primary btn-sm" id="addDeudaBtn">
+            <span class="material-symbols-outlined text-[16px]">add</span> Agregar
+          </button>
+        </div>
+        <section class="glass-card rounded-xl p-lg">
+          <div class="panel-body" id="deudasBody"></div>
+        </section>
+      </div>
+
+      <!-- ============ HISTORIAL ============ -->
+      <div id="vistaHistorial" class="page-view view-hidden">
+        <div class="page-head">
+          <div>
+            <h2><span class="material-symbols-outlined text-primary align-middle mr-1">history</span>Historial</h2>
+            <p>Todos los movimientos que fuiste cargando, mes a mes.</p>
+          </div>
+        </div>
+        <div class="hist-toolbar glass-card rounded-xl">
+          <input type="text" id="histBuscar" placeholder="Buscar por nota, fila o producto…">
+          <select id="histFiltroMes"><option value="">Todos los meses</option></select>
+          <select id="histFiltroCat"><option value="">Todas las categorías</option></select>
+        </div>
+        <section class="glass-card rounded-xl p-lg">
+          <div class="flex justify-between items-center mb-md">
+            <h3 class="font-title-md text-title-md text-primary">Movimientos</h3>
+            <span class="badge" id="historialTotal"></span>
+          </div>
+          <div class="panel-body" id="historialBody"></div>
+        </section>
+      </div>
+
+      <!-- ============ ANALÍTICAS ============ -->
+      <div id="vistaAnaliticas" class="page-view view-hidden">
+        <div class="page-head">
+          <div>
+            <h2><span class="material-symbols-outlined text-primary align-middle mr-1">insights</span>Analíticas</h2>
+            <p>Cómo se mueve tu plata: flujo mensual, presupuestos y proyecciones.</p>
+          </div>
+          <button class="btn-stitch-ghost btn-sm" id="exportarAnaliticasBtn">
+            <span class="material-symbols-outlined text-[16px]">download</span> Exportar
+          </button>
+        </div>
+
+        <section class="glass-card rounded-xl p-lg">
+          <div class="flex justify-between items-center mb-md">
+            <h3 class="font-title-md text-title-md text-primary">Flujo de caja mensual</h3>
+            <span class="badge" id="flujoBadge"></span>
+          </div>
+          <div class="panel-body" id="flujoBody"></div>
+        </section>
+
+        <section class="glass-card rounded-xl p-lg">
+          <div class="flex justify-between items-center mb-md">
+            <h3 class="font-title-md text-title-md text-primary">Presupuesto por categoría</h3>
+            <span class="badge" id="presupuestosBadge"></span>
+          </div>
+          <div class="panel-body" id="presupuestosBody"></div>
+        </section>
+
+        <section class="glass-card rounded-xl p-lg">
+          <h3 class="font-title-md text-title-md text-primary mb-md">Simulador de inversión</h3>
+          <div class="panel-body" id="simuladorBody"></div>
+        </section>
+
+        <section class="glass-card rounded-xl p-lg">
+          <div class="flex justify-between items-center mb-md">
+            <h3 class="font-title-md text-title-md text-primary">Últimos movimientos</h3>
+            <button class="btn-stitch-ghost btn-sm" id="verHistorialBtn">Ver todo →</button>
+          </div>
+          <div class="panel-body" id="ultimosMovsBody"></div>
+        </section>
+
+        <section class="glass-card rounded-xl p-lg">
+          <h3 class="font-title-md text-title-md text-primary mb-md">Gastos recurrentes</h3>
+          <div class="panel-body" id="recurrentesBody"></div>
+        </section>
+
+        <section class="glass-card rounded-xl p-lg" id="eficienciaCard">
+          <div class="panel-body eficiencia-body" id="eficienciaBody"></div>
+        </section>
+
+        <section class="glass-card rounded-xl p-lg">
+          <h3 class="font-title-md text-title-md text-primary mb-md">Cuotas pendientes</h3>
+          <div class="panel-body" id="pendientesBody"></div>
+        </section>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ===== BottomNavBar ===== -->
+  <nav class="bottom-nav">
+    <a href="#resumen" data-page="resumen" class="active">
+      <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+      <span class="font-label-caps text-label-caps">Inicio</span>
+    </a>
+    <a href="#gastos" data-page="gastos">
+      <span class="material-symbols-outlined">shopping_cart</span>
+      <span class="font-label-caps text-label-caps">Gastos</span>
+    </a>
+    <a href="#deudas" data-page="deudas">
+      <span class="material-symbols-outlined">credit_card</span>
+      <span class="font-label-caps text-label-caps">Deudas</span>
+    </a>
+    <a href="#historial" data-page="historial">
+      <span class="material-symbols-outlined">history</span>
+      <span class="font-label-caps text-label-caps">Historial</span>
+    </a>
+    <a href="#analiticas" data-page="analiticas">
+      <span class="material-symbols-outlined">insights</span>
+      <span class="font-label-caps text-label-caps">Analíticas</span>
+    </a>
+  </nav>
+
+  <div class="fab-backdrop" id="fabBackdrop"></div>
+  <div class="fab-wrap" id="fabWrap">
+    <div class="fab-actions" id="fabActions">
+      <button class="fab-action" id="fabMes" style="transition-delay:0ms">
+        <span class="fab-action-label">Nuevo mes</span>
+        <span class="fab-action-ic"><span class="material-symbols-outlined">calendar_add_on</span></span>
+      </button>
+      <button class="fab-action" id="fabIngreso" style="transition-delay:30ms">
+        <span class="fab-action-label">Nuevo ingreso</span>
+        <span class="fab-action-ic"><span class="material-symbols-outlined">payments</span></span>
+      </button>
+      <button class="fab-action" id="fabGasto" style="transition-delay:60ms">
+        <span class="fab-action-label">Nuevo gasto</span>
+        <span class="fab-action-ic"><span class="material-symbols-outlined">shopping_cart</span></span>
+      </button>
+    </div>
+    <button class="fab" id="fabToggle" title="Agregar">
+      <span class="material-symbols-outlined text-[24px]" id="fabToggleIcon">add</span>
+    </button>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-back" id="modalBack">
+  <div class="modal glass-card" id="modal"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+<input type="file" id="importFile" accept="application/json" style="display:none">
+
+<script src="datos-iniciales.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
