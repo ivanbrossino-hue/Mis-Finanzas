@@ -144,6 +144,11 @@ function uidBot(prefijo: string) {
 }
 
 // ---------- Parseo ----------
+// Saca tildes y pasa a minúsculas — para que "saca el azucar" encuentre
+// "Azúcar" en el carrito (si no, "azúcar".includes("azucar") da false).
+function normalizar(s: string): string {
+  return s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+}
 function num(s: string): number {
   s = s.replace(/\./g, "").replace(",", ".");
   const n = parseFloat(s);
@@ -492,9 +497,9 @@ Deno.serve(async (req) => {
         await tg("sendMessage", { chat_id: chat, text: "No hay nada en el carrito para borrar todavía." });
         return new Response("ok");
       }
-      const resto = mBorrar[2].trim().toLowerCase().replace(/^(lo\s+|el\s+|la\s+|los\s+|las\s+)+/, "");
-      const esUltimo = resto === "" || /^(último|ultimo|ultima|última)/.test(resto);
-      let idx = esUltimo ? s.items.length - 1 : s.items.findIndex((it) => it.nombre.toLowerCase().includes(resto));
+      const resto = normalizar(mBorrar[2].trim()).replace(/^(lo\s+|el\s+|la\s+|los\s+|las\s+)+/, "");
+      const esUltimo = resto === "" || /^(ultimo|ultima)/.test(resto);
+      let idx = esUltimo ? s.items.length - 1 : s.items.findIndex((it) => normalizar(it.nombre).includes(resto));
       if (idx === -1) {
         await tg("sendMessage", { chat_id: chat, text: `No encontré "${mBorrar[2].trim()}" en el carrito actual.` });
         return new Response("ok");
@@ -521,6 +526,14 @@ Deno.serve(async (req) => {
     return new Response("ok");
   } catch (e) {
     console.error(e);
+    // Antes esto quedaba en silencio para el usuario (solo en los logs) —
+    // por eso a veces "no pasaba nada" al mandar un mensaje. Avisamos en el
+    // chat aunque sea con un mensaje genérico, para que se note que algo
+    // falló en vez de parecer que el bot no respondió.
+    try {
+      const chat = update?.message?.chat?.id ?? update?.callback_query?.message?.chat?.id;
+      if (chat) await tg("sendMessage", { chat_id: chat, text: "⚠️ Tuve un error procesando eso. Probá de nuevo en un momento." });
+    } catch {}
     return new Response("ok");
   }
 });
