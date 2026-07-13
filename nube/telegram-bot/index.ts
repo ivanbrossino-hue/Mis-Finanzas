@@ -153,14 +153,17 @@ function limpiarNombre(s: string): string {
   return s.split(/\s+/).filter((w) => w && !FILLER.includes(w.toLowerCase()))
     .join(" ").replace(/\s+/g, " ").trim();
 }
+// Un "-" pegado al número (ej: "-2000 devolución") lo resta en vez de sumarlo —
+// sirve para descuentos, devoluciones o para corregir un monto cargado de más,
+// sin tener que borrar y volver a mandar todo el carrito.
 function parseUnItem(seg: string): { nombre: string; monto: number } | null {
   let monto = 0, t = seg.trim();
-  const k = t.match(/(\d[\d.,]*)\s*k\b/i);
-  const nn = t.match(/(\d[\d.,]*)/);
+  const k = t.match(/(-?\d[\d.,]*)\s*k\b/i);
+  const nn = t.match(/(-?\d[\d.,]*)/);
   if (k) { monto = num(k[1]) * 1000; t = t.replace(k[0], ""); }
   else if (nn) { monto = num(nn[1]); t = t.replace(nn[0], ""); }
   if (!monto) return null;
-  return { nombre: limpiarNombre(t) || "item", monto };
+  return { nombre: limpiarNombre(t) || (monto < 0 ? "Descuento" : "item"), monto };
 }
 // separa "2000 arroz, 2300 azucar" en varios items
 function parseItems(text: string): { nombre: string; monto: number }[] {
