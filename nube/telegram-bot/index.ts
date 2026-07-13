@@ -484,6 +484,30 @@ Deno.serve(async (req) => {
       return new Response("ok");
     }
 
+    // --- "borrá lo último" / "sacá el arroz": saca un ítem del carrito en
+    // curso (todavía no confirmado con "Sumar al total") y resta su monto. ---
+    const mBorrar = text.match(/^(borra|borrar|saca|sacar|elimina|eliminar|quita|quitar)\b\s*(.*)$/i);
+    if (mBorrar) {
+      if (!s.items || !s.items.length) {
+        await tg("sendMessage", { chat_id: chat, text: "No hay nada en el carrito para borrar todavía." });
+        return new Response("ok");
+      }
+      const resto = mBorrar[2].trim().toLowerCase().replace(/^(lo\s+|el\s+|la\s+|los\s+|las\s+)+/, "");
+      const esUltimo = resto === "" || /^(último|ultimo|ultima|última)/.test(resto);
+      let idx = esUltimo ? s.items.length - 1 : s.items.findIndex((it) => it.nombre.toLowerCase().includes(resto));
+      if (idx === -1) {
+        await tg("sendMessage", { chat_id: chat, text: `No encontré "${mBorrar[2].trim()}" en el carrito actual.` });
+        return new Response("ok");
+      }
+      const sacado = s.items[idx];
+      s.items.splice(idx, 1);
+      await setSesion(chat, s);
+      await tg("sendMessage", { chat_id: chat, parse_mode: "HTML", text: `🗑️ Saqué <b>${sacado.nombre}</b> (${money(sacado.monto)}) del carrito.` });
+      if (s.items.length) await mostrarCarrito(chat, s);
+      else await tg("sendMessage", { chat_id: chat, text: "El carrito quedó vacío." });
+      return new Response("ok");
+    }
+
     // --- productos: los sumamos al carrito ---
     const items = parseItems(text);
     if (!items.length) {
