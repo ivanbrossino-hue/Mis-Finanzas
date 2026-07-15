@@ -361,6 +361,11 @@ input, select { font-family: inherit; }
 /* ============================================================
    Navegación inferior + FAB
    ============================================================ */
+/* Marca ("Mis Finanzas" + logo) que se muestra arriba de los links cuando
+   la nav se convierte en barra lateral en pantallas grandes — en celular
+   no va, la nav de abajo ya la tiene el header. */
+.side-brand { display: none; }
+
 .bottom-nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 130;
   display: flex; background: rgba(255,255,255,.95); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
