@@ -42,7 +42,7 @@
   var estado = null;
   var mesActivo = null;
   var colapsadas = {}; // categorías colapsadas (solo visual)
-  var evoModo = 'mensual'; // vista del gráfico: 'semanal' | 'mensual' | 'anual'
+  var evoModo = 'mensual'; // vista del gráfico: 'mensual' | 'anual'
   var vistaActual = 'resumen'; // 'resumen' | 'historial' — qué página se está mostrando
 
   // ---- Nube (Supabase) para sincronizar con el bot de Telegram ----
@@ -1079,20 +1079,6 @@
       });
     }
 
-    if (evoModo === 'semanal') {
-      // Estimación: se toman los últimos 3 meses y se reparte cada uno en 4 semanas
-      var last = all.slice(-3);
-      var pts = [];
-      last.forEach(function (k) {
-        var wi = totalIngresos(k) / 4, wg = totalGastos(k) / 4;
-        for (var w = 1; w <= 4; w++) {
-          pts.push({ label: w === 1 ? mesCortoConAnio(k) : '', ing: wi, gas: wg, goto: k,
-                     active: k === mesActivo, titulo: mesKeyLabel(k) + ' · Semana ' + w + ' (est.)' });
-        }
-      });
-      return pts;
-    }
-
     // mensual (por defecto): últimos 12 meses
     return all.slice(-12).map(function (k) {
       return { label: mesCortoConAnio(k), ing: totalIngresos(k), gas: totalGastos(k), goto: k,
@@ -1100,75 +1086,52 @@
     });
   }
 
-  // ---- Gráfico de evolución (área + líneas, estilo Luminous) ----
+  // ---- Gráfico de evolución (Chart.js: ingresos verde, gastos rojo) ----
+  var evoChartInstance = null;
   function renderEvolucion(animate) {
-    var body = document.getElementById('evoBody');
+    var canvas = document.getElementById('evoChart');
+    if (!canvas || typeof Chart === 'undefined') return;
     var serie = serieEvolucion();
-    if (serie.length === 0) { body.innerHTML = ''; return; }
+    if (evoChartInstance) { evoChartInstance.destroy(); evoChartInstance = null; }
+    if (serie.length === 0) return;
 
-    var W = 600, H = 210, padX = 12, padTop = 18, padBot = 14;
-    var max = 0;
-    serie.forEach(function (p) { max = Math.max(max, p.ing, p.gas); });
-    if (max === 0) max = 1;
-    max *= 1.12; // aire arriba
+    var radios = serie.map(function (p) { return p.active ? 6 : 3; });
 
-    var n = serie.length;
-    var xstep = n > 1 ? (W - padX * 2) / (n - 1) : 0;
-    function X(i) { return n > 1 ? padX + i * xstep : W / 2; }
-    function Y(v) { return padTop + (1 - v / max) * (H - padTop - padBot); }
-
-    function linePath(prop) {
-      return serie.map(function (p, i) {
-        return (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(p[prop]).toFixed(1);
-      }).join(' ');
-    }
-    var gLine = linePath('gas');
-    var iLine = linePath('ing');
-    var gArea = gLine + ' L ' + X(n - 1).toFixed(1) + ' ' + (H - padBot) + ' L ' + X(0).toFixed(1) + ' ' + (H - padBot) + ' Z';
-
-    // vértices (útiles cuando hay pocos puntos, ej. anual; y tocables en cualquier caso)
-    var dotsGas = '', dotsIng = '';
-    serie.forEach(function (p, i) {
-      var isAct = p.active;
-      dotsGas += '<circle class="evo-dot" data-goto="' + p.goto + '" cx="' + X(i).toFixed(1) + '" cy="' + Y(p.gas).toFixed(1) + '" r="' + (isAct ? 5 : 7) +
-        '" fill="' + (isAct ? '#ba1a1a' : 'transparent') + '" stroke="#ba1a1a" stroke-width="' + (isAct ? 2 : 0) + '"><title>' + escapeAttr(p.titulo) + '</title></circle>';
-      dotsIng += '<circle class="evo-dot" data-goto="' + p.goto + '" cx="' + X(i).toFixed(1) + '" cy="' + Y(p.ing).toFixed(1) + '" r="' + (isAct ? 5 : 7) +
-        '" fill="' + (isAct ? '#16a34a' : 'transparent') + '" stroke="#16a34a" stroke-width="' + (isAct ? 2 : 0) + '"><title>' + escapeAttr(p.titulo) + '</title></circle>';
-    });
-
-    var svg =
-      '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
-      '<defs><linearGradient id="gGrad" x1="0" x2="0" y1="0" y2="1">' +
-      '<stop offset="0%" stop-color="#ba1a1a" stop-opacity="0.18"/>' +
-      '<stop offset="100%" stop-color="#ba1a1a" stop-opacity="0"/></linearGradient></defs>' +
-      '<path d="' + gArea + '" fill="url(#gGrad)"/>' +
-      '<path class="evo-line" d="' + iLine + '" fill="none" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>' +
-      '<path class="evo-line" d="' + gLine + '" fill="none" stroke="#ba1a1a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>' +
-      dotsGas + dotsIng + '</svg>';
-
-    var labels = '<div class="evo-labels">' + serie.map(function (p) {
-      return '<span data-goto="' + p.goto + '" class="' + (p.active ? 'active' : '') + '" title="' +
-        escapeAttr(p.titulo) + '">' + p.label + '</span>';
-    }).join('') + '</div>';
-
-    body.innerHTML = svg + labels;
-
-    if (animate) {
-      body.querySelectorAll('.evo-line').forEach(function (p) {
-        var len = p.getTotalLength();
-        p.style.transition = 'none';
-        p.style.strokeDasharray = len; p.style.strokeDashoffset = len;
-        requestAnimationFrame(function () {
-          requestAnimationFrame(function () {
-            p.style.transition = 'stroke-dashoffset .9s ease';
-            p.style.strokeDashoffset = 0;
-          });
-        });
-      });
-    }
-
-    body.querySelectorAll('[data-goto]').forEach(function (el) {
-      el.addEventListener('click', function () { mesActivo = el.getAttribute('data-goto'); render(true); });
+    evoChartInstance = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: serie.map(function (p) { return p.label; }),
+        datasets: [
+          {
+            label: 'Ingresos', data: serie.map(function (p) { return p.ing; }),
+            borderColor: '#16a34a', backgroundColor: 'transparent', borderWidth: 2.5,
+            pointRadius: radios, pointHoverRadius: 7, pointBackgroundColor: '#16a34a', tension: 0.25,
+          },
+          {
+            label: 'Gastos', data: serie.map(function (p) { return p.gas; }),
+            borderColor: '#ba1a1a', backgroundColor: 'rgba(186,26,26,.12)', borderWidth: 2.5,
+            pointRadius: radios, pointHoverRadius: 7, pointBackgroundColor: '#ba1a1a', tension: 0.25, fill: true,
+          },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        animation: animate ? { duration: 500 } : false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'top', align: 'start', labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, font: { family: "'Inter',sans-serif", size: 12 } } },
+          tooltip: { callbacks: { label: function (ctx) { return ' ' + ctx.dataset.label + ': ' + fmt(ctx.parsed.y); } } },
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { family: "'JetBrains Mono',monospace", size: 10 } } },
+          y: { display: false },
+        },
+        onClick: function (evt, elements) {
+          if (!elements.length) return;
+          mesActivo = serie[elements[0].index].goto;
+          render(true);
+        },
+      },
     });
   }
 
@@ -1552,6 +1515,8 @@
   // ============================================================
   function renderAnaliticas() {
     renderFlujoCaja();
+    renderGastoDias();
+    renderGastoMeses();
     renderPresupuestos();
     renderSimulador();
     renderUltimosMovimientos();
@@ -1654,39 +1619,138 @@
     });
   }
 
+  var flujoChartInstance = null;
   function renderFlujoCaja() {
-    var body = document.getElementById('flujoBody');
+    var canvas = document.getElementById('flujoChart');
+    if (!canvas || typeof Chart === 'undefined') return;
     var keys = mesesOrdenados().slice(-8);
-    if (!keys.length) { body.innerHTML = '<p class="empty-hint">Todavía no hay meses cargados.</p>'; return; }
+    if (flujoChartInstance) { flujoChartInstance.destroy(); flujoChartInstance = null; }
+    if (!keys.length) { document.getElementById('flujoBadge').textContent = ''; return; }
+
     var balances = keys.map(function (k) { return balanceMes(k); });
-    var maxAbs = Math.max(1, Math.max.apply(null, balances.map(Math.abs)));
     var totalNeto = balances.reduce(function (s, b) { return s + b; }, 0);
     document.getElementById('flujoBadge').textContent = (totalNeto >= 0 ? '+' : '') + fmt(totalNeto) + ' neto';
+    var colores = balances.map(function (b) { return b >= 0 ? '#16a34a' : '#ba1a1a'; });
 
-    var cols = '';
-    keys.forEach(function (k, i) {
-      var bal = balances[i];
-      var ratio = Math.abs(bal) / maxAbs;
-      var h = Math.max(2, Math.round(ratio * 42)); // % relativo a la altura de la columna
-      var top = bal >= 0 ? (50 - h) : 50;
-      var cls = bal >= 0 ? 'pos' : 'neg';
-      var titulo = mesKeyLabel(k) + ' — Ingresos ' + fmt(totalIngresos(k)) + ' · Gastos ' + fmt(totalGastos(k)) +
-        ' · Cuotas pagadas ' + fmt(cuotasPagadas(k)) + ' · Neto ' + (bal >= 0 ? '+' : '') + fmt(bal);
-      cols += '<div class="flow-col" data-goto="' + k + '" title="' + escapeAttr(titulo) + '">' +
-        '<div class="flow-bar ' + cls + '" style="top:' + top + '%;height:' + h + '%"></div></div>';
+    flujoChartInstance = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: keys.map(function (k) { return mesCortoConAnio(k); }),
+        datasets: [{ label: 'Neto', data: balances, backgroundColor: colores, borderRadius: 4, maxBarThickness: 34 }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: function (ctx) {
+            var k = keys[ctx.dataIndex];
+            return ['Ingresos ' + fmt(totalIngresos(k)), 'Gastos ' + fmt(totalGastos(k)), 'Neto ' + (ctx.parsed.y >= 0 ? '+' : '') + fmt(ctx.parsed.y)];
+          } } },
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { family: "'JetBrains Mono',monospace", size: 10 } } },
+          y: { display: false },
+        },
+        onClick: function (evt, elements) {
+          if (!elements.length) return;
+          mesActivo = keys[elements[0].index]; render(true);
+        },
+      },
     });
-    var labels = keys.map(function (k) {
-      return '<span class="' + (k === mesActivo ? 'activo' : '') + '">' + mesCortoConAnio(k) + '</span>';
-    }).join('');
+  }
 
-    body.innerHTML =
-      '<div class="flow-plot"><div class="flow-baseline"></div>' + cols + '</div>' +
-      '<div class="flow-labels">' + labels + '</div>' +
-      '<div class="flow-legend"><span><i style="background:var(--secondary-fixed-dim)"></i>A favor</span>' +
-      '<span><i style="background:var(--error)"></i>En contra</span></div>';
+  // ---- Gastos por día del mes activo: para encontrar el día "pico" y qué
+  // gasto puntual lo causó (no promedios ni estimaciones, movimientos reales) ----
+  var gastoDiasChartInstance = null;
+  function renderGastoDias() {
+    var canvas = document.getElementById('gastoDiasChart');
+    if (!canvas || typeof Chart === 'undefined') return;
+    document.getElementById('gastoDiasMes').textContent = mesKeyLabel(mesActivo);
+    if (gastoDiasChartInstance) { gastoDiasChartInstance.destroy(); gastoDiasChartInstance = null; }
 
-    body.querySelectorAll('[data-goto]').forEach(function (el) {
-      el.addEventListener('click', function () { mesActivo = el.getAttribute('data-goto'); render(true); });
+    var movs = mesData().movimientos || [];
+    var resumenEl = document.getElementById('gastoDiasResumen');
+    if (!movs.length) {
+      resumenEl.textContent = 'Todavía no cargaste gastos este mes.';
+      return;
+    }
+
+    var partes = mesActivo.split('-');
+    var anio = parseInt(partes[0], 10), mes = parseInt(partes[1], 10);
+    var diasEnMes = new Date(anio, mes, 0).getDate();
+    var totalesPorDia = new Array(diasEnMes + 1).fill(0); // índice 1..diasEnMes
+
+    movs.forEach(function (mv) {
+      var dia = parseInt(mv.fecha.split('-')[2], 10);
+      if (dia >= 1 && dia <= diasEnMes) totalesPorDia[dia] += (Number(mv.monto) || 0);
+    });
+
+    var diaPico = 1;
+    for (var d = 2; d <= diasEnMes; d++) if (totalesPorDia[d] > totalesPorDia[diaPico]) diaPico = d;
+
+    var labels = [], data = [], colores = [];
+    for (var i = 1; i <= diasEnMes; i++) {
+      labels.push(String(i));
+      data.push(totalesPorDia[i]);
+      colores.push(i === diaPico && totalesPorDia[i] > 0 ? '#ba1a1a' : '#f0b4b4');
+    }
+
+    gastoDiasChartInstance = new Chart(canvas, {
+      type: 'bar',
+      data: { labels: labels, datasets: [{ label: 'Gastado', data: data, backgroundColor: colores, borderRadius: 3, maxBarThickness: 16 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: function (ctx) { return fmt(ctx.parsed.y); } } },
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { family: "'JetBrains Mono',monospace", size: 9 }, maxRotation: 0, autoSkipPadding: 6 } },
+          y: { display: false },
+        },
+      },
+    });
+
+    if (totalesPorDia[diaPico] > 0) {
+      var movsDelPico = movs.filter(function (mv) { return parseInt(mv.fecha.split('-')[2], 10) === diaPico; });
+      var mayor = movsDelPico.reduce(function (a, b) { return (Number(b.monto) || 0) > (Number(a.monto) || 0) ? b : a; });
+      var cat = CAT_MAP[mayor.categoria] || { icon: '•' };
+      resumenEl.innerHTML = '📍 Tu día de mayor gasto: <b>' + diaPico + ' de ' + MESES_NOMBRE[mes - 1].toLowerCase() + '</b> — ' +
+        fmt(totalesPorDia[diaPico]) + ' en total. El más grande fue ' + cat.icon + ' <b>' + escapeHtml(mayor.fila || mayor.nota || 'un gasto') + '</b> por ' + fmt(mayor.monto) + '.';
+    } else {
+      resumenEl.textContent = 'Todavía no cargaste gastos este mes.';
+    }
+  }
+
+  // ---- Qué meses gastaste más (solo gastos, no el neto — para comparar) ----
+  var gastoMesesChartInstance = null;
+  function renderGastoMeses() {
+    var canvas = document.getElementById('gastoMesesChart');
+    if (!canvas || typeof Chart === 'undefined') return;
+    var keys = mesesOrdenados().slice(-8);
+    if (gastoMesesChartInstance) { gastoMesesChartInstance.destroy(); gastoMesesChartInstance = null; }
+    if (!keys.length) return;
+
+    var gastos = keys.map(function (k) { return totalGastos(k); });
+
+    gastoMesesChartInstance = new Chart(canvas, {
+      type: 'bar',
+      data: { labels: keys.map(function (k) { return mesCortoConAnio(k); }), datasets: [{ label: 'Gastos', data: gastos, backgroundColor: '#ba1a1a', borderRadius: 4, maxBarThickness: 34 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: function (ctx) { return fmt(ctx.parsed.y); } } },
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { family: "'JetBrains Mono',monospace", size: 10 } } },
+          y: { display: false },
+        },
+        onClick: function (evt, elements) {
+          if (!elements.length) return;
+          mesActivo = keys[elements[0].index]; render(true);
+        },
+      },
     });
   }
 

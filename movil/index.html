@@ -17,6 +17,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -73,7 +74,7 @@
   .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; vertical-align: middle; }
   body { min-height: max(884px, 100dvh); font-family: 'Inter', sans-serif; }
 </style>
-<link rel="stylesheet" href="styles.css?v=1">
+<link rel="stylesheet" href="styles.css?v=2">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
 <body class="bg-background text-on-surface font-body-lg min-h-screen overflow-x-hidden">
@@ -199,16 +200,11 @@
               <span class="material-symbols-outlined text-secondary">show_chart</span>Evolución
             </h3>
             <div class="evo-toggle" id="evoToggle">
-              <button data-modo="semanal">Sem</button>
               <button data-modo="mensual" class="active">Mes</button>
               <button data-modo="anual">Año</button>
             </div>
           </div>
-          <div class="chart-legend">
-            <span><i class="dot-ing"></i>Ingresos</span>
-            <span><i class="dot-gas"></i>Gastos</span>
-          </div>
-          <div id="evoBody" class="evo"></div>
+          <div class="evo-canvas-wrap"><canvas id="evoChart"></canvas></div>
         </section>
 
         <section class="glass-card rounded-xl p-lg animate-fade-in-up" id="donutCard">
@@ -307,7 +303,22 @@
             <h3 class="font-title-md text-title-md text-primary">Flujo de caja mensual</h3>
             <span class="badge" id="flujoBadge"></span>
           </div>
-          <div class="panel-body" id="flujoBody"></div>
+          <div class="flujo-canvas-wrap"><canvas id="flujoChart"></canvas></div>
+        </section>
+
+        <section class="glass-card rounded-xl p-lg" id="gastoDiasCard">
+          <div class="flex justify-between items-center mb-md">
+            <h3 class="font-title-md text-title-md text-primary">Gastos por día — <span id="gastoDiasMes"></span></h3>
+          </div>
+          <div class="gastodias-canvas-wrap"><canvas id="gastoDiasChart"></canvas></div>
+          <p class="sub" id="gastoDiasResumen" style="margin:10px 2px 0"></p>
+        </section>
+
+        <section class="glass-card rounded-xl p-lg" id="gastoMesesCard">
+          <div class="flex justify-between items-center mb-md">
+            <h3 class="font-title-md text-title-md text-primary">Qué meses gastaste más</h3>
+          </div>
+          <div class="gastomeses-canvas-wrap"><canvas id="gastoMesesChart"></canvas></div>
         </section>
 
         <section class="glass-card rounded-xl p-lg" id="presupuestosCard">
@@ -408,7 +419,7 @@
 <input type="file" id="importFile" accept="application/json" style="display:none">
 
 <script src="datos-iniciales.js"></script>
-<script src="app.js?v=6"></script>
+<script src="app.js?v=7"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js'); });
