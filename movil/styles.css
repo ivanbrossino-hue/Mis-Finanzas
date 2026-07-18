@@ -163,8 +163,8 @@ header { padding-top: env(safe-area-inset-top); }
 .chart-legend { display: flex; gap: 14px; font-size: 11.5px; color: var(--on-surface-variant); padding: 0 0 6px; }
 .chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .chart-legend i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
-.dot-ing { background: var(--secondary-fixed-dim); }
-.dot-gas { background: var(--primary); }
+.dot-ing { background: #16a34a; }
+.dot-gas { background: var(--error); }
 .evo { width: 100%; }
 .evo svg { display: block; width: 100%; height: 190px; }
 .evo-labels { display: flex; justify-content: space-between; margin-top: 6px; }

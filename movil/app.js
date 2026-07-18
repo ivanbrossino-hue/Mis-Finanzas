@@ -96,6 +96,12 @@
     var p = key.split('-');
     return MESES_NOMBRE[parseInt(p[1], 10) - 1].slice(0, 3);
   }
+  // Para etiquetas de gráficos que muestran varios meses seguidos: siempre
+  // con año, para no confundir "Jul" de este año con uno de otro (ej. si se
+  // crearon meses futuros sin querer con "›").
+  function mesCortoConAnio(key) {
+    return mesCorto(key) + ' ' + key.split('-')[0].slice(2);
+  }
   function siguienteMes(key) {
     var p = key.split('-'); var y = parseInt(p[0], 10); var m = parseInt(p[1], 10);
     m++; if (m > 12) { m = 1; y++; }
@@ -895,6 +901,8 @@
   function render(animate) {
     if (animate === undefined) animate = true;
     document.getElementById('monthLabel').textContent = mesKeyLabel(mesActivo);
+    var hoyBtn = document.getElementById('hoyBtn');
+    if (hoyBtn) hoyBtn.style.display = (mesActivo === mesActualKey()) ? 'none' : '';
     renderKPIs(animate);
     renderDonut(animate);
     renderEvolucion(animate);
@@ -1078,7 +1086,7 @@
       last.forEach(function (k) {
         var wi = totalIngresos(k) / 4, wg = totalGastos(k) / 4;
         for (var w = 1; w <= 4; w++) {
-          pts.push({ label: w === 1 ? mesCorto(k) : '', ing: wi, gas: wg, goto: k,
+          pts.push({ label: w === 1 ? mesCortoConAnio(k) : '', ing: wi, gas: wg, goto: k,
                      active: k === mesActivo, titulo: mesKeyLabel(k) + ' · Semana ' + w + ' (est.)' });
         }
       });
@@ -1087,7 +1095,7 @@
 
     // mensual (por defecto): últimos 12 meses
     return all.slice(-12).map(function (k) {
-      return { label: mesCorto(k), ing: totalIngresos(k), gas: totalGastos(k), goto: k,
+      return { label: mesCortoConAnio(k), ing: totalIngresos(k), gas: totalGastos(k), goto: k,
                active: k === mesActivo, titulo: mesKeyLabel(k) + ' — Ingresos ' + fmt(totalIngresos(k)) + ' · Gastos ' + fmt(totalGastos(k)) };
     });
   }
@@ -1123,19 +1131,19 @@
     serie.forEach(function (p, i) {
       var isAct = p.active;
       dotsGas += '<circle class="evo-dot" data-goto="' + p.goto + '" cx="' + X(i).toFixed(1) + '" cy="' + Y(p.gas).toFixed(1) + '" r="' + (isAct ? 5 : 7) +
-        '" fill="' + (isAct ? '#00361a' : 'transparent') + '" stroke="#00361a" stroke-width="' + (isAct ? 2 : 0) + '"><title>' + escapeAttr(p.titulo) + '</title></circle>';
+        '" fill="' + (isAct ? '#ba1a1a' : 'transparent') + '" stroke="#ba1a1a" stroke-width="' + (isAct ? 2 : 0) + '"><title>' + escapeAttr(p.titulo) + '</title></circle>';
       dotsIng += '<circle class="evo-dot" data-goto="' + p.goto + '" cx="' + X(i).toFixed(1) + '" cy="' + Y(p.ing).toFixed(1) + '" r="' + (isAct ? 5 : 7) +
-        '" fill="' + (isAct ? '#add531' : 'transparent') + '" stroke="#add531" stroke-width="' + (isAct ? 2 : 0) + '"><title>' + escapeAttr(p.titulo) + '</title></circle>';
+        '" fill="' + (isAct ? '#16a34a' : 'transparent') + '" stroke="#16a34a" stroke-width="' + (isAct ? 2 : 0) + '"><title>' + escapeAttr(p.titulo) + '</title></circle>';
     });
 
     var svg =
       '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
       '<defs><linearGradient id="gGrad" x1="0" x2="0" y1="0" y2="1">' +
-      '<stop offset="0%" stop-color="#00361a" stop-opacity="0.22"/>' +
-      '<stop offset="100%" stop-color="#00361a" stop-opacity="0"/></linearGradient></defs>' +
+      '<stop offset="0%" stop-color="#ba1a1a" stop-opacity="0.18"/>' +
+      '<stop offset="100%" stop-color="#ba1a1a" stop-opacity="0"/></linearGradient></defs>' +
       '<path d="' + gArea + '" fill="url(#gGrad)"/>' +
-      '<path class="evo-line" d="' + iLine + '" fill="none" stroke="#add531" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>' +
-      '<path class="evo-line" d="' + gLine + '" fill="none" stroke="#00361a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>' +
+      '<path class="evo-line" d="' + iLine + '" fill="none" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>' +
+      '<path class="evo-line" d="' + gLine + '" fill="none" stroke="#ba1a1a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>' +
       dotsGas + dotsIng + '</svg>';
 
     var labels = '<div class="evo-labels">' + serie.map(function (p) {
@@ -1668,7 +1676,7 @@
         '<div class="flow-bar ' + cls + '" style="top:' + top + '%;height:' + h + '%"></div></div>';
     });
     var labels = keys.map(function (k) {
-      return '<span class="' + (k === mesActivo ? 'activo' : '') + '">' + mesCorto(k) + '</span>';
+      return '<span class="' + (k === mesActivo ? 'activo' : '') + '">' + mesCortoConAnio(k) + '</span>';
     }).join('');
 
     body.innerHTML =
@@ -1845,19 +1853,37 @@
     render();
   }
 
+  // "2026-07" -> 24319 (año*12+mes), para poder restar y saber cuántos meses
+  // de diferencia hay entre dos claves sin parsear fechas de verdad.
+  function mesesEntero(k) {
+    var p = k.split('-');
+    return parseInt(p[0], 10) * 12 + parseInt(p[1], 10);
+  }
+
   function nuevoMes() {
     var keys = mesesOrdenados();
     var ultimo = keys[keys.length - 1];
     var nuevo = siguienteMes(ultimo);
-    // copiar ingresos y gastos del último mes como plantilla
-    var base = estado.meses[ultimo];
-    estado.meses[nuevo] = {
-      ingresos: base.ingresos.map(function (i) { return { id: uid(), nombre: i.nombre, monto: i.monto }; }),
-      gastos: clonarGastos(base.gastos)
-    };
-    mesActivo = nuevo;
-    guardar(); render();
-    toast('Mes nuevo creado copiando ' + mesKeyLabel(ultimo));
+    // Crear un mes muy adelantado suele ser sin querer (tocaste "›" de más
+    // estando ya en el último mes) — confirmamos antes de encadenar meses
+    // vacíos hacia el futuro.
+    if (mesesEntero(nuevo) - mesesEntero(mesActualKey()) > 1) {
+      confirmar('Vas a crear <b>' + mesKeyLabel(nuevo) + '</b>, bastante adelantado respecto a hoy. ¿Seguro que no tocaste "›" de más?', crearMesNuevo, 'Sí, crear igual');
+      return;
+    }
+    crearMesNuevo();
+
+    function crearMesNuevo() {
+      // copiar ingresos y gastos del último mes como plantilla
+      var base = estado.meses[ultimo];
+      estado.meses[nuevo] = {
+        ingresos: base.ingresos.map(function (i) { return { id: uid(), nombre: i.nombre, monto: i.monto }; }),
+        gastos: clonarGastos(base.gastos)
+      };
+      mesActivo = nuevo;
+      guardar(); render();
+      toast('Mes nuevo creado copiando ' + mesKeyLabel(ultimo));
+    }
   }
 
   // ---------- Modales ----------
@@ -1883,10 +1909,10 @@
     window.visualViewport.addEventListener('scroll', ajustarModalATeclado);
   }
 
-  function confirmar(texto, onOk) {
+  function confirmar(texto, onOk, textoBoton) {
     abrirModal('<h3>Confirmar</h3><p class="sub">' + texto + '</p>' +
       '<div class="modal-actions"><button class="btn btn-ghost" id="mCancel">Cancelar</button>' +
-      '<button class="btn btn-primary" id="mOk">Sí, eliminar</button></div>');
+      '<button class="btn btn-primary" id="mOk">' + (textoBoton || 'Sí, eliminar') + '</button></div>');
     document.getElementById('mCancel').onclick = cerrarModal;
     document.getElementById('mOk').onclick = function () { cerrarModal(); onOk(); };
   }
@@ -2156,6 +2182,11 @@
 
     document.getElementById('prevMonth').onclick = function () { irMes(-1); };
     document.getElementById('nextMonth').onclick = function () { irMes(1); };
+    document.getElementById('hoyBtn').onclick = function () {
+      var hoy = mesActualKey();
+      if (!estado.meses[hoy]) asegurarMesActual();
+      mesActivo = hoy; render();
+    };
     // FAB de acciones rápidas: un toque despliega 3 opciones (gasto, ingreso,
     // nuevo mes) con una animación, en vez de ir directo a "nuevo mes".
     var fabWrap = document.getElementById('fabWrap');
