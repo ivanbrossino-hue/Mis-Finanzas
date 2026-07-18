@@ -1118,23 +1118,25 @@
     var iLine = linePath('ing');
     var gArea = gLine + ' L ' + X(n - 1).toFixed(1) + ' ' + (H - padBot) + ' L ' + X(0).toFixed(1) + ' ' + (H - padBot) + ' Z';
 
-    // vértices (útiles cuando hay pocos puntos, ej. anual)
-    var dots = '';
+    // vértices (útiles cuando hay pocos puntos, ej. anual; y tocables en cualquier caso)
+    var dotsGas = '', dotsIng = '';
     serie.forEach(function (p, i) {
       var isAct = p.active;
-      dots += '<circle cx="' + X(i).toFixed(1) + '" cy="' + Y(p.gas).toFixed(1) + '" r="' + (isAct ? 4.5 : 2.6) +
-        '" fill="' + (isAct ? '#7000ff' : '#9b5cff') + '" stroke="#0a0a0c" stroke-width="' + (isAct ? 2 : 1) + '"/>';
+      dotsGas += '<circle class="evo-dot" data-goto="' + p.goto + '" cx="' + X(i).toFixed(1) + '" cy="' + Y(p.gas).toFixed(1) + '" r="' + (isAct ? 5 : 7) +
+        '" fill="' + (isAct ? '#00361a' : 'transparent') + '" stroke="#00361a" stroke-width="' + (isAct ? 2 : 0) + '"><title>' + escapeAttr(p.titulo) + '</title></circle>';
+      dotsIng += '<circle class="evo-dot" data-goto="' + p.goto + '" cx="' + X(i).toFixed(1) + '" cy="' + Y(p.ing).toFixed(1) + '" r="' + (isAct ? 5 : 7) +
+        '" fill="' + (isAct ? '#add531' : 'transparent') + '" stroke="#add531" stroke-width="' + (isAct ? 2 : 0) + '"><title>' + escapeAttr(p.titulo) + '</title></circle>';
     });
 
     var svg =
       '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
       '<defs><linearGradient id="gGrad" x1="0" x2="0" y1="0" y2="1">' +
-      '<stop offset="0%" stop-color="#7000ff" stop-opacity="0.35"/>' +
-      '<stop offset="100%" stop-color="#7000ff" stop-opacity="0"/></linearGradient></defs>' +
+      '<stop offset="0%" stop-color="#00361a" stop-opacity="0.22"/>' +
+      '<stop offset="100%" stop-color="#00361a" stop-opacity="0"/></linearGradient></defs>' +
       '<path d="' + gArea + '" fill="url(#gGrad)"/>' +
-      '<path class="evo-line" d="' + iLine + '" fill="none" stroke="#00dbe9" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>' +
-      '<path class="evo-line" d="' + gLine + '" fill="none" stroke="#7000ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" style="filter:drop-shadow(0 0 6px rgba(112,0,255,.7))"/>' +
-      dots + '</svg>';
+      '<path class="evo-line" d="' + iLine + '" fill="none" stroke="#add531" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>' +
+      '<path class="evo-line" d="' + gLine + '" fill="none" stroke="#00361a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>' +
+      dotsGas + dotsIng + '</svg>';
 
     var labels = '<div class="evo-labels">' + serie.map(function (p) {
       return '<span data-goto="' + p.goto + '" class="' + (p.active ? 'active' : '') + '" title="' +
@@ -1672,8 +1674,8 @@
     body.innerHTML =
       '<div class="flow-plot"><div class="flow-baseline"></div>' + cols + '</div>' +
       '<div class="flow-labels">' + labels + '</div>' +
-      '<div class="flow-legend"><span><i style="background:var(--pos)"></i>A favor</span>' +
-      '<span><i style="background:var(--neg)"></i>En contra</span></div>';
+      '<div class="flow-legend"><span><i style="background:var(--secondary-fixed-dim)"></i>A favor</span>' +
+      '<span><i style="background:var(--error)"></i>En contra</span></div>';
 
     body.querySelectorAll('[data-goto]').forEach(function (el) {
       el.addEventListener('click', function () { mesActivo = el.getAttribute('data-goto'); render(true); });
@@ -1864,6 +1866,22 @@
     document.getElementById('modalBack').classList.add('open');
   }
   function cerrarModal() { document.getElementById('modalBack').classList.remove('open'); }
+
+  // iOS Safari no achica el viewport "fixed" cuando aparece el teclado — el
+  // modal (pegado abajo con align-items:flex-end) queda tapado por el teclado
+  // en vez de moverse. window.visualViewport sí sabe el área realmente
+  // visible, así que ajustamos el alto/posición del overlay a mano.
+  if (window.visualViewport) {
+    var modalBackEl = null;
+    function ajustarModalATeclado() {
+      if (!modalBackEl) modalBackEl = document.getElementById('modalBack');
+      var vv = window.visualViewport;
+      modalBackEl.style.height = vv.height + 'px';
+      modalBackEl.style.top = vv.offsetTop + 'px';
+    }
+    window.visualViewport.addEventListener('resize', ajustarModalATeclado);
+    window.visualViewport.addEventListener('scroll', ajustarModalATeclado);
+  }
 
   function confirmar(texto, onOk) {
     abrirModal('<h3>Confirmar</h3><p class="sub">' + texto + '</p>' +

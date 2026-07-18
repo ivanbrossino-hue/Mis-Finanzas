@@ -95,6 +95,11 @@ input, select { font-family: inherit; }
 /* ============================================================
    TopAppBar extras
    ============================================================ */
+/* En iPhone instalado como PWA (standalone), viewport-fit=cover deja que el
+   contenido se dibuje debajo de la barra de estado — sin esto el ícono de
+   perfil y el reloj del sistema quedan superpuestos. */
+header { padding-top: env(safe-area-inset-top); }
+
 .month-nav-btn {
   width: 30px; height: 30px; border-radius: 9px; border: 1px solid var(--outline-variant);
   background: #fff; color: var(--on-surface-variant); display: grid; place-items: center; transition: background .15s;
@@ -168,6 +173,8 @@ input, select { font-family: inherit; }
   text-transform: capitalize; cursor: pointer; padding: 2px 4px; border-radius: 5px;
 }
 .evo-labels span.active { color: var(--primary); font-weight: 700; }
+.evo-dot { cursor: pointer; transition: r .12s ease; }
+.evo-dot:hover { r: 4; }
 
 .donut-wrap { display: flex; flex-direction: column; gap: 14px; align-items: center; padding: 6px 0 0; }
 .donut-wrap svg { filter: drop-shadow(0 6px 14px rgba(0,54,26,.2)); }
