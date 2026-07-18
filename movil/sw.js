@@ -6,13 +6,13 @@
 // IMPORTANTE: subí CACHE_VERSION cada vez que cambies este archivo o la lista de
 // ASSETS — si no, los navegadores que ya instalaron la PWA pueden seguir viendo
 // una versión vieja del cascarón por un rato.
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v3';
 const CACHE_NAME = 'mis-finanzas-' + CACHE_VERSION;
 const ASSETS = [
   './',
   './index.html',
   './styles.css?v=1',
-  './app.js?v=3',
+  './app.js?v=4',
   './datos-iniciales.js',
   './manifest.json',
   './logo.png',
@@ -32,6 +32,37 @@ self.addEventListener('activate', function (event) {
     })
   );
   self.clients.claim();
+});
+
+// ---- Web Push: mostrar la notificación que mandó enviar-notificacion ----
+self.addEventListener('push', function (event) {
+  var datos = {};
+  try { datos = event.data ? event.data.json() : {}; } catch (e) {}
+  var titulo = datos.titulo || 'Mis Finanzas';
+  event.waitUntil(
+    self.registration.showNotification(titulo, {
+      body: datos.cuerpo || '',
+      icon: 'icons/icon-192.png',
+      badge: 'icons/icon-192.png',
+      data: { url: datos.url || './' },
+      tag: datos.tag || undefined,
+    })
+  );
+});
+
+// Al tocar la notificación: si ya hay una pestaña de la app abierta, la enfoca
+// en vez de abrir una nueva.
+self.addEventListener('notificationclick', function (event) {
+  event.notification.close();
+  var url = (event.notification.data && event.notification.data.url) || './';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (lista) {
+      for (var i = 0; i < lista.length; i++) {
+        if (lista[i].url.indexOf(location.origin) === 0 && 'focus' in lista[i]) return lista[i].focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(url);
+    })
+  );
 });
 
 self.addEventListener('fetch', function (event) {

@@ -61,6 +61,9 @@
   const CUENTA_ANON_KEY = 'sb_publishable_T4yeLPNAAbleawDltkBKBg_Qu25uS4i';
   // Usuario del bot de Telegram (sin @), el que te dio @BotFather al crearlo.
   const TELEGRAM_BOT_USERNAME = 'misfinanzas_ivan_bot';
+  // Clave pública VAPID para Web Push — la privada NUNCA va acá, vive solo
+  // como secreto de la Edge Function enviar-notificacion.
+  const VAPID_PUBLIC_KEY = 'BDjFnnssI1oPLD8hOWdhOUU1evVy0jtk6eYO4n2rGJgXySnUmPRuJM4xjXz8qZWhf8UdK0fyssJCJ8jQRYvsTtM';
   var sbClient = null;
   var modoCuenta = false;           // true si estamos logueados con Google
   var miUsuario = null;             // objeto user de Supabase Auth (nombre, mail, avatar)
@@ -155,7 +158,33 @@
     if (acc) { acc.monto = (Number(acc.monto) || 0) + monto; acc.bot = true; }
     else { acc = { id: uid(), categoria: categoria, nombre: accName, monto: monto, bot: true }; m.gastos.push(acc); }
     m.movimientos.push({ id: uid(), fecha: isoHoyApp(), categoria: categoria, filaId: acc.id, fila: acc.nombre, monto: monto, nota: nota || null, items: items || null });
+    revisarPresupuesto(categoria);
     return acc;
+  }
+
+  // Si esta categoría tiene un presupuesto definido y el gasto recién cargado
+  // lo cruzó, avisa por push — pero UNA sola vez por mes y categoría (si no,
+  // cada gasto nuevo en una categoría ya pasada de presupuesto mandaría otro
+  // aviso). El flag queda guardado en el estado (se sincroniza como cualquier
+  // otro dato), así que "ya avisado" es por proyecto, no por dispositivo.
+  function revisarPresupuesto(categoria) {
+    var tope = Number((estado.presupuestos || {})[categoria]) || 0;
+    if (!tope || !modoCuenta || !miProyectoId) return;
+    var gastado = gastosPorCategoria(mesActivo)[categoria] || 0;
+    if (gastado <= tope) return;
+    if (!estado.presupuestosAvisados) estado.presupuestosAvisados = {};
+    var avisados = estado.presupuestosAvisados[mesActivo] || [];
+    if (avisados.indexOf(categoria) !== -1) return;
+    estado.presupuestosAvisados[mesActivo] = avisados.concat([categoria]);
+    var cat = CAT_MAP[categoria];
+    var nombreCat = cat ? getCatNombre(categoria) : categoria;
+    sbClient.functions.invoke('enviar-notificacion', {
+      body: {
+        proyectoId: miProyectoId, excluirUserId: miUsuario ? miUsuario.id : null,
+        titulo: 'Te pasaste de presupuesto',
+        cuerpo: nombreCat + ': ' + fmt(gastado) + ' de ' + fmt(tope) + ' este mes.',
+      }
+    }).catch(function () {});
   }
 
   // ---------- Persistencia ----------
@@ -491,6 +520,22 @@
     }
   }
 
+  // Avisa a los demás miembros que hubo actividad — pero no en cada guardado
+  // (guardar() dispara esto cada ~800ms mientras alguien tipea, sería spam).
+  // Como mucho uno cada 2 minutos.
+  var ultimoAvisoActividad = 0;
+  function avisarActividad() {
+    if (!miUsuario) return;
+    var ahora = Date.now();
+    if (ahora - ultimoAvisoActividad < 2 * 60 * 1000) return;
+    ultimoAvisoActividad = ahora;
+    var meta = miUsuario.user_metadata || {};
+    var nombre = meta.full_name || meta.name || (miUsuario.email || '').split('@')[0] || 'Alguien';
+    sbClient.functions.invoke('enviar-notificacion', {
+      body: { proyectoId: miProyectoId, excluirUserId: miUsuario.id, titulo: 'Mis Finanzas', cuerpo: nombre + ' actualizó tus finanzas compartidas.' }
+    }).catch(function () {}); // best-effort: si falla, no interrumpe el guardado real
+  }
+
   function guardarEnProyecto() {
     if (!modoCuenta || !miProyectoId || guardandoCuenta || miRol === 'lector') return;
     guardandoCuenta = true;
@@ -499,6 +544,7 @@
       data: estado, rev: cuentaRev, updated_by: 'app', updated_at: new Date().toISOString()
     }).eq('id', miProyectoId).then(function (res) {
       if (res.error) console.warn('guardarEnProyecto: no se pudo guardar', res.error);
+      else avisarActividad();
       guardandoCuenta = false;
     });
   }
@@ -579,12 +625,16 @@
 
     abrirModal('<h3>Tu cuenta</h3>' +
       '<p class="sub"><b>' + escapeHtml(nombre) + '</b><br>' + escapeHtml(miUsuario.email || '') + '<br>' + rolTxt + '</p>' +
+      '<div class="modal-actions" style="justify-content:flex-start;margin-top:0">' +
+        '<button class="btn btn-sm" id="cuNotif">🔔 Activar notificaciones</button>' +
+      '</div>' +
       htmlInvitar +
       '<div class="modal-actions"><button class="btn btn-ghost" id="mCancel">Cerrar</button>' +
       '<button class="btn" id="cuSalir" style="color:var(--danger)">Cerrar sesión</button></div>');
 
     document.getElementById('mCancel').onclick = cerrarModal;
     document.getElementById('cuSalir').onclick = function () { cerrarModal(); cerrarSesionCuenta(); };
+    document.getElementById('cuNotif').onclick = activarNotificaciones;
 
     if (miRol === 'dueno') {
       cargarMiembrosModal();
@@ -661,6 +711,47 @@
     }).then(function (res) {
       if (res.error) throw res.error;
       return 'https://t.me/' + TELEGRAM_BOT_USERNAME + '?start=' + codigo;
+    });
+  }
+
+  // pushManager.subscribe() pide la applicationServerKey como Uint8Array, no
+  // como el string base64url que da VAPID — hay que convertirla a mano.
+  function urlBase64ToUint8Array(base64) {
+    var padding = '='.repeat((4 - (base64.length % 4)) % 4);
+    var base64Segura = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');
+    var binario = atob(base64Segura);
+    var salida = new Uint8Array(binario.length);
+    for (var i = 0; i < binario.length; i++) salida[i] = binario.charCodeAt(i);
+    return salida;
+  }
+
+  // Pide permiso de notificaciones, suscribe este navegador/celular a Web Push
+  // y guarda la suscripción para que enviar-notificacion la encuentre.
+  function activarNotificaciones() {
+    if (!modoCuenta || !miProyectoId) { toast('Iniciá sesión primero.'); return; }
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      toast('Este navegador no soporta notificaciones push.');
+      return;
+    }
+    Notification.requestPermission().then(function (permiso) {
+      if (permiso !== 'granted') { toast('No diste permiso para notificaciones.'); return; }
+      navigator.serviceWorker.ready.then(function (reg) {
+        return reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        });
+      }).then(function (sub) {
+        var json = sub.toJSON();
+        return sbClient.from('push_subscripciones').upsert({
+          proyecto_id: miProyectoId, user_id: miUsuario.id,
+          endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth,
+        }, { onConflict: 'endpoint' });
+      }).then(function (res) {
+        if (res && res.error) throw res.error;
+        toast('¡Notificaciones activadas! 🔔');
+      }).catch(function (e) {
+        toast('No se pudo activar (' + (e && e.message ? e.message : 'error') + ')');
+      });
     });
   }
 
