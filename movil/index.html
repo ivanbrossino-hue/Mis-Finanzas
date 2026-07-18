@@ -200,6 +200,7 @@
               <span class="material-symbols-outlined text-secondary">show_chart</span>Evolución
             </h3>
             <div class="evo-toggle" id="evoToggle">
+              <button data-modo="semanal">Sem</button>
               <button data-modo="mensual" class="active">Mes</button>
               <button data-modo="anual">Año</button>
             </div>
@@ -419,7 +420,7 @@
 <input type="file" id="importFile" accept="application/json" style="display:none">
 
 <script src="datos-iniciales.js"></script>
-<script src="app.js?v=7"></script>
+<script src="app.js?v=8"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js'); });

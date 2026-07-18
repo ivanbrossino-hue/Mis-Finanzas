@@ -42,7 +42,7 @@
   var estado = null;
   var mesActivo = null;
   var colapsadas = {}; // categorías colapsadas (solo visual)
-  var evoModo = 'mensual'; // vista del gráfico: 'mensual' | 'anual'
+  var evoModo = 'mensual'; // vista del gráfico: 'semanal' (real, del mes activo) | 'mensual' | 'anual'
   var vistaActual = 'resumen'; // 'resumen' | 'historial' — qué página se está mostrando
 
   // ---- Nube (Supabase) para sincronizar con el bot de Telegram ----
@@ -1086,13 +1086,71 @@
     });
   }
 
+  // Desglose real por semana DENTRO del mes activo — a diferencia del viejo
+  // modo "Sem" (que dividía el total del mes entre 4 de forma pareja), esto
+  // agrupa los movimientos reales de gastos por día. Los ingresos no tienen
+  // fecha por día en el modelo de datos, así que esta vista es solo gastos.
+  function serieSemanalDelMes() {
+    var movs = mesData().movimientos || [];
+    var partes = mesActivo.split('-');
+    var anio = parseInt(partes[0], 10), mes = parseInt(partes[1], 10);
+    var diasEnMes = new Date(anio, mes, 0).getDate();
+    var nSemanas = Math.ceil(diasEnMes / 7);
+    var totales = new Array(nSemanas).fill(0);
+    movs.forEach(function (mv) {
+      var dia = parseInt(mv.fecha.split('-')[2], 10);
+      var w = Math.min(nSemanas - 1, Math.floor((dia - 1) / 7));
+      totales[w] += Number(mv.monto) || 0;
+    });
+    var hoyDia = (mesActivo === mesActualKey()) ? new Date().getDate() : -1;
+    var semanaHoy = hoyDia > 0 ? Math.min(nSemanas - 1, Math.floor((hoyDia - 1) / 7)) : -1;
+    return totales.map(function (t, i) {
+      var diaIni = i * 7 + 1, diaFin = Math.min(diasEnMes, diaIni + 6);
+      return { label: 'Sem ' + (i + 1), gas: t, active: i === semanaHoy, rango: diaIni + '–' + diaFin };
+    });
+  }
+
   // ---- Gráfico de evolución (Chart.js: ingresos verde, gastos rojo) ----
   var evoChartInstance = null;
   function renderEvolucion(animate) {
     var canvas = document.getElementById('evoChart');
     if (!canvas || typeof Chart === 'undefined') return;
-    var serie = serieEvolucion();
     if (evoChartInstance) { evoChartInstance.destroy(); evoChartInstance = null; }
+
+    if (evoModo === 'semanal') {
+      var semanas = serieSemanalDelMes();
+      if (!semanas.length) return;
+      evoChartInstance = new Chart(canvas, {
+        type: 'line',
+        data: {
+          labels: semanas.map(function (s) { return s.label; }),
+          datasets: [{
+            label: 'Gastos', data: semanas.map(function (s) { return s.gas; }),
+            borderColor: '#ba1a1a', backgroundColor: 'rgba(186,26,26,.15)', borderWidth: 2.5,
+            pointRadius: semanas.map(function (s) { return s.active ? 6 : 4; }), pointHoverRadius: 7,
+            pointBackgroundColor: '#ba1a1a', tension: 0.25, fill: true,
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          animation: animate ? { duration: 500 } : false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: {
+              title: function (items) { return 'Días ' + semanas[items[0].dataIndex].rango + ' de ' + mesKeyLabel(mesActivo); },
+              label: function (ctx) { return 'Gastos: ' + fmt(ctx.parsed.y); },
+            } },
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { font: { family: "'JetBrains Mono',monospace", size: 10 } } },
+            y: { display: false },
+          },
+        },
+      });
+      return;
+    }
+
+    var serie = serieEvolucion();
     if (serie.length === 0) return;
 
     var radios = serie.map(function (p) { return p.active ? 6 : 3; });
@@ -2094,6 +2152,10 @@
         '<button class="btn" id="mImport">⬆️ Restaurar copia</button>' +
         '<button class="btn" id="mReset" style="color:var(--danger)">↺ Empezar de cero</button>' +
         '</div></div>' +
+      '<div class="field"><label>Meses</label>' +
+        '<div class="modal-actions" style="justify-content:flex-start;flex-wrap:wrap;margin-top:0">' +
+        '<button class="btn" id="mLimpiarMeses">🧹 Borrar meses futuros</button>' +
+        '</div></div>' +
       '<div class="modal-actions"><button class="btn btn-ghost" id="mCancel">Cerrar</button></div>');
     document.getElementById('mCancel').onclick = cerrarModal;
     document.getElementById('mNube').onclick = modoCuenta ? function () {
@@ -2116,6 +2178,52 @@
         estado = construirDesdeSemilla(); mesActivo = asegurarMesActual();
         guardar(); render(); toast('Datos reiniciados');
       });
+    };
+    document.getElementById('mLimpiarMeses').onclick = function () { cerrarModal(); modalLimpiarMesesFuturos(); };
+  }
+
+  // Herramienta de limpieza: si se tocó "›" de más (o antes de que existiera
+  // la confirmación al crear un mes muy adelantado) pueden quedar meses
+  // futuros vacíos encadenados. Deja elegir hasta qué mes conservar y borra
+  // el resto de un toque, sin tener que ir mes por mes.
+  function modalLimpiarMesesFuturos() {
+    var hoy = mesActualKey();
+    var futuros = mesesOrdenados().filter(function (k) { return k > hoy; });
+    if (!futuros.length) { toast('No hay meses futuros para borrar.'); return; }
+    var sugerido = siguienteMes(siguienteMes(siguienteMes(siguienteMes(siguienteMes(hoy))))); // hoy + 5 meses
+    abrirModal('<h3>Borrar meses futuros</h3>' +
+      '<p class="sub">Tenés meses cargados hasta <b>' + mesKeyLabel(futuros[futuros.length - 1]) + '</b>. ' +
+      'Elegí hasta qué mes conservar — el resto se borra (si tenés datos reales cargados en alguno, no lo toca).</p>' +
+      '<div class="field"><label>Conservar hasta</label><input id="lmHasta" placeholder="2026-12" value="' + sugerido + '"></div>' +
+      '<p class="sub" id="lmMsg" style="min-height:16px;margin:0 0 4px"></p>' +
+      '<div class="modal-actions"><button class="btn btn-ghost" id="mCancel">Cancelar</button>' +
+      '<button class="btn btn-primary" id="mOk">Ver qué se borra</button></div>');
+    document.getElementById('mCancel').onclick = cerrarModal;
+    document.getElementById('mOk').onclick = function () {
+      var hasta = document.getElementById('lmHasta').value.trim();
+      var msg = document.getElementById('lmMsg');
+      if (!/^\d{4}-\d{2}$/.test(hasta)) { msg.style.color = 'var(--danger)'; msg.textContent = 'Formato: AAAA-MM, ej. 2026-12.'; return; }
+      var aBorrar = futuros.filter(function (k) { return k > hasta; });
+      if (!aBorrar.length) { msg.style.color = 'var(--text-mute)'; msg.textContent = 'No hay nada después de ese mes para borrar.'; return; }
+      // Los ingresos se copian siempre como plantilla al crear un mes nuevo
+      // (aunque nunca se haya usado), así que no sirven para saber si el mes
+      // "se usó" de verdad — solo los gastos con monto (los acumuladores del
+      // bot arrancan en 0 en un mes nuevo) y los movimientos son señal real.
+      var conDatos = aBorrar.filter(function (k) {
+        var m = estado.meses[k];
+        return (m.gastos || []).some(function (g) { return Number(g.monto) > 0; }) ||
+          (m.movimientos || []).length > 0;
+      });
+      var vacios = aBorrar.filter(function (k) { return conDatos.indexOf(k) === -1; });
+      cerrarModal();
+      var texto = 'Se van a borrar <b>' + vacios.length + '</b> mes(es) vacío(s): ' + vacios.map(mesKeyLabel).join(', ') + '.' +
+        (conDatos.length ? '<br><br>⚠️ Estos tienen datos cargados y <b>no se van a tocar</b>: ' + conDatos.map(mesKeyLabel).join(', ') + '.' : '');
+      confirmar(texto, function () {
+        vacios.forEach(function (k) { delete estado.meses[k]; });
+        if (vacios.indexOf(mesActivo) !== -1) mesActivo = hoy;
+        guardar(); render();
+        toast(vacios.length + ' mes(es) borrado(s)');
+      }, 'Sí, borrar');
     };
   }
 
