@@ -165,6 +165,7 @@
     else { acc = { id: uid(), categoria: categoria, nombre: accName, monto: monto, bot: true }; m.gastos.push(acc); }
     m.movimientos.push({ id: uid(), fecha: isoHoyApp(), categoria: categoria, filaId: acc.id, fila: acc.nombre, monto: monto, nota: nota || null, items: items || null });
     revisarPresupuesto(categoria);
+    ultimaAccionDescripcion = 'agregó un gasto de ' + fmt(monto) + ' en ' + getCatNombre(categoria);
     return acc;
   }
 
@@ -530,6 +531,11 @@
   // (guardar() dispara esto cada ~800ms mientras alguien tipea, sería spam).
   // Como mucho uno cada 2 minutos.
   var ultimoAvisoActividad = 0;
+  // Se pisa cada vez que se agrega/edita un gasto o ingreso concreto (ver
+  // registrarCompra y conectarItemEvents), para que el aviso diga QUÉ pasó
+  // en vez de un genérico "actualizó tus finanzas". Si no hay nada puntual
+  // (ej. se borró una fila, se tocó una deuda), cae al genérico.
+  var ultimaAccionDescripcion = null;
   function avisarActividad() {
     if (!miUsuario) return;
     var ahora = Date.now();
@@ -537,8 +543,10 @@
     ultimoAvisoActividad = ahora;
     var meta = miUsuario.user_metadata || {};
     var nombre = meta.full_name || meta.name || (miUsuario.email || '').split('@')[0] || 'Alguien';
+    var detalle = ultimaAccionDescripcion || 'actualizó tus finanzas compartidas';
+    ultimaAccionDescripcion = null;
     sbClient.functions.invoke('enviar-notificacion', {
-      body: { proyectoId: miProyectoId, excluirUserId: miUsuario.id, titulo: 'Mis Finanzas', cuerpo: nombre + ' actualizó tus finanzas compartidas.' }
+      body: { proyectoId: miProyectoId, excluirUserId: miUsuario.id, titulo: 'Mis Finanzas', cuerpo: nombre + ' ' + detalle + '.' }
     }).catch(function () {}); // best-effort: si falla, no interrumpe el guardado real
   }
 
@@ -1393,7 +1401,15 @@
       });
       amtEl.addEventListener('blur', function () {
         var num = evalMonto(amtEl.value);
-        var obj = buscarItem(tipo, id); if (obj) { obj.monto = num; guardar(); actualizarCalculos(); }
+        var obj = buscarItem(tipo, id);
+        if (obj) {
+          obj.monto = num;
+          if (num > 0) {
+            ultimaAccionDescripcion = (tipo === 'ingreso' ? 'agregó un ingreso de ' : 'editó un gasto: ') +
+              (tipo === 'ingreso' ? fmt(num) + (obj.nombre ? ' (' + obj.nombre + ')' : '') : (obj.nombre || 'sin nombre') + ' ' + fmt(num));
+          }
+          guardar(); actualizarCalculos();
+        }
         amtEl.value = num ? formatInput(num) : '';
       });
       amtEl.addEventListener('focus', function () {
