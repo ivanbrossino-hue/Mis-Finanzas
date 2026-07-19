@@ -42,7 +42,7 @@
   var estado = null;
   var mesActivo = null;
   var colapsadas = {}; // categorías colapsadas (solo visual)
-  var evoModo = 'mensual'; // vista del gráfico: 'semanal' (real, del mes activo) | 'mensual' | 'anual'
+  var evoModo = 'mensual'; // vista del gráfico: 'diario' | 'semanal' (real, del mes activo) | 'mensual' | 'anual'
   var vistaActual = 'resumen'; // 'resumen' | 'historial' — qué página se está mostrando
 
   // ---- Nube (Supabase) para sincronizar con el bot de Telegram ----
@@ -1086,6 +1086,24 @@
     });
   }
 
+  // Gastos reales día por día del mes activo — la comparten el modo "Día" de
+  // Evolución y la tarjeta "Gastos por día" de Analíticas, para no calcular
+  // lo mismo dos veces.
+  function serieDiariaDelMes() {
+    var movs = mesData().movimientos || [];
+    var partes = mesActivo.split('-');
+    var anio = parseInt(partes[0], 10), mes = parseInt(partes[1], 10);
+    var diasEnMes = new Date(anio, mes, 0).getDate();
+    var totalesPorDia = new Array(diasEnMes + 1).fill(0); // índice 1..diasEnMes
+    movs.forEach(function (mv) {
+      var dia = parseInt(mv.fecha.split('-')[2], 10);
+      if (dia >= 1 && dia <= diasEnMes) totalesPorDia[dia] += (Number(mv.monto) || 0);
+    });
+    var diaPico = 1;
+    for (var d = 2; d <= diasEnMes; d++) if (totalesPorDia[d] > totalesPorDia[diaPico]) diaPico = d;
+    return { movs: movs, totalesPorDia: totalesPorDia, diasEnMes: diasEnMes, mes: mes, diaPico: diaPico };
+  }
+
   // Desglose real por semana DENTRO del mes activo — a diferencia del viejo
   // modo "Sem" (que dividía el total del mes entre 4 de forma pareja), esto
   // agrupa los movimientos reales de gastos por día. Los ingresos no tienen
@@ -1116,6 +1134,37 @@
     var canvas = document.getElementById('evoChart');
     if (!canvas || typeof Chart === 'undefined') return;
     if (evoChartInstance) { evoChartInstance.destroy(); evoChartInstance = null; }
+
+    if (evoModo === 'diario') {
+      var sd = serieDiariaDelMes();
+      if (!sd.movs.length) return;
+      var labelsD = [], dataD = [], coloresD = [];
+      for (var di = 1; di <= sd.diasEnMes; di++) {
+        labelsD.push(String(di));
+        dataD.push(sd.totalesPorDia[di]);
+        coloresD.push(di === sd.diaPico && sd.totalesPorDia[di] > 0 ? '#ba1a1a' : '#f0b4b4');
+      }
+      evoChartInstance = new Chart(canvas, {
+        type: 'bar',
+        data: { labels: labelsD, datasets: [{ label: 'Gastos', data: dataD, backgroundColor: coloresD, borderRadius: 3, maxBarThickness: 16 }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          animation: animate ? { duration: 500 } : false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: {
+              title: function (items) { return 'Día ' + items[0].label + ' de ' + mesKeyLabel(mesActivo); },
+              label: function (ctx) { return 'Gastos: ' + fmt(ctx.parsed.y); },
+            } },
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { font: { family: "'JetBrains Mono',monospace", size: 9 }, maxRotation: 0, autoSkipPadding: 6 } },
+            y: { display: false },
+          },
+        },
+      });
+      return;
+    }
 
     if (evoModo === 'semanal') {
       var semanas = serieSemanalDelMes();
@@ -1574,7 +1623,6 @@
   function renderAnaliticas() {
     renderFlujoCaja();
     renderGastoDias();
-    renderGastoMeses();
     renderPresupuestos();
     renderSimulador();
     renderUltimosMovimientos();
@@ -1677,6 +1725,9 @@
     });
   }
 
+  // Ingresos vs. gastos por mes, una al lado de la otra — reemplaza los dos
+  // gráficos que había antes (neto por un lado, solo gastos por el otro):
+  // con las dos barras juntas se ve la comparación directa de un vistazo.
   var flujoChartInstance = null;
   function renderFlujoCaja() {
     var canvas = document.getElementById('flujoChart');
@@ -1685,25 +1736,25 @@
     if (flujoChartInstance) { flujoChartInstance.destroy(); flujoChartInstance = null; }
     if (!keys.length) { document.getElementById('flujoBadge').textContent = ''; return; }
 
-    var balances = keys.map(function (k) { return balanceMes(k); });
-    var totalNeto = balances.reduce(function (s, b) { return s + b; }, 0);
+    var ingresos = keys.map(function (k) { return totalIngresos(k); });
+    var gastos = keys.map(function (k) { return totalGastos(k); });
+    var totalNeto = keys.reduce(function (s, k) { return s + balanceMes(k); }, 0);
     document.getElementById('flujoBadge').textContent = (totalNeto >= 0 ? '+' : '') + fmt(totalNeto) + ' neto';
-    var colores = balances.map(function (b) { return b >= 0 ? '#16a34a' : '#ba1a1a'; });
 
     flujoChartInstance = new Chart(canvas, {
       type: 'bar',
       data: {
         labels: keys.map(function (k) { return mesCortoConAnio(k); }),
-        datasets: [{ label: 'Neto', data: balances, backgroundColor: colores, borderRadius: 4, maxBarThickness: 34 }],
+        datasets: [
+          { label: 'Ingresos', data: ingresos, backgroundColor: '#16a34a', borderRadius: 4, maxBarThickness: 22 },
+          { label: 'Gastos', data: gastos, backgroundColor: '#ba1a1a', borderRadius: 4, maxBarThickness: 22 },
+        ],
       },
       options: {
         responsive: true, maintainAspectRatio: false,
         plugins: {
-          legend: { display: false },
-          tooltip: { callbacks: { label: function (ctx) {
-            var k = keys[ctx.dataIndex];
-            return ['Ingresos ' + fmt(totalIngresos(k)), 'Gastos ' + fmt(totalGastos(k)), 'Neto ' + (ctx.parsed.y >= 0 ? '+' : '') + fmt(ctx.parsed.y)];
-          } } },
+          legend: { position: 'top', align: 'start', labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, font: { family: "'Inter',sans-serif", size: 12 } } },
+          tooltip: { callbacks: { label: function (ctx) { return ' ' + ctx.dataset.label + ': ' + fmt(ctx.parsed.y); } } },
         },
         scales: {
           x: { grid: { display: false }, ticks: { font: { family: "'JetBrains Mono',monospace", size: 10 } } },
@@ -1726,31 +1777,18 @@
     document.getElementById('gastoDiasMes').textContent = mesKeyLabel(mesActivo);
     if (gastoDiasChartInstance) { gastoDiasChartInstance.destroy(); gastoDiasChartInstance = null; }
 
-    var movs = mesData().movimientos || [];
     var resumenEl = document.getElementById('gastoDiasResumen');
-    if (!movs.length) {
+    var s = serieDiariaDelMes();
+    if (!s.movs.length) {
       resumenEl.textContent = 'Todavía no cargaste gastos este mes.';
       return;
     }
 
-    var partes = mesActivo.split('-');
-    var anio = parseInt(partes[0], 10), mes = parseInt(partes[1], 10);
-    var diasEnMes = new Date(anio, mes, 0).getDate();
-    var totalesPorDia = new Array(diasEnMes + 1).fill(0); // índice 1..diasEnMes
-
-    movs.forEach(function (mv) {
-      var dia = parseInt(mv.fecha.split('-')[2], 10);
-      if (dia >= 1 && dia <= diasEnMes) totalesPorDia[dia] += (Number(mv.monto) || 0);
-    });
-
-    var diaPico = 1;
-    for (var d = 2; d <= diasEnMes; d++) if (totalesPorDia[d] > totalesPorDia[diaPico]) diaPico = d;
-
     var labels = [], data = [], colores = [];
-    for (var i = 1; i <= diasEnMes; i++) {
+    for (var i = 1; i <= s.diasEnMes; i++) {
       labels.push(String(i));
-      data.push(totalesPorDia[i]);
-      colores.push(i === diaPico && totalesPorDia[i] > 0 ? '#ba1a1a' : '#f0b4b4');
+      data.push(s.totalesPorDia[i]);
+      colores.push(i === s.diaPico && s.totalesPorDia[i] > 0 ? '#ba1a1a' : '#f0b4b4');
     }
 
     gastoDiasChartInstance = new Chart(canvas, {
@@ -1769,47 +1807,15 @@
       },
     });
 
-    if (totalesPorDia[diaPico] > 0) {
-      var movsDelPico = movs.filter(function (mv) { return parseInt(mv.fecha.split('-')[2], 10) === diaPico; });
+    if (s.totalesPorDia[s.diaPico] > 0) {
+      var movsDelPico = s.movs.filter(function (mv) { return parseInt(mv.fecha.split('-')[2], 10) === s.diaPico; });
       var mayor = movsDelPico.reduce(function (a, b) { return (Number(b.monto) || 0) > (Number(a.monto) || 0) ? b : a; });
       var cat = CAT_MAP[mayor.categoria] || { icon: '•' };
-      resumenEl.innerHTML = '📍 Tu día de mayor gasto: <b>' + diaPico + ' de ' + MESES_NOMBRE[mes - 1].toLowerCase() + '</b> — ' +
-        fmt(totalesPorDia[diaPico]) + ' en total. El más grande fue ' + cat.icon + ' <b>' + escapeHtml(mayor.fila || mayor.nota || 'un gasto') + '</b> por ' + fmt(mayor.monto) + '.';
+      resumenEl.innerHTML = '📍 Tu día de mayor gasto: <b>' + s.diaPico + ' de ' + MESES_NOMBRE[s.mes - 1].toLowerCase() + '</b> — ' +
+        fmt(s.totalesPorDia[s.diaPico]) + ' en total. El más grande fue ' + cat.icon + ' <b>' + escapeHtml(mayor.fila || mayor.nota || 'un gasto') + '</b> por ' + fmt(mayor.monto) + '.';
     } else {
       resumenEl.textContent = 'Todavía no cargaste gastos este mes.';
     }
-  }
-
-  // ---- Qué meses gastaste más (solo gastos, no el neto — para comparar) ----
-  var gastoMesesChartInstance = null;
-  function renderGastoMeses() {
-    var canvas = document.getElementById('gastoMesesChart');
-    if (!canvas || typeof Chart === 'undefined') return;
-    var keys = mesesOrdenados().slice(-8);
-    if (gastoMesesChartInstance) { gastoMesesChartInstance.destroy(); gastoMesesChartInstance = null; }
-    if (!keys.length) return;
-
-    var gastos = keys.map(function (k) { return totalGastos(k); });
-
-    gastoMesesChartInstance = new Chart(canvas, {
-      type: 'bar',
-      data: { labels: keys.map(function (k) { return mesCortoConAnio(k); }), datasets: [{ label: 'Gastos', data: gastos, backgroundColor: '#ba1a1a', borderRadius: 4, maxBarThickness: 34 }] },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: { callbacks: { label: function (ctx) { return fmt(ctx.parsed.y); } } },
-        },
-        scales: {
-          x: { grid: { display: false }, ticks: { font: { family: "'JetBrains Mono',monospace", size: 10 } } },
-          y: { display: false },
-        },
-        onClick: function (evt, elements) {
-          if (!elements.length) return;
-          mesActivo = keys[elements[0].index]; render(true);
-        },
-      },
-    });
   }
 
   function renderPresupuestos() {

@@ -200,6 +200,7 @@
               <span class="material-symbols-outlined text-secondary">show_chart</span>Evolución
             </h3>
             <div class="evo-toggle" id="evoToggle">
+              <button data-modo="diario">Día</button>
               <button data-modo="semanal">Sem</button>
               <button data-modo="mensual" class="active">Mes</button>
               <button data-modo="anual">Año</button>
@@ -301,7 +302,7 @@
 
         <section class="glass-card rounded-xl p-lg" id="flujoCard">
           <div class="flex justify-between items-center mb-md">
-            <h3 class="font-title-md text-title-md text-primary">Flujo de caja mensual</h3>
+            <h3 class="font-title-md text-title-md text-primary">Ingresos y gastos por mes</h3>
             <span class="badge" id="flujoBadge"></span>
           </div>
           <div class="flujo-canvas-wrap"><canvas id="flujoChart"></canvas></div>
@@ -315,14 +316,7 @@
           <p class="sub" id="gastoDiasResumen" style="margin:10px 2px 0"></p>
         </section>
 
-        <section class="glass-card rounded-xl p-lg" id="gastoMesesCard">
-          <div class="flex justify-between items-center mb-md">
-            <h3 class="font-title-md text-title-md text-primary">Qué meses gastaste más</h3>
-          </div>
-          <div class="gastomeses-canvas-wrap"><canvas id="gastoMesesChart"></canvas></div>
-        </section>
-
-        <section class="glass-card rounded-xl p-lg" id="presupuestosCard">
+<section class="glass-card rounded-xl p-lg" id="presupuestosCard">
           <div class="flex justify-between items-center mb-md">
             <h3 class="font-title-md text-title-md text-primary">Presupuesto por categoría</h3>
             <span class="badge" id="presupuestosBadge"></span>
@@ -420,7 +414,7 @@
 <input type="file" id="importFile" accept="application/json" style="display:none">
 
 <script src="datos-iniciales.js"></script>
-<script src="app.js?v=8"></script>
+<script src="app.js?v=9"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js'); });

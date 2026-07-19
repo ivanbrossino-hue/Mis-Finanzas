@@ -161,7 +161,7 @@ header { padding-top: env(safe-area-inset-top); }
 }
 .evo-toggle button.active { background: var(--primary); color: #fff; }
 .evo-canvas-wrap { position: relative; width: 100%; height: 220px; }
-.flujo-canvas-wrap, .gastodias-canvas-wrap, .gastomeses-canvas-wrap { position: relative; width: 100%; height: 200px; }
+.flujo-canvas-wrap, .gastodias-canvas-wrap { position: relative; width: 100%; height: 200px; }
 
 .donut-wrap { display: flex; flex-direction: column; gap: 14px; align-items: center; padding: 6px 0 0; }
 .donut-wrap svg { filter: drop-shadow(0 6px 14px rgba(0,54,26,.2)); }
