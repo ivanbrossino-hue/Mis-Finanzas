@@ -174,24 +174,43 @@
   // cada gasto nuevo en una categoría ya pasada de presupuesto mandaría otro
   // aviso). El flag queda guardado en el estado (se sincroniza como cualquier
   // otro dato), así que "ya avisado" es por proyecto, no por dispositivo.
+  function avisarPush(titulo, cuerpo) {
+    if (!modoCuenta || !miProyectoId) return;
+    sbClient.functions.invoke('enviar-notificacion', {
+      body: { proyectoId: miProyectoId, excluirUserId: miUsuario ? miUsuario.id : null, titulo: titulo, cuerpo: cuerpo }
+    }).catch(function () {});
+  }
+
+  // Marca "categoria" como avisada en estado[campo][mesActivo] y devuelve true
+  // la PRIMERA vez que se llama para esa combinación mes+categoría — así el
+  // resto de gastos del mes en esa categoría no repiten el mismo aviso.
+  function marcarAvisadoUnaVez(campo, categoria) {
+    if (!estado[campo]) estado[campo] = {};
+    var avisados = estado[campo][mesActivo] || [];
+    if (avisados.indexOf(categoria) !== -1) return false;
+    estado[campo][mesActivo] = avisados.concat([categoria]);
+    return true;
+  }
+
   function revisarPresupuesto(categoria) {
     var tope = Number((estado.presupuestos || {})[categoria]) || 0;
     if (!tope || !modoCuenta || !miProyectoId) return;
     var gastado = gastosPorCategoria(mesActivo)[categoria] || 0;
-    if (gastado <= tope) return;
-    if (!estado.presupuestosAvisados) estado.presupuestosAvisados = {};
-    var avisados = estado.presupuestosAvisados[mesActivo] || [];
-    if (avisados.indexOf(categoria) !== -1) return;
-    estado.presupuestosAvisados[mesActivo] = avisados.concat([categoria]);
-    var cat = CAT_MAP[categoria];
-    var nombreCat = cat ? getCatNombre(categoria) : categoria;
-    sbClient.functions.invoke('enviar-notificacion', {
-      body: {
-        proyectoId: miProyectoId, excluirUserId: miUsuario ? miUsuario.id : null,
-        titulo: 'Te pasaste de presupuesto',
-        cuerpo: nombreCat + ': ' + fmt(gastado) + ' de ' + fmt(tope) + ' este mes.',
+    var nombreCat = getCatNombre(categoria);
+    if (gastado > tope) {
+      if (marcarAvisadoUnaVez('presupuestosAvisados', categoria)) {
+        avisarPush('Te pasaste de presupuesto', nombreCat + ': ' + fmt(gastado) + ' de ' + fmt(tope) + ' este mes.');
       }
-    }).catch(function () {});
+      return;
+    }
+    // Todavía no lo cruzó, pero si ya está al 80% o más, un aviso preventivo
+    // (una sola vez por mes/categoría) para que puedas frenar antes de pasarte.
+    if (gastado / tope >= 0.8) {
+      if (marcarAvisadoUnaVez('presupuestosAvisadosCerca', categoria)) {
+        avisarPush('Te estás por pasar de presupuesto', nombreCat + ': ' + fmt(gastado) + ' de ' + fmt(tope) +
+          ' (' + Math.round((gastado / tope) * 100) + '%) este mes.');
+      }
+    }
   }
 
   // ---------- Persistencia ----------
