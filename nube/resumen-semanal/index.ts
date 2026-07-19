@@ -27,8 +27,14 @@ webpush.setVapidDetails(
   Deno.env.get("VAPID_PRIVATE_KEY")!,
 );
 
+// El server corre en UTC pero las fechas guardadas (fecha, mes) son en hora
+// local Argentina (UTC-3) — restamos 3hs antes de leer año/mes/día para que
+// coincidan con el calendario que usa el celular del usuario.
+function ahoraArg(): Date {
+  return new Date(Date.now() - 3 * 3600 * 1000);
+}
 function mesActualKey(): string {
-  const d = new Date();
+  const d = ahoraArg();
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 function money(n: number): string {
@@ -55,7 +61,8 @@ Deno.serve(async (req) => {
       const movs = mes.movimientos || [];
       const gastoSemana = movs
         .filter((mv: any) => {
-          const t = new Date(mv.fecha + "T00:00:00Z").getTime();
+          // "-03:00": mv.fecha es la fecha local Argentina en que se cargó el gasto.
+          const t = new Date(mv.fecha + "T00:00:00-03:00").getTime();
           return !isNaN(t) && t >= haceUnaSemana;
         })
         .reduce((s: number, mv: any) => s + (Number(mv.monto) || 0), 0);
@@ -63,7 +70,12 @@ Deno.serve(async (req) => {
 
       const ingresos = (mes.ingresos || []).reduce((s: number, i: any) => s + (Number(i.monto) || 0), 0);
       const gastosMes = (mes.gastos || []).reduce((s: number, g: any) => s + (Number(g.monto) || 0), 0);
-      const teQueda = ingresos - gastosMes;
+      // Igual que balanceMes() en el cliente: también se resta lo que ya se
+      // pagó de cuotas de deuda este mes (no forma parte de "gastos").
+      const deudas = p?.data?.deudas || [];
+      const pagos = mes.deudasPagadas || {};
+      const cuotasPagadas = deudas.reduce((s: number, d: any) => s + (pagos[d.id] ? (Number(d.cuotaMensual) || 0) : 0), 0);
+      const teQueda = ingresos - gastosMes - cuotasPagadas;
 
       const subsRes = await fetch(
         `${SB_URL}/rest/v1/push_subscripciones?proyecto_id=eq.${p.id}&select=id,endpoint,p256dh,auth`,
