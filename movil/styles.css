@@ -550,7 +550,7 @@ header { padding-top: env(safe-area-inset-top); }
 
   /* ---- Analíticas: flujo de caja ancho arriba, el resto de a pares ---- */
   #vistaAnaliticas:not(.view-hidden) { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
-  #vistaAnaliticas > .page-head, #flujoCard { grid-column: 1 / -1; }
+  #vistaAnaliticas > .page-head, #flujoCard, #presupuestosCard { grid-column: 1 / -1; }
 
   /* ---- Historial: se deja en una columna, pero ya aprovecha el .canvas ancho ---- */
 }

@@ -74,7 +74,7 @@
   .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; vertical-align: middle; }
   body { min-height: max(884px, 100dvh); font-family: 'Inter', sans-serif; }
 </style>
-<link rel="stylesheet" href="styles.css?v=2">
+<link rel="stylesheet" href="styles.css?v=3">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
 <body class="bg-background text-on-surface font-body-lg min-h-screen overflow-x-hidden">
@@ -308,20 +308,20 @@
           <div class="flujo-canvas-wrap"><canvas id="flujoChart"></canvas></div>
         </section>
 
+        <section class="glass-card rounded-xl p-lg" id="presupuestosCard">
+          <div class="flex justify-between items-center mb-md">
+            <h3 class="font-title-md text-title-md text-primary">Presupuesto por categoría</h3>
+            <span class="badge" id="presupuestosBadge"></span>
+          </div>
+          <div class="panel-body" id="presupuestosBody"></div>
+        </section>
+
         <section class="glass-card rounded-xl p-lg" id="gastoDiasCard">
           <div class="flex justify-between items-center mb-md">
             <h3 class="font-title-md text-title-md text-primary">Gastos por día — <span id="gastoDiasMes"></span></h3>
           </div>
           <div class="gastodias-canvas-wrap"><canvas id="gastoDiasChart"></canvas></div>
           <p class="sub" id="gastoDiasResumen" style="margin:10px 2px 0"></p>
-        </section>
-
-<section class="glass-card rounded-xl p-lg" id="presupuestosCard">
-          <div class="flex justify-between items-center mb-md">
-            <h3 class="font-title-md text-title-md text-primary">Presupuesto por categoría</h3>
-            <span class="badge" id="presupuestosBadge"></span>
-          </div>
-          <div class="panel-body" id="presupuestosBody"></div>
         </section>
 
         <section class="glass-card rounded-xl p-lg" id="simuladorCard">
