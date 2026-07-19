@@ -51,7 +51,14 @@ Deno.serve(async (req) => {
     const proyectos = proyectosRes.ok ? await proyectosRes.json() : [];
 
     const key = mesActualKey();
-    const haceUnaSemana = Date.now() - 7 * 24 * 3600 * 1000;
+    const [anioStr, mesStr] = key.split("-");
+    const anio = parseInt(anioStr, 10), mesNum = parseInt(mesStr, 10);
+    const diasEnMes = new Date(Date.UTC(anio, mesNum, 0)).getUTCDate();
+    const nSemanas = Math.ceil(diasEnMes / 7);
+    const diaHoy = ahoraArg().getUTCDate();
+    // Mismo bucket que serieSemanalDelMes() en el cliente (app.js): bloques
+    // fijos de 7 días desde el día 1 del mes, no una ventana móvil de 7 días.
+    const semanaHoy = Math.min(nSemanas - 1, Math.floor((diaHoy - 1) / 7));
     let enviados = 0;
 
     for (const p of proyectos) {
@@ -61,9 +68,10 @@ Deno.serve(async (req) => {
       const movs = mes.movimientos || [];
       const gastoSemana = movs
         .filter((mv: any) => {
-          // "-03:00": mv.fecha es la fecha local Argentina en que se cargó el gasto.
-          const t = new Date(mv.fecha + "T00:00:00-03:00").getTime();
-          return !isNaN(t) && t >= haceUnaSemana;
+          const dia = parseInt(String(mv.fecha || "").split("-")[2], 10);
+          if (!dia) return false;
+          const w = Math.min(nSemanas - 1, Math.floor((dia - 1) / 7));
+          return w === semanaHoy;
         })
         .reduce((s: number, mv: any) => s + (Number(mv.monto) || 0), 0);
       if (gastoSemana <= 0) continue; // nada que contar esta semana en este proyecto
