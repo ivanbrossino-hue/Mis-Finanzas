@@ -4,8 +4,10 @@
 //  No hay usuario logueado disparándola, así que en vez de un JWT se valida
 //  un secreto compartido (header x-cron-secret) — mismo patrón que el
 //  WEBHOOK_SECRET del bot de Telegram.
-//  Recorre TODOS los proyectos, calcula lo gastado en los últimos 7 días y
-//  lo que queda del mes, y le manda un push a cada suscripción del proyecto.
+//  Recorre TODOS los proyectos, calcula lo gastado esta semana, lo que queda
+//  del mes, una proyección de cierre de mes (extrapolando el ritmo de gasto
+//  actual) comparada contra el mes anterior, y le manda un push a cada
+//  suscripción del proyecto.
 //  Secrets: CRON_SECRET, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT
 // ============================================================
 import webpush from "npm:web-push@3.6.7";
@@ -37,8 +39,21 @@ function mesActualKey(): string {
   const d = ahoraArg();
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
+function mesAnteriorKey(key: string): string {
+  const [y, m] = key.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1, 1));
+  d.setUTCMonth(d.getUTCMonth() - 1);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+const NOMBRES_MES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+function nombreMes(key: string): string {
+  return NOMBRES_MES[parseInt(key.split("-")[1], 10) - 1] || key;
+}
 function money(n: number): string {
   return "$ " + Math.round(n).toLocaleString("es-AR");
+}
+function sumaMonto(arr: any[]): number {
+  return (arr || []).reduce((s: number, x: any) => s + (Number(x.monto) || 0), 0);
 }
 
 Deno.serve(async (req) => {
@@ -76,14 +91,37 @@ Deno.serve(async (req) => {
         .reduce((s: number, mv: any) => s + (Number(mv.monto) || 0), 0);
       if (gastoSemana <= 0) continue; // nada que contar esta semana en este proyecto
 
-      const ingresos = (mes.ingresos || []).reduce((s: number, i: any) => s + (Number(i.monto) || 0), 0);
-      const gastosMes = (mes.gastos || []).reduce((s: number, g: any) => s + (Number(g.monto) || 0), 0);
+      const ingresos = sumaMonto(mes.ingresos);
+      const gastosMes = sumaMonto(mes.gastos);
       // Igual que balanceMes() en el cliente: también se resta lo que ya se
       // pagó de cuotas de deuda este mes (no forma parte de "gastos").
       const deudas = p?.data?.deudas || [];
       const pagos = mes.deudasPagadas || {};
       const cuotasPagadas = deudas.reduce((s: number, d: any) => s + (pagos[d.id] ? (Number(d.cuotaMensual) || 0) : 0), 0);
       const teQueda = ingresos - gastosMes - cuotasPagadas;
+
+      // Proyección de cierre de mes: extrapola el ritmo de gasto de lo que
+      // va del mes (gastosMes ya es el acumulado a hoy) a los días que faltan.
+      const cuotasTotales = deudas.reduce((s: number, d: any) => s + (d.activa !== false ? (Number(d.cuotaMensual) || 0) : 0), 0);
+      const gastoProyectado = (gastosMes / diaHoy) * diasEnMes;
+      const saldoProyectado = ingresos - gastoProyectado - cuotasTotales;
+
+      const keyAnterior = mesAnteriorKey(key);
+      const mesAnterior = p?.data?.meses?.[keyAnterior];
+      const gastoMesAnteriorTotal = mesAnterior ? sumaMonto(mesAnterior.gastos) : 0;
+
+      let cuerpo = `Esta semana gastaste ${money(gastoSemana)}. Te quedan ${money(teQueda)} este mes.`;
+      if (gastosMes > 0) {
+        cuerpo += ` A este ritmo vas a terminar gastando ${money(gastoProyectado)}`;
+        if (gastoMesAnteriorTotal > 0) {
+          const pct = Math.round(((gastoProyectado - gastoMesAnteriorTotal) / gastoMesAnteriorTotal) * 100);
+          cuerpo += ` (${pct >= 0 ? "+" : ""}${pct}% vs ${nombreMes(keyAnterior)}, ${money(gastoMesAnteriorTotal)})`;
+        }
+        cuerpo += ".";
+        if (saldoProyectado < 0) {
+          cuerpo += ` ⚠️ Al ritmo actual, terminarías el mes en negativo (~${money(saldoProyectado)}).`;
+        }
+      }
 
       const subsRes = await fetch(
         `${SB_URL}/rest/v1/push_subscripciones?proyecto_id=eq.${p.id}&select=id,endpoint,p256dh,auth`,
@@ -92,10 +130,7 @@ Deno.serve(async (req) => {
       const subs = subsRes.ok ? await subsRes.json() : [];
       if (!subs.length) continue;
 
-      const payload = JSON.stringify({
-        titulo: "Resumen semanal",
-        cuerpo: `Esta semana gastaste ${money(gastoSemana)}. Te quedan ${money(teQueda)} este mes.`,
-      });
+      const payload = JSON.stringify({ titulo: "Resumen semanal", cuerpo });
 
       await Promise.all(subs.map(async (s: any) => {
         try {
