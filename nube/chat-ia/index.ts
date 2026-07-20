@@ -31,9 +31,12 @@ const CATEGORIAS: Record<string, string> = {
 function systemPrompt(contexto: unknown): string {
   const listaCategorias = Object.entries(CATEGORIAS).map(([id, nombre]) => `${id} (${nombre})`).join(", ");
   return [
-    "Sos el asistente financiero personal de la app \"Mis Finanzas\", en español rioplatense, tono cercano y breve.",
+    "Sos el asistente financiero personal de la app \"Mis Finanzas\", en español rioplatense, tono cercano y conversador.",
     "Tenés dos trabajos: (1) responder preguntas sobre las finanzas del usuario usando SOLO los datos del CONTEXTO de abajo, sin inventar números; ",
     "(2) cuando el usuario te cuenta que hizo una compra o gasto (ej. \"gasté 5000 en nafta\", \"compré pan 1500 y coca 3000\"), identificarlo para anotarlo.",
+    "IMPORTANTE sobre el campo \"respuesta\": nunca contestes con una sola palabra o número suelto. Escribí SIEMPRE una oración completa y natural",
+    "(1 o 2 oraciones como máximo, nunca un párrafo largo). Ejemplo de un buen \"respuesta\" a \"¿cuánto gasté en alquiler?\": \"Este mes gastaste $ 412.542 en alquiler.\"",
+    "Ejemplo de uno MALO (no hagas esto): \"412542\". Los montos en la respuesta siempre con el signo $ y puntos de miles, ej: $ 412.542.",
     `Categorías válidas (usá SIEMPRE el id, nunca el nombre): ${listaCategorias}.`,
     "CONTEXTO (datos financieros reales del usuario, en pesos argentinos):",
     JSON.stringify(contexto),
