@@ -275,7 +275,26 @@
     return nombre.split(' ')[0];
   }
 
-  function renderChatMensajes() {
+  // Revela el texto de a poco (como si se estuviera "escribiendo"), en vez de
+  // pegarlo entero de golpe — mismo efecto visual que Gemini/ChatGPT, sin
+  // necesitar streaming real de la API (la respuesta ya llegó completa).
+  function animarTextoChat(el, textoCompleto) {
+    var i = 0;
+    var totalMs = Math.min(1400, Math.max(250, textoCompleto.length * 14));
+    var totalFrames = Math.max(1, Math.round(totalMs / 16));
+    var porFrame = Math.max(1, Math.ceil(textoCompleto.length / totalFrames));
+    function tick() {
+      i = Math.min(textoCompleto.length, i + porFrame);
+      el.innerHTML = escapeHtml(textoCompleto.slice(0, i)).replace(/\n/g, '<br>');
+      chatScrollAbajo();
+      if (i < textoCompleto.length) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  // animarUltimo: si es true y el último mensaje es del asistente, lo pinta
+  // vacío y lo va revelando con animarTextoChat() en vez de mostrarlo entero.
+  function renderChatMensajes(animarUltimo) {
     var box = document.getElementById('chatMensajes');
     if (!box) return;
     box.classList.toggle('chat-vacio', !chatHistorial.length);
@@ -285,9 +304,18 @@
         '<div class="chat-vacio-saludo">¿Qué necesitás' + (nombre ? ', ' + escapeHtml(nombre) : '') + '?</div>';
       return;
     }
-    box.innerHTML = chatHistorial.map(function (m) { return chatBurbujaHTML(m.rol, m.texto); }).join('') +
+    var ultimoIdx = chatHistorial.length - 1;
+    var animar = animarUltimo && chatHistorial[ultimoIdx].rol === 'assistant';
+    box.innerHTML = chatHistorial.map(function (m, i) {
+      if (animar && i === ultimoIdx) return '<div class="chat-msg chat-msg-assistant" id="chatUltimaResp"></div>';
+      return chatBurbujaHTML(m.rol, m.texto);
+    }).join('') +
       (chatEnviando ? '<div class="chat-msg chat-msg-assistant chat-typing">Escribiendo…</div>' : '');
     chatScrollAbajo();
+    if (animar) {
+      var el = document.getElementById('chatUltimaResp');
+      if (el) animarTextoChat(el, chatHistorial[ultimoIdx].texto);
+    }
   }
 
   function abrirChat() {
@@ -310,7 +338,7 @@
       chatEnviando = false;
       if (res.error || !res.data || res.data.error) {
         chatHistorial.push({ rol: 'assistant', texto: 'No pude responder ahora, intentá de nuevo en un rato.' });
-        renderChatMensajes();
+        renderChatMensajes(true);
         return;
       }
       var registrados = res.data.registrar || [];
@@ -323,11 +351,11 @@
         texto2 += '\n\n✅ ' + registrados.map(function (it) { return fmt(it.monto) + ' en ' + getCatNombre(it.categoria); }).join(', ');
       }
       chatHistorial.push({ rol: 'assistant', texto: texto2 });
-      renderChatMensajes();
+      renderChatMensajes(true);
     }).catch(function () {
       chatEnviando = false;
       chatHistorial.push({ rol: 'assistant', texto: 'No pude responder ahora, intentá de nuevo en un rato.' });
-      renderChatMensajes();
+      renderChatMensajes(true);
     });
   }
 
