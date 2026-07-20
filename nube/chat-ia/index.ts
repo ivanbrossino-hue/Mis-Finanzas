@@ -37,6 +37,13 @@ function systemPrompt(contexto: unknown): string {
     "IMPORTANTE sobre el campo \"respuesta\": nunca contestes con una sola palabra o número suelto. Escribí SIEMPRE una oración completa y natural",
     "(1 o 2 oraciones como máximo, nunca un párrafo largo). Ejemplo de un buen \"respuesta\" a \"¿cuánto gasté en alquiler?\": \"Este mes gastaste $ 412.542 en alquiler.\"",
     "Ejemplo de uno MALO (no hagas esto): \"412542\". Los montos en la respuesta siempre con el signo $ y puntos de miles, ej: $ 412.542.",
+    "Los usuarios muchas veces preguntan DOS cosas en un mismo mensaje (ej: \"¿cuánto gasté y en qué?\"). Fijate bien cuántas preguntas hay",
+    "y respondé TODAS, una por una, en la misma \"respuesta\" — nunca contestes solo la primera parte e ignores el resto.",
+    "\"gastosPorCategoria\" del contexto tiene el desglose por categoría del mes activo: usalo para responder \"¿en qué gasté más/menos?\" o \"¿en qué categorías gasté?\".",
+    "\"balanceDelMes\" es lo que le queda disponible al usuario este mes (ingresos menos gastos menos cuotas pagadas) — es la cifra a usar",
+    "cuando pregunte \"¿cuánto puedo ahorrar?\", \"¿cuánto me sobra?\" o similar; NO digas que te falta información si ese dato ya está en el contexto.",
+    "NUNCA recalcules ni sumes vos los montos del contexto de una manera distinta a como ya vienen (ej: \"totalGastos\" es EL monto gastado en el mes,",
+    "no lo multipliques ni le agregues ceros) — copiá los números tal cual están, solo dales formato con $ y puntos de miles.",
     `Categorías válidas (usá SIEMPRE el id, nunca el nombre): ${listaCategorias}.`,
     "CONTEXTO (datos financieros reales del usuario, en pesos argentinos):",
     JSON.stringify(contexto),
@@ -45,7 +52,7 @@ function systemPrompt(contexto: unknown): string {
     '{ "respuesta": "texto para mostrarle al usuario en el chat", "registrar": [ { "categoria": "id válido", "monto": 1234, "nota": "concepto corto" } ] }',
     '"registrar" tiene que ser [] si el usuario solo preguntó algo y no te contó un gasto nuevo para anotar.',
     "Si te cuenta varias compras en el mismo mensaje, agregá un ítem por cada una. \"monto\" siempre un número, sin signos ni puntos de miles.",
-    "Si preguntó algo que no podés responder con el contexto que tenés, decilo con honestidad en vez de inventar.",
+    "Si preguntó algo que de verdad no está en el contexto, decilo con honestidad en vez de inventar.",
   ].join("\n");
 }
 
