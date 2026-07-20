@@ -163,6 +163,7 @@
       .find(function (g) { return g.bot || g.nombre === accName; });
     if (acc) { acc.monto = (Number(acc.monto) || 0) + monto; acc.bot = true; }
     else { acc = { id: uid(), categoria: categoria, nombre: accName, monto: monto, bot: true }; m.gastos.push(acc); }
+    revisarGastoInusual(categoria, monto);
     m.movimientos.push({ id: uid(), fecha: isoHoyApp(), categoria: categoria, filaId: acc.id, fila: acc.nombre, monto: monto, nota: nota || null, items: items || null });
     revisarPresupuesto(categoria);
     ultimaAccionDescripcion = 'agregó un gasto de ' + fmt(monto) + ' en ' + getCatNombre(categoria);
@@ -190,6 +191,21 @@
     if (avisados.indexOf(categoria) !== -1) return false;
     estado[campo][mesActivo] = avisados.concat([categoria]);
     return true;
+  }
+
+  // Avisa si esta compra es mucho más grande que el promedio histórico de la
+  // categoría (2.5x). Se llama ANTES de sumar la compra al historial, para
+  // que el promedio no quede inflado por la propia compra que se está evaluando.
+  function revisarGastoInusual(categoria, monto) {
+    if (!modoCuenta || !miProyectoId) return;
+    var historial = todosLosMovimientos()
+      .map(function (x) { return x.mv; })
+      .filter(function (mv) { return mv.categoria === categoria; });
+    if (historial.length < 4) return; // hace falta historial para saber qué es "normal"
+    var promedio = historial.reduce(function (s, mv) { return s + (Number(mv.monto) || 0); }, 0) / historial.length;
+    if (promedio > 0 && monto >= promedio * 2.5) {
+      avisarPush('Gasto inusual', fmt(monto) + ' en ' + getCatNombre(categoria) + ', bastante más que tu promedio habitual (' + fmt(promedio) + ').');
+    }
   }
 
   function revisarPresupuesto(categoria) {
