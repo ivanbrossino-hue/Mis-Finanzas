@@ -268,11 +268,21 @@
     return '<div class="chat-msg chat-msg-' + rol + '">' + escapeHtml(texto).replace(/\n/g, '<br>') + '</div>';
   }
 
+  function chatNombreUsuario() {
+    if (!miUsuario) return '';
+    var meta = miUsuario.user_metadata || {};
+    var nombre = meta.full_name || meta.name || (miUsuario.email || '').split('@')[0] || '';
+    return nombre.split(' ')[0];
+  }
+
   function renderChatMensajes() {
     var box = document.getElementById('chatMensajes');
     if (!box) return;
+    box.classList.toggle('chat-vacio', !chatHistorial.length);
     if (!chatHistorial.length) {
-      box.innerHTML = '<div class="chat-msg chat-msg-assistant">¡Hola! Preguntame algo sobre tus finanzas o contame un gasto y lo anoto (ej: "gasté 3000 en nafta").</div>';
+      var nombre = chatNombreUsuario();
+      box.innerHTML = '<div class="chat-vacio-icon">✨</div>' +
+        '<div class="chat-vacio-saludo">¿Qué necesitás' + (nombre ? ', ' + escapeHtml(nombre) : '') + '?</div>';
       return;
     }
     box.innerHTML = chatHistorial.map(function (m) { return chatBurbujaHTML(m.rol, m.texto); }).join('') +
