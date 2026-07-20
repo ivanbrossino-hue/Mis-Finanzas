@@ -2567,12 +2567,12 @@
     document.getElementById('chatBack').addEventListener('click', function (e) {
       if (e.target === this) cerrarChat();
     });
-    document.getElementById('chatForm').addEventListener('submit', function (e) {
-      e.preventDefault();
+    (function () {
       var inp = document.getElementById('chatInput');
-      enviarMensajeChat(inp.value);
-      inp.value = '';
-    });
+      function enviarYLimpiar() { enviarMensajeChat(inp.value); inp.value = ''; }
+      document.getElementById('chatSendBtn').onclick = enviarYLimpiar;
+      inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') enviarYLimpiar(); });
+    })();
     document.getElementById('importFile').addEventListener('change', function (e) {
       if (e.target.files[0]) importarArchivo(e.target.files[0]);
       e.target.value = '';
