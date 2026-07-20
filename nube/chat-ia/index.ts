@@ -12,7 +12,7 @@
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const NVIDIA_API_KEY = Deno.env.get("NVIDIA_API_KEY") ?? "";
-const NVIDIA_MODEL = "meta/llama-3.3-70b-instruct";
+const NVIDIA_MODEL = "meta/llama-3.1-8b-instruct";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
     const iaRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${NVIDIA_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: NVIDIA_MODEL, messages, temperature: 0.2, top_p: 0.7, max_tokens: 600 }),
+      body: JSON.stringify({ model: NVIDIA_MODEL, messages, temperature: 0.2, top_p: 0.7, max_tokens: 300 }),
     });
     if (!iaRes.ok) {
       const detalle = await iaRes.text().catch(() => "");
