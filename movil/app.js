@@ -107,6 +107,11 @@
     m++; if (m > 12) { m = 1; y++; }
     return y + '-' + (m < 10 ? '0' + m : m);
   }
+  function mesAnteriorKey(key) {
+    var p = key.split('-'); var y = parseInt(p[0], 10); var m = parseInt(p[1], 10);
+    m--; if (m < 1) { m = 12; y--; }
+    return y + '-' + (m < 10 ? '0' + m : m);
+  }
   function mesesOrdenados() { return Object.keys(estado.meses).sort(); }
   // Clave del mes actual según la fecha de la compu (ej: '2026-07')
   function mesActualKey() {
@@ -227,6 +232,93 @@
           ' (' + Math.round((gastado / tope) * 100) + '%) este mes.');
       }
     }
+  }
+
+  // ---------- Asistente de chat (IA) ----------
+  var chatHistorial = [];  // { rol: 'user' | 'assistant', texto }
+  var chatEnviando = false;
+
+  // Resumen compacto (no todo el historial) que se manda como contexto a la
+  // IA en cada mensaje — solo lo necesario para responder preguntas y
+  // comparar contra el mes anterior, sin mandar años de datos innecesarios.
+  function contextoFinancieroParaChat() {
+    var mAnt = mesAnteriorKey(mesActivo);
+    var hayMesAnterior = !!estado.meses[mAnt];
+    return {
+      mesActivo: mesKeyLabel(mesActivo),
+      ingresos: (mesData().ingresos || []).map(function (i) { return { nombre: i.nombre, monto: Number(i.monto) || 0 }; }),
+      gastosPorCategoria: gastosPorCategoria(mesActivo),
+      totalIngresos: totalIngresos(mesActivo),
+      totalGastos: totalGastos(mesActivo),
+      balanceDelMes: balanceMes(mesActivo),
+      presupuestosPorCategoria: estado.presupuestos || {},
+      deudas: (estado.deudas || []).map(function (d) {
+        return { nombre: d.nombre, saldo: Number(d.saldo) || 0, cuotaMensual: Number(d.cuotaMensual) || 0, activa: d.activa !== false };
+      }),
+      mesAnterior: hayMesAnterior ? { nombre: mesKeyLabel(mAnt), totalGastos: totalGastos(mAnt) } : null,
+    };
+  }
+
+  function chatScrollAbajo() {
+    var box = document.getElementById('chatMensajes');
+    if (box) box.scrollTop = box.scrollHeight;
+  }
+
+  function chatBurbujaHTML(rol, texto) {
+    return '<div class="chat-msg chat-msg-' + rol + '">' + escapeHtml(texto).replace(/\n/g, '<br>') + '</div>';
+  }
+
+  function renderChatMensajes() {
+    var box = document.getElementById('chatMensajes');
+    if (!box) return;
+    if (!chatHistorial.length) {
+      box.innerHTML = '<div class="chat-msg chat-msg-assistant">¡Hola! Preguntame algo sobre tus finanzas o contame un gasto y lo anoto (ej: "gasté 3000 en nafta").</div>';
+      return;
+    }
+    box.innerHTML = chatHistorial.map(function (m) { return chatBurbujaHTML(m.rol, m.texto); }).join('') +
+      (chatEnviando ? '<div class="chat-msg chat-msg-assistant chat-typing">Escribiendo…</div>' : '');
+    chatScrollAbajo();
+  }
+
+  function abrirChat() {
+    if (!modoCuenta || !miProyectoId) { toast('Iniciá sesión primero.'); return; }
+    document.getElementById('chatBack').classList.add('open');
+    renderChatMensajes();
+    setTimeout(function () { var inp = document.getElementById('chatInput'); if (inp) inp.focus(); }, 150);
+  }
+  function cerrarChat() { document.getElementById('chatBack').classList.remove('open'); }
+
+  function enviarMensajeChat(texto) {
+    texto = texto.trim();
+    if (!texto || chatEnviando) return;
+    chatHistorial.push({ rol: 'user', texto: texto });
+    chatEnviando = true;
+    renderChatMensajes();
+    sbClient.functions.invoke('chat-ia', {
+      body: { mensaje: texto, historial: chatHistorial.slice(0, -1), contexto: contextoFinancieroParaChat() }
+    }).then(function (res) {
+      chatEnviando = false;
+      if (res.error || !res.data || res.data.error) {
+        chatHistorial.push({ rol: 'assistant', texto: 'No pude responder ahora, intentá de nuevo en un rato.' });
+        renderChatMensajes();
+        return;
+      }
+      var registrados = res.data.registrar || [];
+      registrados.forEach(function (it) {
+        registrarCompra(it.categoria, it.monto, it.nota || null, null);
+      });
+      if (registrados.length) { guardar(); actualizarCalculos(); }
+      var texto2 = res.data.respuesta || '';
+      if (registrados.length) {
+        texto2 += '\n\n✅ ' + registrados.map(function (it) { return fmt(it.monto) + ' en ' + getCatNombre(it.categoria); }).join(', ');
+      }
+      chatHistorial.push({ rol: 'assistant', texto: texto2 });
+      renderChatMensajes();
+    }).catch(function () {
+      chatEnviando = false;
+      chatHistorial.push({ rol: 'assistant', texto: 'No pude responder ahora, intentá de nuevo en un rato.' });
+      renderChatMensajes();
+    });
   }
 
   // ---------- Persistencia ----------
@@ -2077,12 +2169,14 @@
   // en vez de moverse. window.visualViewport sí sabe el área realmente
   // visible, así que ajustamos el alto/posición del overlay a mano.
   if (window.visualViewport) {
-    var modalBackEl = null;
     function ajustarModalATeclado() {
-      if (!modalBackEl) modalBackEl = document.getElementById('modalBack');
       var vv = window.visualViewport;
-      modalBackEl.style.height = vv.height + 'px';
-      modalBackEl.style.top = vv.offsetTop + 'px';
+      ['modalBack', 'chatBack'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.style.height = vv.height + 'px';
+        el.style.top = vv.offsetTop + 'px';
+      });
     }
     window.visualViewport.addEventListener('resize', ajustarModalATeclado);
     window.visualViewport.addEventListener('scroll', ajustarModalATeclado);
@@ -2457,6 +2551,17 @@
     });
     document.getElementById('modalBack').addEventListener('click', function (e) {
       if (e.target === this) cerrarModal();
+    });
+    document.getElementById('chatFab').onclick = abrirChat;
+    document.getElementById('chatClose').onclick = cerrarChat;
+    document.getElementById('chatBack').addEventListener('click', function (e) {
+      if (e.target === this) cerrarChat();
+    });
+    document.getElementById('chatForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var inp = document.getElementById('chatInput');
+      enviarMensajeChat(inp.value);
+      inp.value = '';
     });
     document.getElementById('importFile').addEventListener('change', function (e) {
       if (e.target.files[0]) importarArchivo(e.target.files[0]);
