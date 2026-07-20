@@ -451,7 +451,13 @@ header { padding-top: env(safe-area-inset-top); }
 }
 .chat-input-bar input {
   flex: 1; border: none; background: transparent; padding: 10px 0; font-size: 14px; color: var(--on-surface);
-  outline: none; -webkit-tap-highlight-color: transparent;
+  -webkit-appearance: none; appearance: none; -webkit-tap-highlight-color: transparent;
+  outline: none !important; box-shadow: none !important;
+}
+.chat-input-bar input:focus,
+.chat-input-bar input:focus-visible,
+.chat-input-bar input:active {
+  outline: none !important; box-shadow: none !important; border: none !important;
 }
 .chat-input-bar input::placeholder { color: var(--on-surface-variant); }
 .chat-send {
