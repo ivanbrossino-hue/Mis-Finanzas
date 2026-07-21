@@ -160,7 +160,7 @@
   }
 
   // Registra una compra: la suma a la línea acumuladora de la categoría y la anota en el historial
-  function registrarCompra(categoria, monto, nota, items) {
+  function registrarCompra(categoria, monto, nota, items, fecha) {
     var m = mesData();
     if (!m.gastos) m.gastos = [];
     if (!m.movimientos) m.movimientos = [];
@@ -170,7 +170,7 @@
     if (acc) { acc.monto = (Number(acc.monto) || 0) + monto; acc.bot = true; }
     else { acc = { id: uid(), categoria: categoria, nombre: accName, monto: monto, bot: true }; m.gastos.push(acc); }
     revisarGastoInusual(categoria, monto);
-    m.movimientos.push({ id: uid(), fecha: isoHoyApp(), categoria: categoria, filaId: acc.id, fila: acc.nombre, monto: monto, nota: nota || null, items: items || null });
+    m.movimientos.push({ id: uid(), fecha: fecha || isoHoyApp(), categoria: categoria, filaId: acc.id, fila: acc.nombre, monto: monto, nota: nota || null, items: items || null });
     revisarPresupuesto(categoria);
     ultimaAccionDescripcion = 'agregó un gasto de ' + fmt(monto) + ' en ' + getCatNombre(categoria);
     return acc;
@@ -2504,6 +2504,7 @@
         '<div class="field"><label>Monto</label><input id="gMonto" inputmode="text" placeholder="0 (podés escribir 200+120)"></div>' +
         '<div class="field"><label>Categoría</label><select id="gCat">' + opciones + '</select></div>' +
       '</div>' +
+      '<div class="field"><label>Fecha</label><input type="date" id="gFecha" value="' + isoHoyApp() + '" max="' + isoHoyApp() + '"></div>' +
       '<div class="modal-actions"><button class="btn btn-ghost" id="mCancel">Cancelar</button>' +
       '<button class="btn btn-primary" id="mOk">Agregar gasto</button></div>');
     document.getElementById('mCancel').onclick = cerrarModal;
@@ -2515,8 +2516,9 @@
       var nombre = nombreEl.value.trim();
       var monto = evalMonto(montoEl.value);
       var cat = document.getElementById('gCat').value;
+      var fecha = document.getElementById('gFecha').value || isoHoyApp();
       if (!monto) { montoEl.focus(); return; }
-      var acc = registrarCompra(cat, monto, nombre || null, nombre ? [{ nombre: nombre, monto: monto }] : null);
+      var acc = registrarCompra(cat, monto, nombre || null, nombre ? [{ nombre: nombre, monto: monto }] : null, fecha);
       colapsadas[cat] = false;
       guardar(); cerrarModal(); render(false);
       toast('Sumado ' + fmt(monto) + ' en ' + getCatNombre(cat));
