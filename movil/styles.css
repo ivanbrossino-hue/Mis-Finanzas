@@ -225,6 +225,8 @@ header { padding-top: env(safe-area-inset-top); }
 .hist-table { width: 100%; border-collapse: collapse; }
 .hist-table td { padding: 11px 8px; border-bottom: 1px solid var(--outline-variant); vertical-align: middle; }
 .hist-table tr:last-child td { border-bottom: none; }
+.hist-row { cursor: pointer; transition: background .12s; }
+.hist-row:hover, .hist-row:active { background: var(--surface-container); }
 .h-fecha { font-family: var(--mono); font-size: 11px; color: var(--on-surface-variant); white-space: nowrap; width: 68px; }
 .h-cat { width: 32px; text-align: center; }
 .h-ic { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; background: var(--surface-container); font-size: 14px; }

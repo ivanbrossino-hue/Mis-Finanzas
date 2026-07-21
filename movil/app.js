@@ -1941,7 +1941,7 @@
       if (mv.nota && mv.nota !== desc) sub.push(escapeHtml(mv.nota));
       if (mv.items && mv.items.length > 1) sub.push(escapeHtml(mv.items.map(function (i) { return i.nombre; }).join(' · ')));
       var detItems = sub.length ? '<span class="h-items">' + sub.join(' — ') + '</span>' : '';
-      html += '<tr data-mv="' + mv.id + '" data-mes="' + r.mesKey + '">' +
+      html += '<tr class="hist-row" data-mv="' + mv.id + '" data-mes="' + r.mesKey + '" title="Tocá para editar">' +
         '<td class="h-fecha">' + fechaCortaApp(mv.fecha) + '</td>' +
         '<td class="h-cat" title="' + escapeAttr(getCatNombre(mv.categoria)) + '"><span class="h-ic">' + c.icon + '</span></td>' +
         '<td class="h-desc"><b>' + escapeHtml(desc) + '</b>' + detItems + '</td>' +
@@ -1952,8 +1952,81 @@
     html += '</tbody></table>';
     body.innerHTML = html;
     body.querySelectorAll('[data-delmov]').forEach(function (b) {
-      b.addEventListener('click', function () { eliminarMovimiento(b.getAttribute('data-delmov'), b.getAttribute('data-delmes')); });
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        eliminarMovimiento(b.getAttribute('data-delmov'), b.getAttribute('data-delmes'));
+      });
     });
+    body.querySelectorAll('.hist-row').forEach(function (tr) {
+      tr.addEventListener('click', function () {
+        modalEditarMovimiento(tr.getAttribute('data-mv'), tr.getAttribute('data-mes'));
+      });
+    });
+  }
+
+  // Deja cambiar categoría, fila, monto o nota de un movimiento ya cargado —
+  // saca el monto viejo de la fila donde estaba y lo suma a la fila nueva
+  // (existente o creada en el momento), sin tener que borrar y recargar.
+  function modalEditarMovimiento(id, mesKey) {
+    var m = estado.meses[mesKey];
+    if (!m) return;
+    var mv = (m.movimientos || []).find(function (x) { return x.id === id; });
+    if (!mv) return;
+    var opciones = CATEGORIAS.map(function (c) {
+      var sel = (c.id === mv.categoria) ? ' selected' : '';
+      return '<option value="' + c.id + '"' + sel + '>' + c.icon + '  ' + escapeHtml(getCatNombre(c.id)) + '</option>';
+    }).join('');
+    var DATALIST_ID = 'emFilasExistentes';
+    abrirModal('<h3>Editar movimiento</h3><p class="sub">Cambiá la categoría, la fila, el monto o la nota.</p>' +
+      '<div class="field"><label>Concepto / nota</label><input id="emNota" value="' + escapeAttr(mv.nota || '') + '"></div>' +
+      '<div class="field-row">' +
+        '<div class="field"><label>Monto</label><input id="emMonto" inputmode="text" value="' + formatInput(mv.monto) + '"></div>' +
+        '<div class="field"><label>Categoría</label><select id="emCat">' + opciones + '</select></div>' +
+      '</div>' +
+      '<div class="field"><label>Fila</label><input id="emFila" list="' + DATALIST_ID + '" value="' + escapeAttr(mv.fila || '') + '" placeholder="Nombre de la fila (podés escribir una nueva)">' +
+      '<datalist id="' + DATALIST_ID + '"></datalist></div>' +
+      '<div class="modal-actions"><button class="btn btn-ghost" id="mCancel">Cancelar</button>' +
+      '<button class="btn btn-primary" id="mOk">Guardar cambios</button></div>');
+    document.getElementById('mCancel').onclick = cerrarModal;
+
+    function actualizarFilasSugeridas() {
+      var cat = document.getElementById('emCat').value;
+      var nombres = (m.gastos || []).filter(function (g) { return g.categoria === cat; }).map(function (g) { return g.nombre; });
+      document.getElementById(DATALIST_ID).innerHTML = nombres.map(function (n) { return '<option value="' + escapeAttr(n) + '">'; }).join('');
+    }
+    actualizarFilasSugeridas();
+    document.getElementById('emCat').addEventListener('change', actualizarFilasSugeridas);
+
+    document.getElementById('mOk').onclick = function () {
+      var nuevaCat = document.getElementById('emCat').value;
+      var nuevaFilaNombre = document.getElementById('emFila').value.trim() || nombreAcumulador(nuevaCat);
+      var nuevoMonto = evalMonto(document.getElementById('emMonto').value);
+      var nuevaNota = document.getElementById('emNota').value.trim();
+      if (!nuevoMonto) { document.getElementById('emMonto').focus(); return; }
+
+      var filaVieja = (m.gastos || []).find(function (g) { return g.id === mv.filaId; })
+        || (m.gastos || []).filter(function (g) { return g.categoria === mv.categoria; })
+          .find(function (g) { return g.bot || g.nombre === nombreAcumulador(mv.categoria); });
+      if (filaVieja) filaVieja.monto = Math.max(0, (Number(filaVieja.monto) || 0) - (Number(mv.monto) || 0));
+
+      if (!m.gastos) m.gastos = [];
+      var filaNueva = m.gastos.filter(function (g) { return g.categoria === nuevaCat; })
+        .find(function (g) { return g.nombre === nuevaFilaNombre; });
+      if (filaNueva) { filaNueva.monto = (Number(filaNueva.monto) || 0) + nuevoMonto; }
+      else { filaNueva = { id: uid(), categoria: nuevaCat, nombre: nuevaFilaNombre, monto: nuevoMonto, bot: true }; m.gastos.push(filaNueva); }
+
+      mv.categoria = nuevaCat;
+      mv.filaId = filaNueva.id;
+      mv.fila = filaNueva.nombre;
+      mv.monto = nuevoMonto;
+      mv.nota = nuevaNota || null;
+
+      guardar();
+      if (mesKey === mesActivo) actualizarCalculos();
+      cerrarModal();
+      renderHistorial();
+      toast('Movimiento actualizado');
+    };
   }
 
   function eliminarMovimiento(id, mesKey) {
