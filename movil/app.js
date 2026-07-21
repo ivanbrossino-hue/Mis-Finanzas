@@ -240,6 +240,51 @@
   var chatEnviando = false;
   var chatYaRegistrados = [];   // "categoria|monto|nota" de lo que ya se registró en esta conversación (evita duplicar)
   var chatCargado = false;      // si ya se restauró chatHistorial desde estado.chatLog
+  var chatVozActivada = localStorage.getItem('misFinanzas_chatVoz') !== '0'; // preferencia de este dispositivo, no se sincroniza
+  var chatReconocimiento = null; // instancia de SpeechRecognition (se crea la primera vez que se usa)
+  var chatEscuchando = false;
+
+  // Lee en voz alta la respuesta del asistente (gratis, nativo del navegador,
+  // funciona en Android e iPhone). Si el usuario apagó el sonido, no hace nada.
+  function chatHablar(texto) {
+    if (!chatVozActivada || !texto || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel(); // no superponer con una lectura anterior
+    var u = new SpeechSynthesisUtterance(texto);
+    u.lang = 'es-AR';
+    window.speechSynthesis.speak(u);
+  }
+
+  // Dictado por voz (gratis, nativo) — no existe en Safari/iOS, ahí se oculta el botón.
+  function chatMicDisponible() { return !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
+  function chatToggleMic() {
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    var btn = document.getElementById('chatMicBtn');
+    if (chatEscuchando) { if (chatReconocimiento) chatReconocimiento.stop(); return; }
+    if (!chatReconocimiento) {
+      chatReconocimiento = new SR();
+      chatReconocimiento.lang = 'es-AR';
+      chatReconocimiento.interimResults = true;
+      chatReconocimiento.continuous = false;
+      chatReconocimiento.onresult = function (e) {
+        var texto = '';
+        for (var i = 0; i < e.results.length; i++) texto += e.results[i][0].transcript;
+        var inp = document.getElementById('chatInput');
+        if (inp) inp.value = texto;
+      };
+      chatReconocimiento.onend = function () {
+        chatEscuchando = false;
+        if (btn) btn.classList.remove('listening');
+      };
+      chatReconocimiento.onerror = function () {
+        chatEscuchando = false;
+        if (btn) btn.classList.remove('listening');
+      };
+    }
+    chatEscuchando = true;
+    if (btn) btn.classList.add('listening');
+    chatReconocimiento.start();
+  }
 
   // Guarda el historial (recortado) en el proyecto compartido, para poder
   // revisarlo después desde cualquier dispositivo — igual que el resto de los datos.
@@ -388,6 +433,7 @@
       chatHistorial.push({ rol: 'assistant', texto: textoMostrado, textoIA: textoIA });
       chatPersistirLog();
       renderChatMensajes(true);
+      chatHablar(textoIA);
     }).catch(function () {
       chatEnviando = false;
       chatHistorial.push({ rol: 'assistant', texto: 'No pude responder ahora, intentá de nuevo en un rato.' });
@@ -2639,6 +2685,26 @@
       document.getElementById('chatSendBtn').onclick = enviarYLimpiar;
       inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') enviarYLimpiar(); });
     })();
+    var chatVozBtn = document.getElementById('chatVozToggle');
+    if (chatVozBtn) {
+      var chatVozIcon = chatVozBtn.querySelector('.material-symbols-outlined');
+      function chatVozActualizarIcono() {
+        chatVozBtn.classList.toggle('muted', !chatVozActivada);
+        if (chatVozIcon) chatVozIcon.textContent = chatVozActivada ? 'volume_up' : 'volume_off';
+      }
+      chatVozActualizarIcono();
+      chatVozBtn.onclick = function () {
+        chatVozActivada = !chatVozActivada;
+        localStorage.setItem('misFinanzas_chatVoz', chatVozActivada ? '1' : '0');
+        chatVozActualizarIcono();
+        if (!chatVozActivada && window.speechSynthesis) window.speechSynthesis.cancel();
+      };
+    }
+    var chatMicBtn = document.getElementById('chatMicBtn');
+    if (chatMicBtn) {
+      if (!chatMicDisponible()) chatMicBtn.style.display = 'none';
+      else chatMicBtn.onclick = chatToggleMic;
+    }
     document.getElementById('importFile').addEventListener('change', function (e) {
       if (e.target.files[0]) importarArchivo(e.target.files[0]);
       e.target.value = '';
