@@ -379,6 +379,10 @@
     var enHistorial = panel.classList.toggle('modo-historial');
     if (enHistorial) renderChatHistorialLista();
   }
+  function chatCerrarHistorialVista() {
+    var panel = document.getElementById('chatPanel');
+    if (panel) panel.classList.remove('modo-historial');
+  }
 
   // Resumen compacto (no todo el historial) que se manda como contexto a la
   // IA en cada mensaje — solo lo necesario para responder preguntas y
@@ -2773,6 +2777,8 @@
     })();
     var chatHistorialBtn = document.getElementById('chatHistorialBtn');
     if (chatHistorialBtn) chatHistorialBtn.onclick = chatToggleHistorialVista;
+    var chatHistBackdrop = document.getElementById('chatHistBackdrop');
+    if (chatHistBackdrop) chatHistBackdrop.onclick = chatCerrarHistorialVista;
     var chatVozBtn = document.getElementById('chatVozToggle');
     if (chatVozBtn) {
       var chatVozIcon = chatVozBtn.querySelector('.material-symbols-outlined');
