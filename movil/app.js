@@ -146,14 +146,15 @@
   // ordenados del más reciente al más viejo (para la página de Historial).
   function todosLosMovimientos() {
     var out = [];
+    var seq = 0;
     mesesOrdenados().forEach(function (k) {
       (estado.meses[k].movimientos || []).forEach(function (mv) {
-        out.push({ mv: mv, mesKey: k });
+        out.push({ mv: mv, mesKey: k, seq: seq++ }); // seq = orden real de carga (fecha sola no alcanza, no tiene hora)
       });
     });
     out.sort(function (a, b) {
       if (a.mv.fecha !== b.mv.fecha) return a.mv.fecha < b.mv.fecha ? 1 : -1;
-      return 0;
+      return b.seq - a.seq; // mismo día: el que se cargó después va primero
     });
     return out;
   }
