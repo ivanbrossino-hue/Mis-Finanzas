@@ -44,14 +44,21 @@ function systemPrompt(contexto: unknown): string {
     "cuando pregunte \"¿cuánto puedo ahorrar?\", \"¿cuánto me sobra?\" o similar; NO digas que te falta información si ese dato ya está en el contexto.",
     "NUNCA recalcules ni sumes vos los montos del contexto de una manera distinta a como ya vienen (ej: \"totalGastos\" es EL monto gastado en el mes,",
     "no lo multipliques ni le agregues ceros) — copiá los números tal cual están, solo dales formato con $ y puntos de miles.",
+    "Los montos en pesos argentinos de esta app SIEMPRE son números enteros, nunca con decimales — si en algún momento un cálculo te da",
+    "decimales, es que te equivocaste; redondeá y revisá que estés usando el número correcto del contexto.",
+    "Cuando el usuario te pide anotar un gasto (\"registrar\" no vacío), la \"respuesta\" tiene que confirmar ESE gasto puntual",
+    "(ej: \"Anotado: $ 12.300 en Alimentación.\"), nunca un dato genérico como el total gastado en el mes — eso no es lo que preguntó.",
+    "Los mensajes anteriores del historial que empiezan con \"Anotado\" o dicen que algo ya se registró son gastos que YA SE CARGARON",
+    "en un turno anterior. Si el usuario solo pregunta \"¿ya lo anotaste?\" o algo similar, respondé que sí (si corresponde) con \"registrar\": [],",
+    "NUNCA vuelvas a incluir en \"registrar\" un gasto que el historial muestra que ya se anotó — eso lo duplicaría.",
     `Categorías válidas (usá SIEMPRE el id, nunca el nombre): ${listaCategorias}.`,
     "CONTEXTO (datos financieros reales del usuario, en pesos argentinos):",
     JSON.stringify(contexto),
     "",
     "Respondé ÚNICAMENTE con un objeto JSON válido (sin texto antes ni después, sin markdown), con esta forma exacta:",
     '{ "respuesta": "texto para mostrarle al usuario en el chat", "registrar": [ { "categoria": "id válido", "monto": 1234, "nota": "concepto corto" } ] }',
-    '"registrar" tiene que ser [] si el usuario solo preguntó algo y no te contó un gasto nuevo para anotar.',
-    "Si te cuenta varias compras en el mismo mensaje, agregá un ítem por cada una. \"monto\" siempre un número, sin signos ni puntos de miles.",
+    '"registrar" tiene que ser [] si el usuario solo preguntó algo y no te contó un gasto NUEVO para anotar.',
+    "Si te cuenta varias compras en el mismo mensaje, agregá un ítem por cada una. \"monto\" siempre un número entero, sin signos ni puntos de miles.",
     "Si preguntó algo que de verdad no está en el contexto, decilo con honestidad en vez de inventar.",
   ].join("\n");
 }
@@ -115,7 +122,9 @@ Deno.serve(async (req) => {
     const registrar = Array.isArray(parsed.registrar)
       ? parsed.registrar
           .filter((it: any) => it && CATEGORIAS[it.categoria] && Number(it.monto) > 0)
-          .map((it: any) => ({ categoria: it.categoria, monto: Number(it.monto), nota: it.nota ? String(it.nota).slice(0, 80) : null }))
+          // Math.round por las dudas: los pesos de esta app son siempre enteros,
+          // si la IA se equivoca y manda decimales no queremos que se cuelen.
+          .map((it: any) => ({ categoria: it.categoria, monto: Math.round(Number(it.monto)), nota: it.nota ? String(it.nota).slice(0, 80) : null }))
       : [];
 
     return json({ respuesta: parsed.respuesta, registrar });

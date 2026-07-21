@@ -235,8 +235,9 @@
   }
 
   // ---------- Asistente de chat (IA) ----------
-  var chatHistorial = [];  // { rol: 'user' | 'assistant', texto }
+  var chatHistorial = [];       // { rol: 'user' | 'assistant', texto, textoIA? }
   var chatEnviando = false;
+  var chatYaRegistrados = [];   // "categoria|monto|nota" de lo que ya se registró en esta conversación (evita duplicar)
 
   // Resumen compacto (no todo el historial) que se manda como contexto a la
   // IA en cada mensaje — solo lo necesario para responder preguntas y
@@ -332,8 +333,14 @@
     chatHistorial.push({ rol: 'user', texto: texto });
     chatEnviando = true;
     renderChatMensajes();
+    // Al armar el historial para la IA, mandamos SOLO lo que ella misma dijo
+    // (sin el "✅ ..." que agrega el cliente) — si no, la IA ve sus propias
+    // confirmaciones viejas en el historial y tiende a repetirlas/recontarlas.
+    var historialParaIA = chatHistorial.slice(0, -1).map(function (h) {
+      return { rol: h.rol, texto: h.textoIA || h.texto };
+    });
     sbClient.functions.invoke('chat-ia', {
-      body: { mensaje: texto, historial: chatHistorial.slice(0, -1), contexto: contextoFinancieroParaChat() }
+      body: { mensaje: texto, historial: historialParaIA, contexto: contextoFinancieroParaChat() }
     }).then(function (res) {
       chatEnviando = false;
       if (res.error || !res.data || res.data.error) {
@@ -341,16 +348,25 @@
         renderChatMensajes(true);
         return;
       }
-      var registrados = res.data.registrar || [];
+      // Freno de seguridad: si la IA repite (por error) un gasto que ya se
+      // registró en esta conversación, NO lo volvemos a cargar — evita
+      // duplicar gastos reales por una confusión del modelo.
+      var registrados = (res.data.registrar || []).filter(function (it) {
+        var clave = it.categoria + '|' + it.monto + '|' + (it.nota || '');
+        if (chatYaRegistrados.indexOf(clave) !== -1) return false;
+        chatYaRegistrados.push(clave);
+        return true;
+      });
       registrados.forEach(function (it) {
         registrarCompra(it.categoria, it.monto, it.nota || null, null);
       });
       if (registrados.length) { guardar(); actualizarCalculos(); }
-      var texto2 = res.data.respuesta || '';
+      var textoIA = res.data.respuesta || '';
+      var textoMostrado = textoIA;
       if (registrados.length) {
-        texto2 += '\n\n✅ ' + registrados.map(function (it) { return fmt(it.monto) + ' en ' + getCatNombre(it.categoria); }).join(', ');
+        textoMostrado += '\n\n✅ ' + registrados.map(function (it) { return fmt(it.monto) + ' en ' + getCatNombre(it.categoria); }).join(', ');
       }
-      chatHistorial.push({ rol: 'assistant', texto: texto2 });
+      chatHistorial.push({ rol: 'assistant', texto: textoMostrado, textoIA: textoIA });
       renderChatMensajes(true);
     }).catch(function () {
       chatEnviando = false;
