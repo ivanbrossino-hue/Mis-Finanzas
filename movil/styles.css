@@ -405,11 +405,12 @@ header { padding-top: env(safe-area-inset-top); }
 .chat-fab {
   position: fixed; left: 16px; bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom) + 14px);
   width: 54px; height: 54px; border-radius: 50%; border: none; z-index: 140;
-  background: var(--secondary-container); color: var(--primary);
+  background: #fff; color: var(--primary); padding: 8px; overflow: hidden;
   display: grid; place-items: center; box-shadow: 0 10px 24px -4px rgba(0,54,26,.35);
   transition: transform .2s;
 }
 .chat-fab:active { transform: scale(.94); }
+.chat-fab-icon { width: 100%; height: 100%; object-fit: contain; }
 
 .chat-back {
   position: fixed; inset: 0; background: #fff; display: none; z-index: 191;
