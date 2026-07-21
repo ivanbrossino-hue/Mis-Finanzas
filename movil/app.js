@@ -235,11 +235,15 @@
   }
 
   // ---------- Asistente de chat (IA) ----------
-  var CHAT_LOG_MAX = 150; // tope de mensajes que se guardan en la nube, para no inflar el proyecto sin límite
-  var chatHistorial = [];       // { rol: 'user' | 'assistant', texto, textoIA? } — se restaura desde estado.chatLog
+  // Cada conversación es una "sesión" independiente (estado.chats[]), como en
+  // ChatGPT/Claude/Gemini: abrir el chat siempre arranca una nueva, y desde el
+  // ícono de historial se puede retomar cualquiera de las anteriores.
+  var CHAT_SESIONES_MAX = 30;      // cuántas conversaciones se guardan en la nube
+  var CHAT_MSGS_POR_SESION_MAX = 150;
+  var chatHistorial = [];       // mensajes de la sesión ACTIVA: { rol: 'user' | 'assistant', texto, textoIA? }
+  var chatSesionId = null;      // id de estado.chats[] de la sesión activa (null = todavía no se guardó ninguna)
   var chatEnviando = false;
-  var chatYaRegistrados = [];   // "categoria|monto|nota" de lo que ya se registró en esta conversación (evita duplicar)
-  var chatCargado = false;      // si ya se restauró chatHistorial desde estado.chatLog
+  var chatYaRegistrados = [];   // "categoria|monto|nota" ya registrado EN ESTA sesión (evita duplicar)
   var chatVozActivada = localStorage.getItem('misFinanzas_chatVoz') !== '0'; // preferencia de este dispositivo, no se sincroniza
   var chatReconocimiento = null; // instancia de SpeechRecognition (se crea la primera vez que se usa)
   var chatEscuchando = false;
@@ -288,11 +292,92 @@
 
   // Guarda el historial (recortado) en el proyecto compartido, para poder
   // revisarlo después desde cualquier dispositivo — igual que el resto de los datos.
+  function chatTituloDesde(mensajes) {
+    var primero = mensajes.filter(function (m) { return m.rol === 'user'; })[0];
+    var t = primero ? primero.texto : 'Conversación';
+    return t.length > 42 ? t.slice(0, 42) + '…' : t;
+  }
+
+  // Guarda/actualiza la sesión ACTIVA dentro de estado.chats[], recortando
+  // mensajes viejos y limitando cuántas conversaciones se acumulan.
   function chatPersistirLog() {
-    estado.chatLog = chatHistorial.slice(-CHAT_LOG_MAX).map(function (m) {
-      return { rol: m.rol, texto: m.texto, textoIA: m.textoIA || null };
-    });
+    if (!chatSesionId) chatSesionId = uid();
+    if (!estado.chats) estado.chats = [];
+    var sesion = {
+      id: chatSesionId,
+      titulo: chatTituloDesde(chatHistorial),
+      actualizado: Date.now(),
+      mensajes: chatHistorial.slice(-CHAT_MSGS_POR_SESION_MAX).map(function (m) {
+        return { rol: m.rol, texto: m.texto, textoIA: m.textoIA || null };
+      }),
+    };
+    var idx = -1;
+    for (var i = 0; i < estado.chats.length; i++) { if (estado.chats[i].id === chatSesionId) { idx = i; break; } }
+    if (idx !== -1) estado.chats[idx] = sesion; else estado.chats.push(sesion);
+    estado.chats.sort(function (a, b) { return (b.actualizado || 0) - (a.actualizado || 0); });
+    if (estado.chats.length > CHAT_SESIONES_MAX) estado.chats.length = CHAT_SESIONES_MAX;
     guardar();
+  }
+
+  function chatFechaCorta(ts) {
+    if (!ts) return '';
+    var d = new Date(ts);
+    return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  // Arranca una conversación nueva y vacía (lo que pasa siempre que abrís el
+  // chat desde la burbuja, y también al tocar "+ Nueva conversación").
+  function chatIniciarNueva() {
+    chatHistorial = [];
+    chatSesionId = null;
+    chatYaRegistrados = [];
+    var panel = document.getElementById('chatPanel');
+    if (panel) panel.classList.remove('modo-historial');
+    renderChatMensajes();
+  }
+
+  // Retoma una conversación guardada en estado.chats[] y la deja como activa.
+  function chatCargarSesion(id) {
+    var sesion = null;
+    for (var i = 0; i < (estado.chats || []).length; i++) { if (estado.chats[i].id === id) { sesion = estado.chats[i]; break; } }
+    if (!sesion) return;
+    chatHistorial = (sesion.mensajes || []).map(function (m) {
+      return { rol: m.rol, texto: m.texto, textoIA: m.textoIA || undefined };
+    });
+    chatSesionId = sesion.id;
+    chatYaRegistrados = [];
+    var panel = document.getElementById('chatPanel');
+    if (panel) panel.classList.remove('modo-historial');
+    renderChatMensajes();
+  }
+
+  function renderChatHistorialLista() {
+    var cont = document.getElementById('chatHistorialLista');
+    if (!cont) return;
+    var chats = (estado.chats || []).slice().sort(function (a, b) { return (b.actualizado || 0) - (a.actualizado || 0); });
+    var html = '<button class="chat-hist-nuevo" id="chatHistNuevoBtn">+ Nueva conversación</button>';
+    if (!chats.length) {
+      html += '<div class="chat-hist-vacio">Todavía no tenés conversaciones guardadas.</div>';
+    } else {
+      html += chats.map(function (s) {
+        return '<button class="chat-hist-item" data-id="' + escapeAttr(s.id) + '">' +
+          '<span class="chat-hist-titulo">' + escapeHtml(s.titulo || 'Conversación') + '</span>' +
+          '<span class="chat-hist-fecha">' + chatFechaCorta(s.actualizado) + '</span></button>';
+      }).join('');
+    }
+    cont.innerHTML = html;
+    var nuevoBtn = document.getElementById('chatHistNuevoBtn');
+    if (nuevoBtn) nuevoBtn.onclick = chatIniciarNueva;
+    Array.prototype.slice.call(cont.querySelectorAll('.chat-hist-item')).forEach(function (btn) {
+      btn.onclick = function () { chatCargarSesion(btn.getAttribute('data-id')); };
+    });
+  }
+
+  function chatToggleHistorialVista() {
+    var panel = document.getElementById('chatPanel');
+    if (!panel) return;
+    var enHistorial = panel.classList.toggle('modo-historial');
+    if (enHistorial) renderChatHistorialLista();
   }
 
   // Resumen compacto (no todo el historial) que se manda como contexto a la
@@ -377,12 +462,13 @@
 
   function abrirChat() {
     if (!modoCuenta || !miProyectoId) { toast('Iniciá sesión primero.'); return; }
-    if (!chatCargado) {
-      chatHistorial = (estado.chatLog || []).map(function (m) {
-        return { rol: m.rol, texto: m.texto, textoIA: m.textoIA || undefined };
-      });
-      chatCargado = true;
-    }
+    // Cada vez que se abre la burbuja arranca una conversación nueva — las
+    // anteriores se retoman desde el ícono de historial, no automáticamente.
+    chatHistorial = [];
+    chatSesionId = null;
+    chatYaRegistrados = [];
+    var panel = document.getElementById('chatPanel');
+    if (panel) panel.classList.remove('modo-historial');
     document.getElementById('chatBack').classList.add('open');
     renderChatMensajes();
     setTimeout(function () { var inp = document.getElementById('chatInput'); if (inp) inp.focus(); }, 150);
@@ -470,13 +556,13 @@
     if (!estado.deudas) estado.deudas = [];
     if (!estado.catNombres) estado.catNombres = {};
     if (!estado.presupuestos) estado.presupuestos = {};
-    if (!estado.chatLog) estado.chatLog = [];
+    if (!estado.chats) estado.chats = [];
   }
 
   // Convierte los datos precargados del Excel al formato interno (con ids)
   function construirDesdeSemilla() {
     var semilla = window.DATOS_INICIALES || { meses: {}, deudas: [] };
-    var out = { version: 1, meses: {}, deudas: [], catNombres: {}, presupuestos: {}, chatLog: [] };
+    var out = { version: 1, meses: {}, deudas: [], catNombres: {}, presupuestos: {}, chats: [] };
     Object.keys(semilla.meses || {}).forEach(function (k) {
       var m = semilla.meses[k];
       out.meses[k] = {
@@ -2685,6 +2771,8 @@
       document.getElementById('chatSendBtn').onclick = enviarYLimpiar;
       inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') enviarYLimpiar(); });
     })();
+    var chatHistorialBtn = document.getElementById('chatHistorialBtn');
+    if (chatHistorialBtn) chatHistorialBtn.onclick = chatToggleHistorialVista;
     var chatVozBtn = document.getElementById('chatVozToggle');
     if (chatVozBtn) {
       var chatVozIcon = chatVozBtn.querySelector('.material-symbols-outlined');

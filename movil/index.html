@@ -74,7 +74,7 @@
   .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; vertical-align: middle; }
   body { min-height: max(884px, 100dvh); font-family: 'Inter', sans-serif; }
 </style>
-<link rel="stylesheet" href="styles.css?v=9">
+<link rel="stylesheet" href="styles.css?v=10">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
 <body class="bg-background text-on-surface font-body-lg min-h-screen overflow-x-hidden">
@@ -417,10 +417,14 @@
 <div class="chat-back" id="chatBack">
   <div class="chat-panel glass-card" id="chatPanel">
     <div class="chat-header">
-      <button class="chat-voz-toggle" id="chatVozToggle" title="Leer respuestas en voz alta"><span class="material-symbols-outlined">volume_up</span></button>
-      <button class="chat-close" id="chatClose"><span class="material-symbols-outlined">close</span></button>
+      <button class="chat-historial-btn" id="chatHistorialBtn" title="Conversaciones anteriores"><span class="material-symbols-outlined">history</span></button>
+      <div class="chat-header-right">
+        <button class="chat-voz-toggle" id="chatVozToggle" title="Leer respuestas en voz alta"><span class="material-symbols-outlined">volume_up</span></button>
+        <button class="chat-close" id="chatClose"><span class="material-symbols-outlined">close</span></button>
+      </div>
     </div>
     <div class="chat-mensajes" id="chatMensajes"></div>
+    <div class="chat-historial-lista" id="chatHistorialLista"></div>
     <div class="chat-input-bar" id="chatForm">
       <button type="button" class="chat-mic" id="chatMicBtn" title="Hablar"><span class="material-symbols-outlined">mic</span></button>
       <input type="text" id="chatInput" placeholder="Preguntame o contame un gasto…" autocomplete="one-time-code" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true">
@@ -433,7 +437,7 @@
 <input type="file" id="importFile" accept="application/json" style="display:none">
 
 <script src="datos-iniciales.js"></script>
-<script src="app.js?v=19"></script>
+<script src="app.js?v=20"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js'); });
