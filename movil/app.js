@@ -235,9 +235,20 @@
   }
 
   // ---------- Asistente de chat (IA) ----------
-  var chatHistorial = [];       // { rol: 'user' | 'assistant', texto, textoIA? }
+  var CHAT_LOG_MAX = 150; // tope de mensajes que se guardan en la nube, para no inflar el proyecto sin límite
+  var chatHistorial = [];       // { rol: 'user' | 'assistant', texto, textoIA? } — se restaura desde estado.chatLog
   var chatEnviando = false;
   var chatYaRegistrados = [];   // "categoria|monto|nota" de lo que ya se registró en esta conversación (evita duplicar)
+  var chatCargado = false;      // si ya se restauró chatHistorial desde estado.chatLog
+
+  // Guarda el historial (recortado) en el proyecto compartido, para poder
+  // revisarlo después desde cualquier dispositivo — igual que el resto de los datos.
+  function chatPersistirLog() {
+    estado.chatLog = chatHistorial.slice(-CHAT_LOG_MAX).map(function (m) {
+      return { rol: m.rol, texto: m.texto, textoIA: m.textoIA || null };
+    });
+    guardar();
+  }
 
   // Resumen compacto (no todo el historial) que se manda como contexto a la
   // IA en cada mensaje — solo lo necesario para responder preguntas y
@@ -281,7 +292,7 @@
   // necesitar streaming real de la API (la respuesta ya llegó completa).
   function animarTextoChat(el, textoCompleto) {
     var i = 0;
-    var totalMs = Math.min(1400, Math.max(250, textoCompleto.length * 14));
+    var totalMs = Math.min(3200, Math.max(500, textoCompleto.length * 22));
     var totalFrames = Math.max(1, Math.round(totalMs / 16));
     var porFrame = Math.max(1, Math.ceil(textoCompleto.length / totalFrames));
     function tick() {
@@ -321,6 +332,12 @@
 
   function abrirChat() {
     if (!modoCuenta || !miProyectoId) { toast('Iniciá sesión primero.'); return; }
+    if (!chatCargado) {
+      chatHistorial = (estado.chatLog || []).map(function (m) {
+        return { rol: m.rol, texto: m.texto, textoIA: m.textoIA || undefined };
+      });
+      chatCargado = true;
+    }
     document.getElementById('chatBack').classList.add('open');
     renderChatMensajes();
     setTimeout(function () { var inp = document.getElementById('chatInput'); if (inp) inp.focus(); }, 150);
@@ -331,6 +348,7 @@
     texto = texto.trim();
     if (!texto || chatEnviando) return;
     chatHistorial.push({ rol: 'user', texto: texto });
+    chatPersistirLog();
     chatEnviando = true;
     renderChatMensajes();
     // Al armar el historial para la IA, mandamos SOLO lo que ella misma dijo
@@ -345,6 +363,7 @@
       chatEnviando = false;
       if (res.error || !res.data || res.data.error) {
         chatHistorial.push({ rol: 'assistant', texto: 'No pude responder ahora, intentá de nuevo en un rato.' });
+        chatPersistirLog();
         renderChatMensajes(true);
         return;
       }
@@ -367,10 +386,12 @@
         textoMostrado += '\n\n✅ ' + registrados.map(function (it) { return fmt(it.monto) + ' en ' + getCatNombre(it.categoria); }).join(', ');
       }
       chatHistorial.push({ rol: 'assistant', texto: textoMostrado, textoIA: textoIA });
+      chatPersistirLog();
       renderChatMensajes(true);
     }).catch(function () {
       chatEnviando = false;
       chatHistorial.push({ rol: 'assistant', texto: 'No pude responder ahora, intentá de nuevo en un rato.' });
+      chatPersistirLog();
       renderChatMensajes(true);
     });
   }
@@ -403,12 +424,13 @@
     if (!estado.deudas) estado.deudas = [];
     if (!estado.catNombres) estado.catNombres = {};
     if (!estado.presupuestos) estado.presupuestos = {};
+    if (!estado.chatLog) estado.chatLog = [];
   }
 
   // Convierte los datos precargados del Excel al formato interno (con ids)
   function construirDesdeSemilla() {
     var semilla = window.DATOS_INICIALES || { meses: {}, deudas: [] };
-    var out = { version: 1, meses: {}, deudas: [], catNombres: {}, presupuestos: {} };
+    var out = { version: 1, meses: {}, deudas: [], catNombres: {}, presupuestos: {}, chatLog: [] };
     Object.keys(semilla.meses || {}).forEach(function (k) {
       var m = semilla.meses[k];
       out.meses[k] = {
