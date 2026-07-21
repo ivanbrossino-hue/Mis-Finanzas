@@ -404,8 +404,8 @@ header { padding-top: env(safe-area-inset-top); }
    ============================================================ */
 .chat-fab {
   position: fixed; left: 16px; bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom) + 14px);
-  width: 54px; height: 54px; border-radius: 50%; border: none; z-index: 140;
-  background: transparent; color: var(--primary); padding: 4px;
+  width: 54px; height: 54px; border-radius: 50%; overflow: hidden; border: none; z-index: 140;
+  background: transparent; color: var(--primary); padding: 6px;
   display: grid; place-items: center; transition: transform .2s;
 }
 .chat-fab:active { transform: scale(.94); }
