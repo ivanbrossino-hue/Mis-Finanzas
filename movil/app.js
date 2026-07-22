@@ -2664,10 +2664,35 @@
       if (qr.fecha) document.getElementById('gFecha').value = qr.fecha;
       if (qr.monto) document.getElementById('gMonto').value = formatInput(qr.monto);
       toast('QR leído — completá el resto. Para ver los artículos, usá "Escanear ticket" con una foto.');
-    } else {
-      console.log('QR leído (formato no reconocido):', texto);
-      toast('Ese QR no tiene el formato de ticket fiscal que reconozco.');
+      return;
     }
+    // No es el QR fiscal de AFIP — algunos comercios (Coto confirmado, quizás
+    // otros) tienen su PROPIO QR que lleva a una página con el detalle completo
+    // de la compra (con artículos incluidos). Si parece una URL, se la mandamos
+    // al servidor para que la abra e interprete.
+    var esUrl = /^https?:\/\//i.test(texto);
+    if (!esUrl) {
+      console.log('QR leído (formato no reconocido):', texto);
+      toast('No reconozco el formato de ese QR.');
+      return;
+    }
+    toast('Buscando el detalle del ticket…');
+    sbClient.functions.invoke('leer-ticket', { body: { ticketUrl: texto } }).then(function (res) {
+      if (res.error || !res.data || res.data.error) {
+        toast((res.data && res.data.error) || 'No pude leer el detalle de ese ticket, completá a mano.');
+        console.log('QR leído (no se pudo interpretar la página):', texto);
+        return;
+      }
+      var d = res.data;
+      modalGasto();
+      if (d.nota) document.getElementById('gNombre').value = d.nota;
+      if (d.monto) document.getElementById('gMonto').value = formatInput(d.monto);
+      if (d.categoria) document.getElementById('gCat').value = d.categoria;
+      if (d.fecha) document.getElementById('gFecha').value = d.fecha;
+      toast('Ticket leído — revisá los datos antes de confirmar.');
+    }).catch(function () {
+      toast('No pude leer el detalle de ese ticket, completá a mano.');
+    });
   }
 
   // Prepara una foto de ticket para el escaneo: busca el QR de AFIP a una
