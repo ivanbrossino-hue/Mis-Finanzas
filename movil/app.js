@@ -2583,31 +2583,64 @@
     });
   }
 
-  // Achica y comprime una foto (de la cámara o la galería) a un data URL JPEG
-  // antes de mandarla al servidor — las fotos de celular pueden pesar varios MB,
-  // y para leer un ticket alcanza con mucha menos resolución. callback(dataUrl)
-  // o callback(null) si algo falló al procesar la imagen.
-  function comprimirImagenATexto(file, callback) {
+  // El comprobante AFIP en el pie del ticket trae un QR con fecha e importe
+  // EXACTOS (no es una lectura/estimación de una IA, es el dato fiscal real).
+  // Decodifica la URL del QR (formato "https://www.afip.gob.ar/fe/qr/?p=<base64>")
+  // y devuelve { fecha: 'YYYY-MM-DD', monto } o null si no es ese formato.
+  function leerQRTicket(texto) {
+    try {
+      var p = new URL(texto).searchParams.get('p');
+      if (!p) return null;
+      var b64 = p.replace(/-/g, '+').replace(/_/g, '/');
+      var datos = JSON.parse(atob(b64));
+      var fecha = (typeof datos.fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(datos.fecha)) ? datos.fecha : null;
+      var monto = Number(datos.importe) > 0 ? Math.round(Number(datos.importe)) : null;
+      return (fecha || monto) ? { fecha: fecha, monto: monto } : null;
+    } catch (e) { return null; }
+  }
+
+  // Prepara una foto de ticket para el escaneo: busca el QR de AFIP a una
+  // resolución más alta (para que se llegue a decodificar bien) y por separado
+  // arma una versión más chica/comprimida para mandarle a la IA de visión (no
+  // necesita tanta resolución para leer el comercio y los artículos, y así el
+  // envío pesa mucho menos). callback({ dataUrl, qr }) — dataUrl o qr pueden
+  // venir null si no se pudieron obtener.
+  function procesarFotoTicket(file, callback) {
     var reader = new FileReader();
     reader.onload = function (e) {
       var img = new Image();
       img.onload = function () {
-        var MAX = 1280;
-        var w = img.width, h = img.height;
-        if (w > MAX || h > MAX) {
-          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
-          else { w = Math.round(w * MAX / h); h = MAX; }
+        var escalar = function (max) {
+          var w = img.width, h = img.height;
+          if (w > max || h > max) {
+            if (w > h) { h = Math.round(h * max / w); w = max; }
+            else { w = Math.round(w * max / h); h = max; }
+          }
+          var canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          return canvas;
+        };
+
+        var qr = null;
+        if (window.jsQR) {
+          try {
+            var qrCanvas = escalar(1600);
+            var datos = qrCanvas.getContext('2d').getImageData(0, 0, qrCanvas.width, qrCanvas.height);
+            var code = window.jsQR(datos.data, qrCanvas.width, qrCanvas.height);
+            if (code && code.data) qr = leerQRTicket(code.data);
+          } catch (err) { /* sin QR legible, seguimos solo con la IA */ }
         }
-        var canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        try { callback(canvas.toDataURL('image/jpeg', 0.7)); }
-        catch (err) { callback(null); }
+
+        var dataUrl = null;
+        try { dataUrl = escalar(1280).toDataURL('image/jpeg', 0.7); } catch (err) { /* dataUrl queda null */ }
+
+        callback({ dataUrl: dataUrl, qr: qr });
       };
-      img.onerror = function () { callback(null); };
+      img.onerror = function () { callback({ dataUrl: null, qr: null }); };
       img.src = e.target.result;
     };
-    reader.onerror = function () { callback(null); };
+    reader.onerror = function () { callback({ dataUrl: null, qr: null }); };
     reader.readAsDataURL(file);
   }
 
@@ -2623,8 +2656,9 @@
     var puedeEscanear = modoCuenta && miProyectoId;
     abrirModal('<h3>Agregar gasto</h3><p class="sub">Se suma solo al total de la categoría que elijas.</p>' +
       (puedeEscanear
-        ? '<button type="button" class="btn btn-ghost" id="gEscanearBtn" style="width:100%;margin-bottom:12px">' +
+        ? '<button type="button" class="btn btn-ghost" id="gEscanearBtn" style="width:100%">' +
           '<span class="material-symbols-outlined text-[18px]">photo_camera</span> Escanear ticket</button>' +
+          '<p class="sub" style="margin:4px 0 12px">Que se vea el ticket completo, incluido el QR del pie.</p>' +
           '<input type="file" accept="image/*" capture="environment" id="gTicketInput" style="display:none">'
         : '') +
       '<div class="field"><label>Concepto</label><input id="gNombre" placeholder="Ej: Compra en el super"></div>' +
@@ -2650,16 +2684,14 @@
         if (!file) return;
         escanearBtn.disabled = true;
         escanearBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">hourglass_top</span> Leyendo ticket…';
-        comprimirImagenATexto(file, function (dataUrl) {
-          if (!dataUrl) {
-            toast('No pude leer esa imagen.');
-            escanearBtn.disabled = false;
-            escanearBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">photo_camera</span> Escanear ticket';
-            return;
-          }
-          sbClient.functions.invoke('leer-ticket', { body: { imagenBase64: dataUrl } }).then(function (res) {
-            escanearBtn.disabled = false;
-            escanearBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">photo_camera</span> Escanear ticket';
+        var restaurarBtn = function () {
+          escanearBtn.disabled = false;
+          escanearBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">photo_camera</span> Escanear ticket';
+        };
+        procesarFotoTicket(file, function (foto) {
+          if (!foto.dataUrl) { toast('No pude leer esa imagen.'); restaurarBtn(); return; }
+          sbClient.functions.invoke('leer-ticket', { body: { imagenBase64: foto.dataUrl } }).then(function (res) {
+            restaurarBtn();
             if (res.error || !res.data || res.data.error) {
               toast((res.data && res.data.error) || 'No pude leer el ticket, completá a mano.');
               return;
@@ -2669,10 +2701,16 @@
             if (d.monto) montoEl.value = formatInput(d.monto);
             if (d.categoria) document.getElementById('gCat').value = d.categoria;
             if (d.fecha) document.getElementById('gFecha').value = d.fecha;
-            toast('Ticket leído — revisá los datos antes de confirmar.');
+            // El QR de AFIP trae fecha e importe EXACTOS (dato fiscal real, no una
+            // lectura de la IA) — si lo pudimos decodificar, pisan lo que haya
+            // puesto la IA para esos dos campos.
+            if (foto.qr) {
+              if (foto.qr.fecha) document.getElementById('gFecha').value = foto.qr.fecha;
+              if (foto.qr.monto) montoEl.value = formatInput(foto.qr.monto);
+            }
+            toast(foto.qr ? 'Ticket leído (con QR) — revisá los datos.' : 'Ticket leído — revisá los datos antes de confirmar.');
           }).catch(function () {
-            escanearBtn.disabled = false;
-            escanearBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">photo_camera</span> Escanear ticket';
+            restaurarBtn();
             toast('No pude leer el ticket, completá a mano.');
           });
         });
