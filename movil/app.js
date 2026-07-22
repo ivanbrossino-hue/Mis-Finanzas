@@ -215,6 +215,17 @@
     }
   }
 
+  // Cuando el chat fija un presupuesto nuevo para una categoría, guardamos cuánto
+  // llevaba gastado ESE mes hasta ese momento — así "vas X de Y" cuenta desde que
+  // se puso el tope ("es un presupuesto nuevo"), no arrastra gastos de antes de
+  // pedirlo. Es aparte de estado.presupuestos (el tope en sí, que sigue siendo el
+  // mismo que usa la página de Analíticas y el aviso push de revisarPresupuesto).
+  function marcarBasePresupuestoChat(categoria) {
+    if (!estado.presupuestosDesde) estado.presupuestosDesde = {};
+    if (!estado.presupuestosDesde[mesActivo]) estado.presupuestosDesde[mesActivo] = {};
+    estado.presupuestosDesde[mesActivo][categoria] = gastosPorCategoria(mesActivo)[categoria] || 0;
+  }
+
   // Frase de progreso para el chat ("Vas $ 50.000 de $ 200.000 en Alimentación (25%).")
   // cuando esa categoría tiene un presupuesto definido. Es un cálculo aparte del
   // aviso push de revisarPresupuesto (que solo dispara una vez al cruzar 80%/100%):
@@ -222,7 +233,8 @@
   function progresoPresupuestoTexto(categoria) {
     var tope = Number((estado.presupuestos || {})[categoria]) || 0;
     if (!tope) return null;
-    var gastado = gastosPorCategoria(mesActivo)[categoria] || 0;
+    var base = ((estado.presupuestosDesde || {})[mesActivo] || {})[categoria] || 0;
+    var gastado = Math.max(0, (gastosPorCategoria(mesActivo)[categoria] || 0) - base);
     var pct = Math.round((gastado / tope) * 100);
     return 'Vas ' + fmt(gastado) + ' de ' + fmt(tope) + ' en ' + getCatNombre(categoria) + ' (' + pct + '%).';
   }
@@ -532,18 +544,22 @@
         chatYaRegistrados.push(clave);
         return true;
       });
-      registrados.forEach(function (it) {
-        registrarCompra(it.categoria, it.monto, it.nota || null, null);
-      });
       // Presupuesto por chat: si el usuario acaba de fijar un tope (ej. "quiero
       // gastar 200000 en comida este mes"), lo guardamos como cualquier otro
-      // presupuesto de la app (misma tabla que usa la página de Analíticas).
+      // presupuesto de la app (misma tabla que usa la página de Analíticas), y
+      // marcamos desde cuánto gastado arranca a contar (ANTES de sumar los
+      // gastos de este mismo mensaje) — así "es un presupuesto nuevo" y no
+      // arrastra lo que ya se había gastado en la categoría antes de pedirlo.
       var pres = res.data.presupuesto;
       var presupuestoTexto = null;
       if (pres && CAT_MAP[pres.categoria] && Number(pres.monto) > 0) {
+        marcarBasePresupuestoChat(pres.categoria);
         estado.presupuestos[pres.categoria] = Math.round(Number(pres.monto));
         presupuestoTexto = '🎯 Presupuesto de ' + getCatNombre(pres.categoria) + ': ' + fmt(pres.monto) + ' este mes.';
       }
+      registrados.forEach(function (it) {
+        registrarCompra(it.categoria, it.monto, it.nota || null, null);
+      });
       if (registrados.length || pres) { guardar(); actualizarCalculos(); }
       // Progreso contra presupuesto: una línea por cada categoría distinta que
       // se acaba de registrar (o que se acaba de fijar), solo si tiene tope.

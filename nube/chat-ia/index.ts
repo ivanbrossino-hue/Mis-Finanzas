@@ -83,10 +83,13 @@ function systemPrompt(contexto: unknown): string {
     "CONTEXTO (datos financieros reales del usuario, en pesos argentinos):",
     JSON.stringify(contexto),
     "",
-    "Respondé ÚNICAMENTE con un objeto JSON válido (sin texto antes ni después, sin markdown), con esta forma exacta:",
-    '{ "respuesta": "texto para mostrarle al usuario en el chat", "registrar": [ { "categoria": "id válido", "monto": 1234, "nota": "concepto corto" } ], "presupuesto": null, "buscarWeb": null }',
-    '"registrar" tiene que ser [] si el usuario solo preguntó algo y no te contó un gasto NUEVO para anotar.',
-    "Si te cuenta varias compras en el mismo mensaje, agregá un ítem por cada una. \"monto\" siempre un número entero, sin signos ni puntos de miles.",
+    "Respondé ÚNICAMENTE con un objeto JSON válido (sin texto antes ni después, sin markdown, sin explicaciones fuera del JSON).",
+    'La clave "respuesta" es OBLIGATORIA en TODAS tus respuestas, sin excepción — nunca la omitas, nunca mandes el JSON sin ella.',
+    'Las otras tres claves ("registrar", "presupuesto", "buscarWeb") son OPCIONALES: agregalas solo cuando corresponda a lo que',
+    "el usuario pidió en ESTE mensaje; si no aplican, directamente no las incluyas (no hace falta poner [] o null a la fuerza).",
+    'Ejemplo mínimo (una simple pregunta o charla): { "respuesta": "Este mes gastaste $ 412.542 en alquiler." }',
+    'Ejemplo con un gasto: { "respuesta": "Anotado: $ 12.300 en Alimentación.", "registrar": [ { "categoria": "alimentacion", "monto": 12300, "nota": "super" } ] }',
+    "Si te cuenta varias compras en el mismo mensaje, agregá un ítem de \"registrar\" por cada una. \"monto\" siempre un número entero, sin signos ni puntos de miles.",
     "Si preguntó algo que de verdad no está en el contexto, decilo con honestidad en vez de inventar.",
   ].join("\n");
 }
@@ -198,12 +201,15 @@ Deno.serve(async (req) => {
     if (contenido === null) return json({ error: "el asistente no pudo responder ahora" }, 502);
     const parsed = extraerJson(contenido);
 
-    if (!parsed || typeof parsed.respuesta !== "string") {
-      // La IA no devolvió el JSON esperado — al menos mostramos el texto crudo.
-      return json({ respuesta: contenido || "No entendí bien, ¿podés reformular?", registrar: [] });
-    }
+    // Si el modelo no mandó un JSON válido, o lo mandó pero sin "respuesta", NUNCA
+    // le mostramos al usuario ese texto crudo (puede ser JSON a medio escribir) —
+    // mejor un mensaje genérico. Igual procesamos registrar/presupuesto por si esas
+    // claves sí vinieron bien aunque "respuesta" se haya perdido.
+    let respuesta = (parsed && typeof parsed.respuesta === "string" && parsed.respuesta.trim())
+      ? parsed.respuesta
+      : "No entendí bien, ¿podés reformular?";
 
-    const registrar = Array.isArray(parsed.registrar)
+    const registrar = (parsed && Array.isArray(parsed.registrar))
       ? parsed.registrar
           .filter((it: any) => it && CATEGORIAS[it.categoria] && Number(it.monto) > 0)
           // Math.round por las dudas: los pesos de esta app son siempre enteros,
@@ -211,12 +217,11 @@ Deno.serve(async (req) => {
           .map((it: any) => ({ categoria: it.categoria, monto: Math.round(Number(it.monto)), nota: it.nota ? String(it.nota).slice(0, 80) : null }))
       : [];
 
-    const presupuesto = (parsed.presupuesto && CATEGORIAS[parsed.presupuesto.categoria] && Number(parsed.presupuesto.monto) > 0)
+    const presupuesto = (parsed && parsed.presupuesto && CATEGORIAS[parsed.presupuesto.categoria] && Number(parsed.presupuesto.monto) > 0)
       ? { categoria: parsed.presupuesto.categoria, monto: Math.round(Number(parsed.presupuesto.monto)) }
       : null;
 
-    let respuesta = parsed.respuesta;
-    if (typeof parsed.buscarWeb === "string" && parsed.buscarWeb.trim()) {
+    if (parsed && typeof parsed.buscarWeb === "string" && parsed.buscarWeb.trim()) {
       const busqueda = await buscarWeb(parsed.buscarWeb.trim());
       if (busqueda.ok) {
         const contenido2 = await llamarNvidia(
