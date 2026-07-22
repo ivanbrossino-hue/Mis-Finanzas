@@ -219,7 +219,7 @@ header { padding-top: env(safe-area-inset-top); }
 }
 .hist-toolbar input { flex: 1; min-width: 160px; }
 .hist-toolbar input::placeholder { color: var(--outline); }
-.hist-toolbar select { min-width: 0; flex: 1; }
+.hist-toolbar select { min-width: 150px; flex: 1; }
 .hist-toolbar input:focus, .hist-toolbar select:focus { outline: none; border-color: var(--primary); }
 
 .hist-table { width: 100%; border-collapse: collapse; }
