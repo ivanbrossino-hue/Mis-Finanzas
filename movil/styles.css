@@ -694,17 +694,25 @@ header { padding-top: env(safe-area-inset-top); }
     padding: 11px 12px; margin: 0; border-radius: 12px; font-size: 13.5px;
   }
   .bottom-nav a .material-symbols-outlined { font-size: 21px; }
-  /* El botón "+" pasa a ser una fila más de la barra lateral, en vez de un
-     círculo levantado (eso solo tiene sentido flotando sobre una barra
-     horizontal). El semicírculo tampoco tiene sentido acá: el popup se
-     abre como una lista simple a la derecha de la barra. */
-  .bottom-nav-fab { flex: none; flex-direction: row; justify-content: flex-start; gap: 12px; padding: 11px 12px; }
-  .bottom-nav-fab .fab { margin-top: 0; width: 36px; height: 36px; }
-  .fab-actions {
-    left: 100%; top: 50%; transform: translateY(-50%); margin-left: 12px;
-    width: auto; height: auto; display: flex; flex-direction: column; gap: 10px;
+  /* El botón "+" vuelve a flotar solo en la esquina inferior derecha (como
+     antes de mover todo a la barra de abajo en la versión mobile) — acá ya
+     no comparte fila con Inicio/Gastos/Deudas/Historial. Mismo diseño en
+     arco que en mobile, pero un cuarto de círculo hacia arriba-izquierda
+     (el único cuadrante con espacio libre desde una esquina). */
+  /* OJO: "right" NO sirve acá — .bottom-nav tiene backdrop-filter, y eso lo
+     convierte en el "contenedor" de sus descendientes position:fixed, así
+     que "right" se mediría contra el ancho de la barra lateral (232px), no
+     contra la ventana. El origen (x=0) sí coincide con el de la ventana,
+     así que "left" calculado con 100vw da la posición real esperada. */
+  .bottom-nav-fab {
+    position: fixed; left: calc(100vw - 86px); bottom: 32px; right: auto; top: auto;
+    flex: none; width: auto; height: auto; z-index: 140;
   }
-  .fab-action, .bottom-nav-fab.open .fab-action { position: static; transform: none !important; }
+  .bottom-nav-fab .fab { margin-top: 0; width: 54px; height: 54px; }
+  #fabQR      { --fx: -135px; --fy: 0px; }
+  #fabMes     { --fx: -117px; --fy: -68px; }
+  #fabIngreso { --fx: -68px;  --fy: -117px; }
+  #fabGasto   { --fx: 0px;    --fy: -135px; }
 
   /* ---- Barra superior: arranca después de la sidebar ---- */
   header { left: 232px !important; width: calc(100% - 232px) !important; }
