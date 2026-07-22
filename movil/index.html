@@ -278,6 +278,12 @@
           <input type="text" id="histBuscar" placeholder="Buscar por nota, fila o producto…">
           <select id="histFiltroMes"><option value="">Todos los meses</option></select>
           <select id="histFiltroCat"><option value="">Todas las categorías</option></select>
+          <select id="histOrden">
+            <option value="reciente">Fecha más reciente</option>
+            <option value="lejana">Fecha más lejana</option>
+            <option value="mayor">Mayor gasto</option>
+            <option value="menor">Menor gasto</option>
+          </select>
         </div>
         <section class="glass-card rounded-xl p-lg">
           <div class="flex justify-between items-center mb-md">
@@ -438,7 +444,7 @@
 <input type="file" id="importFile" accept="application/json" style="display:none">
 
 <script src="datos-iniciales.js"></script>
-<script src="app.js?v=24"></script>
+<script src="app.js?v=25"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js'); });

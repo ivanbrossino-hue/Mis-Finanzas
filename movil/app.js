@@ -251,11 +251,14 @@
 
   // Lee en voz alta la respuesta del asistente (gratis, nativo del navegador,
   // funciona en Android e iPhone). Si el usuario apagó el sonido, no hace nada.
-  function chatHablar(texto) {
-    if (!chatVozActivada || !texto || !window.speechSynthesis) return;
+  // alTerminar (opcional): se llama cuando termina de hablar (o de una) — lo
+  // usa el Modo Voz para retomar la escucha apenas termina de responder.
+  function chatHablar(texto, alTerminar) {
+    if (!chatVozActivada || !texto || !window.speechSynthesis) { if (alTerminar) alTerminar(); return; }
     window.speechSynthesis.cancel(); // no superponer con una lectura anterior
     var u = new SpeechSynthesisUtterance(texto);
     u.lang = 'es-AR';
+    if (alTerminar) { u.onend = alTerminar; u.onerror = alTerminar; }
     window.speechSynthesis.speak(u);
   }
 
@@ -480,9 +483,12 @@
   }
   function cerrarChat() { document.getElementById('chatBack').classList.remove('open'); }
 
-  function enviarMensajeChat(texto) {
+  // alTerminar (opcional): se llama al final de todo el ciclo (con el texto
+  // que dijo la IA, o null si falló) — lo usa el Modo Voz para saber cuándo
+  // arrancar a hablar / volver a escuchar.
+  function enviarMensajeChat(texto, alTerminar) {
     texto = texto.trim();
-    if (!texto || chatEnviando) return;
+    if (!texto || chatEnviando) { if (alTerminar) alTerminar(null); return; }
     chatHistorial.push({ rol: 'user', texto: texto });
     chatPersistirLog();
     chatEnviando = true;
@@ -501,6 +507,7 @@
         chatHistorial.push({ rol: 'assistant', texto: 'No pude responder ahora, intentá de nuevo en un rato.' });
         chatPersistirLog();
         renderChatMensajes(true);
+        if (alTerminar) alTerminar(null);
         return;
       }
       // Freno de seguridad: si la IA repite (por error) un gasto que ya se
@@ -1923,6 +1930,13 @@
       return true;
     });
 
+    // todosLosMovimientos() ya viene en orden "más reciente primero" — desde
+    // ahí solo hace falta invertir o reordenar por monto según lo elegido.
+    var orden = (document.getElementById('histOrden') || {}).value || 'reciente';
+    if (orden === 'lejana') lista.reverse();
+    else if (orden === 'mayor') lista.sort(function (a, b) { return (Number(b.mv.monto) || 0) - (Number(a.mv.monto) || 0); });
+    else if (orden === 'menor') lista.sort(function (a, b) { return (Number(a.mv.monto) || 0) - (Number(b.mv.monto) || 0); });
+
     var totalFiltrado = lista.reduce(function (s, r) { return s + (Number(r.mv.monto) || 0); }, 0);
     document.getElementById('historialTotal').textContent = lista.length
       ? (lista.length + (lista.length === 1 ? ' registro · ' : ' registros · ') + fmt(totalFiltrado))
@@ -2893,7 +2907,7 @@
     });
 
     // filtros de la página de Historial
-    ['histFiltroMes', 'histFiltroCat'].forEach(function (id) {
+    ['histFiltroMes', 'histFiltroCat', 'histOrden'].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.addEventListener('change', function () { renderHistorial(); });
     });
