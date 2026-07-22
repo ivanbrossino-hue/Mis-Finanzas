@@ -2583,13 +2583,50 @@
     });
   }
 
+  // Achica y comprime una foto (de la cámara o la galería) a un data URL JPEG
+  // antes de mandarla al servidor — las fotos de celular pueden pesar varios MB,
+  // y para leer un ticket alcanza con mucha menos resolución. callback(dataUrl)
+  // o callback(null) si algo falló al procesar la imagen.
+  function comprimirImagenATexto(file, callback) {
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      var img = new Image();
+      img.onload = function () {
+        var MAX = 1280;
+        var w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+          else { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        var canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        try { callback(canvas.toDataURL('image/jpeg', 0.7)); }
+        catch (err) { callback(null); }
+      };
+      img.onerror = function () { callback(null); };
+      img.src = e.target.result;
+    };
+    reader.onerror = function () { callback(null); };
+    reader.readAsDataURL(file);
+  }
+
   // Modal para agregar un gasto y mandarlo a la categoría elegida
   function modalGasto(catInicial) {
     var opciones = CATEGORIAS.map(function (c) {
       var sel = (c.id === catInicial) ? ' selected' : '';
       return '<option value="' + c.id + '"' + sel + '>' + c.icon + '  ' + escapeHtml(getCatNombre(c.id)) + '</option>';
     }).join('');
+    // Escanear ticket necesita una sesión real (llama a un Edge Function con
+    // IA de visión) — en modo invitado/local no hay nada a lo que autenticarse,
+    // así que el botón solo aparece si hay cuenta vinculada.
+    var puedeEscanear = modoCuenta && miProyectoId;
     abrirModal('<h3>Agregar gasto</h3><p class="sub">Se suma solo al total de la categoría que elijas.</p>' +
+      (puedeEscanear
+        ? '<button type="button" class="btn btn-ghost" id="gEscanearBtn" style="width:100%;margin-bottom:12px">' +
+          '<span class="material-symbols-outlined text-[18px]">photo_camera</span> Escanear ticket</button>' +
+          '<input type="file" accept="image/*" capture="environment" id="gTicketInput" style="display:none">'
+        : '') +
       '<div class="field"><label>Concepto</label><input id="gNombre" placeholder="Ej: Compra en el super"></div>' +
       '<div class="field-row">' +
         '<div class="field"><label>Monto</label><input id="gMonto" inputmode="text" placeholder="0 (podés escribir 200+120)"></div>' +
@@ -2603,6 +2640,44 @@
     var montoEl = document.getElementById('gMonto');
     nombreEl.focus();
     montoEl.addEventListener('keydown', function (e) { if (e.key === 'Enter') document.getElementById('mOk').click(); });
+    if (puedeEscanear) {
+      var escanearBtn = document.getElementById('gEscanearBtn');
+      var ticketInput = document.getElementById('gTicketInput');
+      escanearBtn.onclick = function () { ticketInput.click(); };
+      ticketInput.onchange = function () {
+        var file = ticketInput.files && ticketInput.files[0];
+        ticketInput.value = '';
+        if (!file) return;
+        escanearBtn.disabled = true;
+        escanearBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">hourglass_top</span> Leyendo ticket…';
+        comprimirImagenATexto(file, function (dataUrl) {
+          if (!dataUrl) {
+            toast('No pude leer esa imagen.');
+            escanearBtn.disabled = false;
+            escanearBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">photo_camera</span> Escanear ticket';
+            return;
+          }
+          sbClient.functions.invoke('leer-ticket', { body: { imagenBase64: dataUrl } }).then(function (res) {
+            escanearBtn.disabled = false;
+            escanearBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">photo_camera</span> Escanear ticket';
+            if (res.error || !res.data || res.data.error) {
+              toast((res.data && res.data.error) || 'No pude leer el ticket, completá a mano.');
+              return;
+            }
+            var d = res.data;
+            if (d.nota) nombreEl.value = d.nota;
+            if (d.monto) montoEl.value = formatInput(d.monto);
+            if (d.categoria) document.getElementById('gCat').value = d.categoria;
+            if (d.fecha) document.getElementById('gFecha').value = d.fecha;
+            toast('Ticket leído — revisá los datos antes de confirmar.');
+          }).catch(function () {
+            escanearBtn.disabled = false;
+            escanearBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">photo_camera</span> Escanear ticket';
+            toast('No pude leer el ticket, completá a mano.');
+          });
+        });
+      };
+    }
     document.getElementById('mOk').onclick = function () {
       var nombre = nombreEl.value.trim();
       var monto = evalMonto(montoEl.value);
