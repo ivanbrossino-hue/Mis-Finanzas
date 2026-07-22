@@ -222,19 +222,22 @@ header { padding-top: env(safe-area-inset-top); }
 .hist-toolbar select { min-width: 150px; flex: 1; }
 .hist-toolbar input:focus, .hist-toolbar select:focus { outline: none; border-color: var(--primary); }
 
-.hist-table { width: 100%; border-collapse: collapse; }
-.hist-table td { padding: 11px 8px; border-bottom: 1px solid var(--outline-variant); vertical-align: middle; }
+.hist-mov-header { flex-wrap: wrap; row-gap: 4px; }
+.hist-mov-header .badge { white-space: nowrap; }
+
+.hist-table { width: 100%; max-width: 100%; border-collapse: collapse; table-layout: fixed; }
+.hist-table td { padding: 11px 6px; border-bottom: 1px solid var(--outline-variant); vertical-align: middle; overflow: hidden; }
 .hist-table tr:last-child td { border-bottom: none; }
 .hist-row { cursor: pointer; transition: background .12s; }
 .hist-row:hover, .hist-row:active { background: var(--surface-container); }
-.h-fecha { font-family: var(--mono); font-size: 11px; color: var(--on-surface-variant); white-space: nowrap; width: 68px; }
-.h-cat { width: 32px; text-align: center; }
-.h-ic { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; background: var(--surface-container); font-size: 14px; }
-.h-desc { color: var(--on-surface); }
+.h-fecha { font-family: var(--mono); font-size: 11px; color: var(--on-surface-variant); white-space: nowrap; width: 46px; }
+.h-cat { width: 30px; text-align: center; }
+.h-ic { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 9px; background: var(--surface-container); font-size: 13px; }
+.h-desc { color: var(--on-surface); width: auto; word-break: break-word; overflow-wrap: break-word; }
 .h-desc b { font-weight: 700; }
-.h-items { display: block; font-family: var(--mono); font-size: 10px; color: var(--outline); margin-top: 2px; }
-.h-monto { font-family: var(--mono); font-weight: 700; white-space: nowrap; color: var(--on-surface); }
-.h-del { width: 36px; text-align: right; }
+.h-items { display: block; font-family: var(--mono); font-size: 10px; color: var(--outline); margin-top: 2px; word-break: break-word; }
+.h-monto { font-family: var(--mono); font-weight: 700; white-space: nowrap; color: var(--on-surface); width: 78px; text-align: right; }
+.h-del { width: 28px; text-align: right; }
 .h-del .del { border: none; background: transparent; color: var(--on-surface-variant); border-radius: 8px; padding: 6px 8px; font-size: 13px; }
 .h-del .del:hover { background: var(--error-container); color: var(--error); }
 .add-line { display: flex; align-items: center; gap: 7px; color: var(--primary); font-weight: 700; font-size: 13px; padding: 8px 8px; border: none; background: transparent; border-radius: 8px; }
