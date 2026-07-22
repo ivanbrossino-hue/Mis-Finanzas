@@ -2914,7 +2914,30 @@
     var histBuscar = document.getElementById('histBuscar');
     if (histBuscar) histBuscar.addEventListener('input', function () { renderHistorial(); });
 
+    manejarAccesoDirecto();
     iniciarAuth(); // no hace nada si es el archivo local (file://)
+  }
+
+  // Atajos del manifest (mantener apretado el ícono de la app): ?accion=gasto
+  // abre el modal de agregar gasto, ?accion=ingreso agrega una fila de ingreso
+  // rápido, ?accion=chat abre el asistente.
+  function manejarAccesoDirecto() {
+    var params = new URLSearchParams(location.search);
+    var accion = params.get('accion');
+    if (!accion) return;
+    history.replaceState(null, '', location.pathname); // que un refresh no repita la acción
+    if (accion === 'gasto') {
+      modalGasto();
+    } else if (accion === 'ingreso') {
+      mostrarPagina('gastos');
+      document.querySelectorAll('.bottom-nav a').forEach(function (a) { a.classList.toggle('active', a.getAttribute('data-page') === 'gastos'); });
+      agregarIngresoRapido();
+      var sec = document.getElementById('ingresos');
+      if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (accion === 'chat') {
+      // pequeño respiro para que termine de resolverse el login antes de abrir el chat
+      setTimeout(abrirChat, 700);
+    }
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

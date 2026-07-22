@@ -6,13 +6,13 @@
 // IMPORTANTE: subí CACHE_VERSION cada vez que cambies este archivo o la lista de
 // ASSETS — si no, los navegadores que ya instalaron la PWA pueden seguir viendo
 // una versión vieja del cascarón por un rato.
-const CACHE_VERSION = 'v35';
+const CACHE_VERSION = 'v36';
 const CACHE_NAME = 'mis-finanzas-' + CACHE_VERSION;
 const ASSETS = [
   './',
   './index.html',
   './styles.css?v=19',
-  './app.js?v=25',
+  './app.js?v=26',
   './datos-iniciales.js',
   './manifest.json',
   './logo.png',
