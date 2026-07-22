@@ -483,6 +483,8 @@ header { padding-top: env(safe-area-inset-top); }
   padding: 10px 16px; border-radius: 18px 18px 4px 18px;
 }
 .chat-msg-assistant { align-self: flex-start; max-width: 100%; color: var(--on-surface); }
+.chat-msg a { color: var(--secondary); text-decoration: underline; word-break: break-all; }
+.chat-msg-user a { color: #fff; }
 .chat-typing { opacity: .55; font-style: italic; }
 .chat-input-bar {
   display: flex; align-items: center; gap: 6px; flex: none;

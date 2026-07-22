@@ -439,8 +439,28 @@
     if (box) box.scrollTop = box.scrollHeight;
   }
 
+  // Convierte URLs sueltas del texto (ej. las "Fuentes:" que agrega el asistente
+  // al buscar en la web) en links tocables, sin abrir hueco a XSS: recorta las
+  // URLs ANTES de escapar el resto del texto, así lo que va dentro de href/texto
+  // siempre pasa por escapeHtml/escapeAttr.
+  function linkifyEscaped(texto) {
+    var re = /(https?:\/\/[^\s<>"]+)/g;
+    var out = '';
+    var last = 0;
+    var m;
+    while ((m = re.exec(texto))) {
+      out += escapeHtml(texto.slice(last, m.index));
+      var url = m[0].replace(/[.,;:)]+$/, ''); // no arrastrar puntuación de cierre de frase
+      var cola = m[0].slice(url.length);
+      out += '<a href="' + escapeAttr(url) + '" target="_blank" rel="noopener">' + escapeHtml(url) + '</a>' + escapeHtml(cola);
+      last = m.index + m[0].length;
+    }
+    out += escapeHtml(texto.slice(last));
+    return out;
+  }
+
   function chatBurbujaHTML(rol, texto) {
-    return '<div class="chat-msg chat-msg-' + rol + '">' + escapeHtml(texto).replace(/\n/g, '<br>') + '</div>';
+    return '<div class="chat-msg chat-msg-' + rol + '">' + linkifyEscaped(texto).replace(/\n/g, '<br>') + '</div>';
   }
 
   function chatNombreUsuario() {

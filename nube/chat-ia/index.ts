@@ -109,13 +109,17 @@ function systemPromptConBusqueda(mensajeOriginal: string, resultados: string): s
     "Se hizo una búsqueda web real para responder eso, incluyendo búsquedas puntuales en los sitios de varios",
     "supermercados argentinos. Resultados encontrados (agrupados por sitio cuando corresponde):",
     resultados,
-    "Con ESA información (y solo esa, no inventes nada que no esté en los resultados) armá una respuesta clara.",
-    "Si la pregunta es para COMPARAR precios entre supermercados/tiendas, y encontraste precios de más de un sitio,",
-    "armá una lista corta con el precio de cada uno (ej. \"En Coto está a $ 2.000, en Dia a $ 4.000...\") y señalá",
-    "cuál es la opción más barata que encontraste. Si para algún supermercado no hay resultado, decilo en vez de",
-    "inventar un precio para ese sitio. Si no es una comparación, respondé en 1 a 3 oraciones mencionando el sitio",
-    "de donde sale el dato (ej. \"Según coto.com.ar...\"). Si los resultados no alcanzan para responder con confianza,",
-    "decilo con honestidad en vez de inventar.",
+    "REGLA MÁS IMPORTANTE: un precio o dato solo vale si está LITERALMENTE escrito en el texto de arriba, para ESE",
+    "producto puntual. Nunca calcules, redondees, promedies ni \"estimes\" un precio a partir de otro número que veas",
+    "(precios por kilo, por unidad, de un producto distinto, etc.) — si no hay un precio claro y explícito para el",
+    "producto que pidió el usuario en la sección de una tienda, para esa tienda decís \"no encontré el precio\" en vez",
+    "de inventar cualquier número. Es preferible decir menos y que sea correcto, a decir más y que sea inventado.",
+    "Si la pregunta es para COMPARAR precios entre supermercados/tiendas, armá una lista corta con el precio de cada",
+    "tienda donde SÍ encontraste un precio real (ej. \"En Coto está a $ 2.000, en Dia a $ 4.000...\") y señalá cuál es",
+    "la más barata ENTRE ESAS — nunca inventes ni completes con una tienda que no tenía dato. Si no es una",
+    "comparación, respondé en 1 a 3 oraciones mencionando de qué sitio sale el dato (ej. \"Según coto.com.ar...\").",
+    "Si NINGÚN resultado tiene lo que se necesita para responder con confianza, decilo con honestidad.",
+    "No hace falta que cites URLs en la respuesta — la app ya le agrega las fuentes reales al final del mensaje.",
     "Respondé ÚNICAMENTE con un objeto JSON válido: { \"respuesta\": \"texto para el chat\" }",
   ].join("\n");
 }
@@ -150,39 +154,48 @@ async function tavilySearch(body: Record<string, unknown>): Promise<{ answer?: s
   }
 }
 
+// content más largo que antes (500 en vez de 300) y la URL completa (no solo
+// el hostname) — un fragmento más largo le da al modelo mejores chances de
+// encontrar el precio real en vez de agarrar un número suelto de otra parte
+// de la página, y la URL completa sirve para que el usuario pueda ir a mirar.
 function formatearResultados(results: any[]): string {
   return (results || []).slice(0, 5).map((r: any, i: number) => {
-    const sitio = (() => { try { return new URL(r.url).hostname; } catch { return r.url; } })();
-    return `${i + 1}. ${r.title} (${sitio}): ${String(r.content || "").slice(0, 300)}`;
+    return `${i + 1}. ${r.title} (${r.url}): ${String(r.content || "").slice(0, 500)}`;
   }).join("\n");
 }
 
-// Busca en la web con Tavily (búsqueda general + resumen). Devuelve ok:false
-// si no hay API key configurada o si falla, para que el llamador use el mensaje
-// de respaldo en vez de romper el chat.
-async function buscarWeb(query: string): Promise<{ ok: boolean; texto: string }> {
-  if (!TAVILY_API_KEY) return { ok: false, texto: "" };
-  const data = await tavilySearch({ query, include_answer: true, max_results: 5 });
+function urlsDe(results: any[]): string[] {
+  return (results || []).map((r: any) => r.url).filter(Boolean);
+}
+
+// Busca en la web con Tavily (búsqueda general + resumen). "advanced" trae
+// mejor contenido por resultado que "basic" (más preciso para extraer un
+// precio puntual), a costa de más créditos de la cuenta de Tavily. Devuelve
+// ok:false si no hay API key configurada o si falla.
+async function buscarWeb(query: string): Promise<{ ok: boolean; texto: string; urls: string[] }> {
+  if (!TAVILY_API_KEY) return { ok: false, texto: "", urls: [] };
+  const data = await tavilySearch({ query, search_depth: "advanced", include_answer: true, max_results: 5 });
   const partes: string[] = [];
   if (data.answer) partes.push(`Resumen general: ${data.answer}`);
   const listado = formatearResultados(data.results);
   if (listado) partes.push(listado);
-  return { ok: partes.length > 0, texto: partes.join("\n") };
+  return { ok: partes.length > 0, texto: partes.join("\n"), urls: urlsDe(data.results) };
 }
 
 // Busca la MISMA consulta puntualmente en el sitio de cada supermercado grande
 // (en paralelo), para poder comparar precios entre cadenas — una búsqueda
 // general sola casi nunca trae resultados de más de una tienda a la vez.
-async function buscarEnSupermercados(query: string): Promise<{ ok: boolean; texto: string }> {
-  if (!TAVILY_API_KEY) return { ok: false, texto: "" };
+async function buscarEnSupermercados(query: string): Promise<{ ok: boolean; texto: string; urls: string[] }> {
+  if (!TAVILY_API_KEY) return { ok: false, texto: "", urls: [] };
   const entradas = Object.entries(SUPERMERCADOS);
   const porTienda = await Promise.all(entradas.map(async ([nombre, dominio]) => {
-    const data = await tavilySearch({ query, include_domains: [dominio], max_results: 3 });
+    const data = await tavilySearch({ query, search_depth: "advanced", include_domains: [dominio], max_results: 3 });
     const listado = formatearResultados(data.results);
-    return listado ? `## ${nombre} (${dominio})\n${listado}` : null;
+    return { listado: listado ? `## ${nombre} (${dominio})\n${listado}` : null, urls: urlsDe(data.results) };
   }));
-  const secciones = porTienda.filter((s): s is string => !!s);
-  return { ok: secciones.length > 0, texto: secciones.join("\n\n") };
+  const secciones = porTienda.map((t) => t.listado).filter((s): s is string => !!s);
+  const urls = porTienda.flatMap((t) => t.urls);
+  return { ok: secciones.length > 0, texto: secciones.join("\n\n"), urls };
 }
 
 function extraerJson(texto: string): any {
@@ -277,6 +290,11 @@ Deno.serve(async (req) => {
         );
         const parsed2 = contenido2 && extraerJson(contenido2);
         if (parsed2 && typeof parsed2.respuesta === "string") respuesta = parsed2.respuesta;
+        // Las fuentes las agrega la app con las URLs REALES que devolvió la
+        // búsqueda (no lo que el modelo diga que citó) — así el usuario siempre
+        // puede entrar a verificar el dato en vez de confiar a ciegas en el texto.
+        const urls = Array.from(new Set([...general.urls, ...porTienda.urls])).slice(0, 6);
+        if (urls.length) respuesta += "\n\nFuentes:\n" + urls.join("\n");
       }
       // Si no hay TAVILY_API_KEY configurada o ninguna búsqueda trajo resultados,
       // se queda con el mensaje de respaldo que ya armó la IA en la primera pasada.
