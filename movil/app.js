@@ -44,6 +44,7 @@
   var colapsadas = {}; // categorías colapsadas (solo visual)
   var evoModo = 'mensual'; // vista del gráfico: 'diario' | 'semanal' (real, del mes activo) | 'mensual' | 'anual'
   var vistaActual = 'resumen'; // 'resumen' | 'historial' — qué página se está mostrando
+  var saldoOculto = localStorage.getItem('misFinanzas_saldoOculto') === '1'; // preferencia de este dispositivo, no se sincroniza
 
   // ---- Nube (Supabase) para sincronizar con el bot de Telegram ----
   const NUBE_KEY = 'misFinanzas_nube';
@@ -1344,7 +1345,15 @@
     heroVal.style.color = pos ? 'var(--pos)' : 'var(--neg)';
     // en déficit mostramos el signo menos: -$ 37.907
     var fmtSigno = function (v) { return (pos ? '' : '-') + fmt(v); };
-    countUp(heroVal, Math.abs(bal), animate, fmtSigno);
+    if (saldoOculto) {
+      heroVal.dataset.raw = Math.round(Math.abs(bal));
+      heroVal.textContent = (pos ? '' : '-') + '$ ••••••';
+    } else {
+      countUp(heroVal, Math.abs(bal), animate, fmtSigno);
+    }
+    var heroEyeIcon = document.getElementById('heroEyeIcon');
+    if (heroEyeIcon) heroEyeIcon.textContent = saldoOculto ? 'visibility_off' : 'visibility';
+    document.getElementById('heroEyeBtn').title = saldoOculto ? 'Mostrar saldo' : 'Ocultar saldo';
     document.getElementById('heroBalDelta').innerHTML =
       '<span class="chip ' + (pos ? 'up' : 'down') + '">' + (pos ? '▲' : '▼') + ' ' + pct + '%</span>' +
       '<span class="muted">' + (pos ? 'usado de tus ingresos' : 'gastaste más de lo que entró') + '</span>';
@@ -2835,6 +2844,11 @@
     document.getElementById('menuBtn').onclick = modalMenu;
     document.getElementById('heroBackup').onclick = modalMenu;
     document.getElementById('heroAddGasto').onclick = function () { modalGasto(); };
+    document.getElementById('heroEyeBtn').onclick = function () {
+      saldoOculto = !saldoOculto;
+      localStorage.setItem('misFinanzas_saldoOculto', saldoOculto ? '1' : '0');
+      updateKPIs(false);
+    };
     document.getElementById('addDeudaBtn').onclick = function () { modalDeuda(); };
     document.getElementById('exportarAnaliticasBtn').onclick = exportar;
     document.getElementById('verHistorialBtn').onclick = function () {

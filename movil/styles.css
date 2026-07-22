@@ -26,6 +26,8 @@
   --outline-variant: #c1c9bf;
   --error: #ba1a1a;
   --error-container: #ffdad6;
+  --pos: #2e7d32;
+  --neg: #ba1a1a;
   --mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
   --bottom-nav-h: 68px;
 }
@@ -131,6 +133,15 @@ header { padding-top: env(safe-area-inset-top); }
 .hero-delta .up { background: var(--secondary-container); color: var(--on-secondary-container); }
 .hero-delta .down { background: var(--error-container); color: var(--error); }
 .hero-delta .muted { color: var(--on-surface-variant); }
+
+.hero-eye-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border: none; border-radius: 50%;
+  background: transparent; color: var(--on-surface-variant);
+  flex-shrink: 0;
+}
+.hero-eye-btn .material-symbols-outlined { font-size: 22px; }
+.hero-eye-btn:active { background: var(--surface-container); }
 
 /* ============================================================
    KPIs
