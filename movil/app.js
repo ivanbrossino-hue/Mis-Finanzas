@@ -1337,6 +1337,15 @@
     else if (vistaActual === 'analiticas') renderAnaliticas();
   }
 
+  // Marca qué destino está activo: los de la barra de abajo (Inicio/Gastos/
+  // Deudas/Historial) y el botón de Analíticas, que ahora vive aparte arriba
+  // (junto al selector de mes) en vez de ocupar un lugar en la barra.
+  function marcarNavActivo(pagina) {
+    document.querySelectorAll('.bottom-nav a').forEach(function (a) { a.classList.toggle('active', a.getAttribute('data-page') === pagina); });
+    var corner = document.getElementById('analiticasNavBtn');
+    if (corner) corner.classList.toggle('active', pagina === 'analiticas');
+  }
+
   // Cambia entre las páginas completas de la app (no apiladas: solo una visible a la vez)
   var PAGINAS = ['resumen', 'gastos', 'deudas', 'historial', 'analiticas'];
   function mostrarPagina(nombre) {
@@ -2241,7 +2250,7 @@
     var link = document.getElementById('irADeudasLink');
     if (link) link.addEventListener('click', function () {
       mostrarPagina('deudas');
-      document.querySelectorAll('.bottom-nav a').forEach(function (a) { a.classList.toggle('active', a.getAttribute('data-page') === 'deudas'); });
+      marcarNavActivo('deudas');
     });
   }
 
@@ -3098,8 +3107,9 @@
       if (!estado.meses[hoy]) asegurarMesActual();
       mesActivo = hoy; render();
     };
-    // FAB de acciones rápidas: un toque despliega 3 opciones (gasto, ingreso,
-    // nuevo mes) con una animación, en vez de ir directo a "nuevo mes".
+    // FAB de acciones rápidas (ahora vive en el medio de la barra de abajo,
+    // no flotando aparte): un toque despliega 4 opciones (escanear QR, nuevo
+    // mes, nuevo ingreso, nuevo gasto) con una animación.
     var fabWrap = document.getElementById('fabWrap');
     var fabBackdrop = document.getElementById('fabBackdrop');
     function fabAbierto(v) {
@@ -3109,10 +3119,11 @@
     document.getElementById('fabToggle').onclick = function () { fabAbierto(!fabWrap.classList.contains('open')); };
     if (fabBackdrop) fabBackdrop.onclick = function () { fabAbierto(false); };
     document.getElementById('fabGasto').onclick = function () { fabAbierto(false); modalGasto(); };
+    document.getElementById('fabQR').onclick = function () { fabAbierto(false); abrirEscanerQR(); };
     document.getElementById('fabIngreso').onclick = function () {
       fabAbierto(false);
       mostrarPagina('gastos');
-      document.querySelectorAll('.bottom-nav a').forEach(function (a) { a.classList.toggle('active', a.getAttribute('data-page') === 'gastos'); });
+      marcarNavActivo('gastos');
       agregarIngresoRapido();
       var sec = document.getElementById('ingresos');
       if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -3129,9 +3140,12 @@
     document.getElementById('addDeudaBtn').onclick = function () { modalDeuda(); };
     document.getElementById('exportarAnaliticasBtn').onclick = exportar;
     document.getElementById('verHistorialBtn').onclick = function () {
-      var link = document.querySelector('[data-page="historial"]');
-      document.querySelectorAll('.bottom-nav a').forEach(function (x) { x.classList.toggle('active', x === link); });
       mostrarPagina('historial');
+      marcarNavActivo('historial');
+    };
+    document.getElementById('analiticasNavBtn').onclick = function () {
+      mostrarPagina('analiticas');
+      marcarNavActivo('analiticas');
     };
 
     // toggle del gráfico: semanal / mensual / anual
@@ -3145,7 +3159,6 @@
     document.getElementById('modalBack').addEventListener('click', function (e) {
       if (e.target === this) cerrarModal();
     });
-    document.getElementById('qrNavBtn').onclick = abrirEscanerQR;
     document.getElementById('qrScanClose').onclick = cerrarEscanerQR;
     document.getElementById('chatFab').onclick = abrirChat;
     document.getElementById('chatClose').onclick = cerrarChat;
@@ -3194,8 +3207,9 @@
     navLinks.forEach(function (a) {
       a.addEventListener('click', function (e) {
         e.preventDefault();
-        navLinks.forEach(function (x) { x.classList.toggle('active', x === a); });
-        mostrarPagina(a.getAttribute('data-page'));
+        var pagina = a.getAttribute('data-page');
+        marcarNavActivo(pagina);
+        mostrarPagina(pagina);
       });
     });
 
@@ -3223,7 +3237,7 @@
       modalGasto();
     } else if (accion === 'ingreso') {
       mostrarPagina('gastos');
-      document.querySelectorAll('.bottom-nav a').forEach(function (a) { a.classList.toggle('active', a.getAttribute('data-page') === 'gastos'); });
+      marcarNavActivo('gastos');
       agregarIngresoRapido();
       var sec = document.getElementById('ingresos');
       if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
