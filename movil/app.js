@@ -215,6 +215,18 @@
     }
   }
 
+  // Frase de progreso para el chat ("Vas $ 50.000 de $ 200.000 en Alimentación (25%).")
+  // cuando esa categoría tiene un presupuesto definido. Es un cálculo aparte del
+  // aviso push de revisarPresupuesto (que solo dispara una vez al cruzar 80%/100%):
+  // esta frase se agrega en CADA mensaje de chat que registre un gasto en la categoría.
+  function progresoPresupuestoTexto(categoria) {
+    var tope = Number((estado.presupuestos || {})[categoria]) || 0;
+    if (!tope) return null;
+    var gastado = gastosPorCategoria(mesActivo)[categoria] || 0;
+    var pct = Math.round((gastado / tope) * 100);
+    return 'Vas ' + fmt(gastado) + ' de ' + fmt(tope) + ' en ' + getCatNombre(categoria) + ' (' + pct + '%).';
+  }
+
   function revisarPresupuesto(categoria) {
     var tope = Number((estado.presupuestos || {})[categoria]) || 0;
     if (!tope || !modoCuenta || !miProyectoId) return;
@@ -523,12 +535,32 @@
       registrados.forEach(function (it) {
         registrarCompra(it.categoria, it.monto, it.nota || null, null);
       });
-      if (registrados.length) { guardar(); actualizarCalculos(); }
+      // Presupuesto por chat: si el usuario acaba de fijar un tope (ej. "quiero
+      // gastar 200000 en comida este mes"), lo guardamos como cualquier otro
+      // presupuesto de la app (misma tabla que usa la página de Analíticas).
+      var pres = res.data.presupuesto;
+      var presupuestoTexto = null;
+      if (pres && CAT_MAP[pres.categoria] && Number(pres.monto) > 0) {
+        estado.presupuestos[pres.categoria] = Math.round(Number(pres.monto));
+        presupuestoTexto = '🎯 Presupuesto de ' + getCatNombre(pres.categoria) + ': ' + fmt(pres.monto) + ' este mes.';
+      }
+      if (registrados.length || pres) { guardar(); actualizarCalculos(); }
+      // Progreso contra presupuesto: una línea por cada categoría distinta que
+      // se acaba de registrar (o que se acaba de fijar), solo si tiene tope.
+      var categoriasParaProgreso = registrados.map(function (it) { return it.categoria; });
+      if (pres && categoriasParaProgreso.indexOf(pres.categoria) === -1) categoriasParaProgreso.push(pres.categoria);
+      var progresoLineas = [];
+      categoriasParaProgreso.filter(function (c, i, arr) { return arr.indexOf(c) === i; }).forEach(function (c) {
+        var linea = progresoPresupuestoTexto(c);
+        if (linea) progresoLineas.push(linea);
+      });
       var textoIA = res.data.respuesta || '';
       var textoMostrado = textoIA;
       if (registrados.length) {
         textoMostrado += '\n\n✅ ' + registrados.map(function (it) { return fmt(it.monto) + ' en ' + getCatNombre(it.categoria); }).join(', ');
       }
+      if (presupuestoTexto) textoMostrado += '\n\n' + presupuestoTexto;
+      if (progresoLineas.length) textoMostrado += '\n\n' + progresoLineas.join('\n');
       chatHistorial.push({ rol: 'assistant', texto: textoMostrado, textoIA: textoIA });
       chatPersistirLog();
       renderChatMensajes(true);

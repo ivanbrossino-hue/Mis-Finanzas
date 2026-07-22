@@ -7,12 +7,17 @@
 //  gastos que hay que registrar — el REGISTRO en sí lo hace el cliente
 //  con registrarCompra(), esta función nunca toca la tabla de proyectos.
 //  Modelo: NVIDIA NIM (API gratuita, compatible con OpenAI), build.nvidia.com
-//  Secrets: NVIDIA_API_KEY
+//  Secrets: NVIDIA_API_KEY, TAVILY_API_KEY (opcional — sin ella el asistente
+//  sigue funcionando, solo no puede buscar promociones/descuentos reales)
 // ============================================================
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const NVIDIA_API_KEY = Deno.env.get("NVIDIA_API_KEY") ?? "";
 const NVIDIA_MODEL = "meta/llama-3.1-8b-instruct";
+// Búsqueda web real para preguntas de promociones/descuentos (Tavily, tiene nivel
+// gratuito). Si no está configurada, el asistente sigue funcionando normal, solo
+// que no puede buscar nada en internet — avisa con honestidad en vez de inventar.
+const TAVILY_API_KEY = Deno.env.get("TAVILY_API_KEY") ?? "";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -58,15 +63,81 @@ function systemPrompt(contexto: unknown): string {
     "en un turno anterior. Si el usuario solo pregunta \"¿ya lo anotaste?\" o algo similar, respondé que sí (si corresponde) con \"registrar\": [],",
     "NUNCA vuelvas a incluir en \"registrar\" un gasto que el historial muestra que ya se anotó — eso lo duplicaría.",
     `Categorías válidas (usá SIEMPRE el id, nunca el nombre): ${listaCategorias}.`,
+    "",
+    "TERCER trabajo: presupuestos por chat. Si el usuario te dice cuánto quiere gastar como máximo en una categoría",
+    "(ej. \"voy a hacer la compra mensual y quiero gastar 200000 solo en comida\", \"que la nafta no pase de 40000 este mes\",",
+    "\"ponele un tope de 30000 a entretenimiento\"), eso NO es un gasto para registrar — es fijar un presupuesto. Devolvé",
+    '"presupuesto": { "categoria": "id válido", "monto": 200000 } (un solo objeto, no un array) y "registrar": [] para ese mensaje,',
+    "y en \"respuesta\" confirmá el tope de forma natural (ej. \"Listo, te aviso cuando te vayas acercando a los $ 200.000 en Alimentación.\").",
+    "Si el usuario no está fijando un tope nuevo, \"presupuesto\" tiene que ser null. El progreso contra el presupuesto (cuánto lleva",
+    "gastado de cuánto tiene disponible) NO lo calculás vos — te lo agrega la app automáticamente después de tu respuesta, así que",
+    "no repitas ni inventes ese número en \"respuesta\".",
+    "",
+    "CUARTO trabajo: promociones y descuentos reales de comercios (ej. \"¿qué día tiene descuento Coto?\", \"hay alguna promo en",
+    "Carrefour esta semana\", \"conviene comprar en Dia o en Jumbo\"). Para esto NO tenés información propia — cualquier dato que",
+    "\"recuerdes\" sobre promociones puede estar desactualizado o directamente inventado, así que NUNCA respondas esto de memoria.",
+    'En su lugar devolvé "buscarWeb": "una consulta de búsqueda en español, con el nombre del comercio y \'Argentina\'" (ej.',
+    '"descuentos Coto Argentina esta semana"), y en "respuesta" un mensaje corto tipo "Dejame fijarme..." (por si la búsqueda no',
+    'está disponible, ese será el mensaje que vea el usuario). Si la pregunta NO es sobre promos/descuentos/comercios, "buscarWeb"',
+    "tiene que ser null. Nunca pongas algo en \"buscarWeb\" y en \"registrar\" o \"presupuesto\" a la vez en el mismo mensaje.",
     "CONTEXTO (datos financieros reales del usuario, en pesos argentinos):",
     JSON.stringify(contexto),
     "",
     "Respondé ÚNICAMENTE con un objeto JSON válido (sin texto antes ni después, sin markdown), con esta forma exacta:",
-    '{ "respuesta": "texto para mostrarle al usuario en el chat", "registrar": [ { "categoria": "id válido", "monto": 1234, "nota": "concepto corto" } ] }',
+    '{ "respuesta": "texto para mostrarle al usuario en el chat", "registrar": [ { "categoria": "id válido", "monto": 1234, "nota": "concepto corto" } ], "presupuesto": null, "buscarWeb": null }',
     '"registrar" tiene que ser [] si el usuario solo preguntó algo y no te contó un gasto NUEVO para anotar.',
     "Si te cuenta varias compras en el mismo mensaje, agregá un ítem por cada una. \"monto\" siempre un número entero, sin signos ni puntos de miles.",
     "Si preguntó algo que de verdad no está en el contexto, decilo con honestidad en vez de inventar.",
   ].join("\n");
+}
+
+// Prompt para la segunda pasada, cuando hubo que buscar en la web. Le pasamos
+// los resultados ya obtenidos y le pedimos que arme la respuesta final con eso
+// (no le pedimos registrar/presupuesto de nuevo: una pregunta de promos no es
+// a la vez un gasto o un tope nuevo).
+function systemPromptConBusqueda(mensajeOriginal: string, resultados: string): string {
+  return [
+    "Sos el asistente financiero de la app \"Mis Finanzas\", en español rioplatense, tono cercano.",
+    `El usuario preguntó: "${mensajeOriginal}"`,
+    "Se hizo una búsqueda web real para responder eso. Resultados encontrados (título, sitio y fragmento):",
+    resultados,
+    "Con ESA información (y solo esa, no inventes nada que no esté en los resultados) armá una respuesta clara y corta",
+    "(1 a 3 oraciones), mencionando de qué sitio sale el dato (ej. \"Según coto.com.ar...\"). Si los resultados no alcanzan",
+    "para responder con confianza, decilo con honestidad en vez de inventar una promoción.",
+    "Respondé ÚNICAMENTE con un objeto JSON válido: { \"respuesta\": \"texto para el chat\" }",
+  ].join("\n");
+}
+
+// Busca en la web con Tavily (search_depth básico + resumen). Devuelve ok:false
+// si no hay API key configurada o si falla, para que el llamador use el mensaje
+// de respaldo en vez de romper el chat.
+async function buscarWeb(query: string): Promise<{ ok: boolean; texto: string }> {
+  if (!TAVILY_API_KEY) return { ok: false, texto: "" };
+  try {
+    const res = await fetch("https://api.tavily.com/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: TAVILY_API_KEY,
+        query,
+        search_depth: "basic",
+        include_answer: true,
+        max_results: 5,
+      }),
+    });
+    if (!res.ok) return { ok: false, texto: "" };
+    const data = await res.json();
+    const partes: string[] = [];
+    if (data.answer) partes.push(`Resumen: ${data.answer}`);
+    (data.results || []).slice(0, 5).forEach((r: any, i: number) => {
+      const sitio = (() => { try { return new URL(r.url).hostname; } catch { return r.url; } })();
+      partes.push(`${i + 1}. ${r.title} (${sitio}): ${String(r.content || "").slice(0, 300)}`);
+    });
+    return { ok: partes.length > 0, texto: partes.join("\n") };
+  } catch (e) {
+    console.error("Tavily error:", e);
+    return { ok: false, texto: "" };
+  }
 }
 
 function extraerJson(texto: string): any {
@@ -74,6 +145,23 @@ function extraerJson(texto: string): any {
   const m = texto.match(/\{[\s\S]*\}/);
   if (m) { try { return JSON.parse(m[0]); } catch { /* nada más para intentar */ } }
   return null;
+}
+
+// Llama al modelo con una lista de mensajes ya armada y devuelve el contenido
+// crudo (string). null si falló la llamada — el llamador decide el fallback.
+async function llamarNvidia(messages: unknown, maxTokens = 300): Promise<string | null> {
+  const res = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${NVIDIA_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ model: NVIDIA_MODEL, messages, temperature: 0.2, top_p: 0.7, max_tokens: maxTokens }),
+  });
+  if (!res.ok) {
+    const detalle = await res.text().catch(() => "");
+    console.error("NVIDIA API error:", res.status, detalle);
+    return null;
+  }
+  const data = await res.json();
+  return data?.choices?.[0]?.message?.content || "";
 }
 
 Deno.serve(async (req) => {
@@ -106,18 +194,8 @@ Deno.serve(async (req) => {
       { role: "user", content: mensaje },
     ];
 
-    const iaRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${NVIDIA_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: NVIDIA_MODEL, messages, temperature: 0.2, top_p: 0.7, max_tokens: 300 }),
-    });
-    if (!iaRes.ok) {
-      const detalle = await iaRes.text().catch(() => "");
-      console.error("NVIDIA API error:", iaRes.status, detalle);
-      return json({ error: "el asistente no pudo responder ahora" }, 502);
-    }
-    const iaData = await iaRes.json();
-    const contenido = iaData?.choices?.[0]?.message?.content || "";
+    const contenido = await llamarNvidia(messages);
+    if (contenido === null) return json({ error: "el asistente no pudo responder ahora" }, 502);
     const parsed = extraerJson(contenido);
 
     if (!parsed || typeof parsed.respuesta !== "string") {
@@ -133,7 +211,26 @@ Deno.serve(async (req) => {
           .map((it: any) => ({ categoria: it.categoria, monto: Math.round(Number(it.monto)), nota: it.nota ? String(it.nota).slice(0, 80) : null }))
       : [];
 
-    return json({ respuesta: parsed.respuesta, registrar });
+    const presupuesto = (parsed.presupuesto && CATEGORIAS[parsed.presupuesto.categoria] && Number(parsed.presupuesto.monto) > 0)
+      ? { categoria: parsed.presupuesto.categoria, monto: Math.round(Number(parsed.presupuesto.monto)) }
+      : null;
+
+    let respuesta = parsed.respuesta;
+    if (typeof parsed.buscarWeb === "string" && parsed.buscarWeb.trim()) {
+      const busqueda = await buscarWeb(parsed.buscarWeb.trim());
+      if (busqueda.ok) {
+        const contenido2 = await llamarNvidia(
+          [{ role: "system", content: systemPromptConBusqueda(mensaje, busqueda.texto) }],
+          250
+        );
+        const parsed2 = contenido2 && extraerJson(contenido2);
+        if (parsed2 && typeof parsed2.respuesta === "string") respuesta = parsed2.respuesta;
+      }
+      // Si no hay TAVILY_API_KEY configurada o la búsqueda falló, se queda con
+      // el mensaje de respaldo que ya armó la IA en la primera pasada.
+    }
+
+    return json({ respuesta, registrar, presupuesto });
   } catch (e) {
     console.error(e);
     return json({ error: String(e) }, 500);
