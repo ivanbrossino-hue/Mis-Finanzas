@@ -73,13 +73,17 @@ function systemPrompt(contexto: unknown): string {
     "gastado de cuánto tiene disponible) NO lo calculás vos — te lo agrega la app automáticamente después de tu respuesta, así que",
     "no repitas ni inventes ese número en \"respuesta\".",
     "",
-    "CUARTO trabajo: promociones y descuentos reales de comercios (ej. \"¿qué día tiene descuento Coto?\", \"hay alguna promo en",
-    "Carrefour esta semana\", \"conviene comprar en Dia o en Jumbo\"). Para esto NO tenés información propia — cualquier dato que",
-    "\"recuerdes\" sobre promociones puede estar desactualizado o directamente inventado, así que NUNCA respondas esto de memoria.",
-    'En su lugar devolvé "buscarWeb": "una consulta de búsqueda en español, con el nombre del comercio y \'Argentina\'" (ej.',
-    '"descuentos Coto Argentina esta semana"), y en "respuesta" un mensaje corto tipo "Dejame fijarme..." (por si la búsqueda no',
-    'está disponible, ese será el mensaje que vea el usuario). Si la pregunta NO es sobre promos/descuentos/comercios, "buscarWeb"',
-    "tiene que ser null. Nunca pongas algo en \"buscarWeb\" y en \"registrar\" o \"presupuesto\" a la vez en el mismo mensaje.",
+    "CUARTO trabajo: promociones/descuentos reales de comercios (ej. \"¿qué día tiene descuento Coto?\", \"hay alguna promo en",
+    "Carrefour esta semana\") Y comparar precios de un producto entre supermercados (ej. \"qué súper tiene mejor precio en",
+    "fideos\", \"dónde me conviene comprar arroz\", \"comparame el precio de la yerba entre Coto y Dia\"). Para esto NO tenés",
+    "información propia — cualquier dato que \"recuerdes\" sobre precios o promociones puede estar desactualizado o directamente",
+    "inventado, así que NUNCA respondas esto de memoria, ni un precio ni una promo ni cuál es más barato.",
+    'En su lugar devolvé "buscarWeb" con una consulta de búsqueda corta y simple (el producto o la promo, SIN nombrar un',
+    'supermercado en particular — el sistema ya busca sola en los sitios de Coto, Día, Carrefour, Jumbo y Vea) — ej.',
+    '"precio fideos 500g" o "descuentos supermercados esta semana". En "respuesta" poné un mensaje corto tipo "Dejame',
+    'fijarme..." (por si la búsqueda no está disponible, ese será el mensaje que vea el usuario). Si la pregunta NO es sobre',
+    "promos/descuentos/precios/comercios, \"buscarWeb\" tiene que ser null. Nunca pongas algo en \"buscarWeb\" y en \"registrar\"",
+    "o \"presupuesto\" a la vez en el mismo mensaje.",
     "CONTEXTO (datos financieros reales del usuario, en pesos argentinos):",
     JSON.stringify(contexto),
     "",
@@ -102,45 +106,83 @@ function systemPromptConBusqueda(mensajeOriginal: string, resultados: string): s
   return [
     "Sos el asistente financiero de la app \"Mis Finanzas\", en español rioplatense, tono cercano.",
     `El usuario preguntó: "${mensajeOriginal}"`,
-    "Se hizo una búsqueda web real para responder eso. Resultados encontrados (título, sitio y fragmento):",
+    "Se hizo una búsqueda web real para responder eso, incluyendo búsquedas puntuales en los sitios de varios",
+    "supermercados argentinos. Resultados encontrados (agrupados por sitio cuando corresponde):",
     resultados,
-    "Con ESA información (y solo esa, no inventes nada que no esté en los resultados) armá una respuesta clara y corta",
-    "(1 a 3 oraciones), mencionando de qué sitio sale el dato (ej. \"Según coto.com.ar...\"). Si los resultados no alcanzan",
-    "para responder con confianza, decilo con honestidad en vez de inventar una promoción.",
+    "Con ESA información (y solo esa, no inventes nada que no esté en los resultados) armá una respuesta clara.",
+    "Si la pregunta es para COMPARAR precios entre supermercados/tiendas, y encontraste precios de más de un sitio,",
+    "armá una lista corta con el precio de cada uno (ej. \"En Coto está a $ 2.000, en Dia a $ 4.000...\") y señalá",
+    "cuál es la opción más barata que encontraste. Si para algún supermercado no hay resultado, decilo en vez de",
+    "inventar un precio para ese sitio. Si no es una comparación, respondé en 1 a 3 oraciones mencionando el sitio",
+    "de donde sale el dato (ej. \"Según coto.com.ar...\"). Si los resultados no alcanzan para responder con confianza,",
+    "decilo con honestidad en vez de inventar.",
     "Respondé ÚNICAMENTE con un objeto JSON válido: { \"respuesta\": \"texto para el chat\" }",
   ].join("\n");
 }
 
-// Busca en la web con Tavily (search_depth básico + resumen). Devuelve ok:false
-// si no hay API key configurada o si falla, para que el llamador use el mensaje
-// de respaldo en vez de romper el chat.
-async function buscarWeb(query: string): Promise<{ ok: boolean; texto: string }> {
-  if (!TAVILY_API_KEY) return { ok: false, texto: "" };
+// Sitios oficiales de las cadenas de supermercado más grandes de Argentina —
+// se usan para buscar puntualmente en cada uno cuando el usuario quiere
+// comparar precios entre tiendas (una búsqueda general sola casi nunca trae
+// resultados de más de un supermercado a la vez).
+const SUPERMERCADOS: Record<string, string> = {
+  Coto: "cotodigital.com.ar",
+  Día: "diaonline.supermercadosdia.com.ar",
+  Carrefour: "carrefour.com.ar",
+  Jumbo: "jumbo.com.ar",
+  Vea: "vea.com.ar",
+};
+
+// Llama a la API de búsqueda de Tavily con los parámetros dados. Devuelve los
+// resultados crudos (title/url/content) o results:[] si falló — nunca tira excepción.
+async function tavilySearch(body: Record<string, unknown>): Promise<{ answer?: string; results: any[] }> {
   try {
     const res = await fetch("https://api.tavily.com/search", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        api_key: TAVILY_API_KEY,
-        query,
-        search_depth: "basic",
-        include_answer: true,
-        max_results: 5,
-      }),
+      body: JSON.stringify({ api_key: TAVILY_API_KEY, search_depth: "basic", ...body }),
     });
-    if (!res.ok) return { ok: false, texto: "" };
+    if (!res.ok) return { results: [] };
     const data = await res.json();
-    const partes: string[] = [];
-    if (data.answer) partes.push(`Resumen: ${data.answer}`);
-    (data.results || []).slice(0, 5).forEach((r: any, i: number) => {
-      const sitio = (() => { try { return new URL(r.url).hostname; } catch { return r.url; } })();
-      partes.push(`${i + 1}. ${r.title} (${sitio}): ${String(r.content || "").slice(0, 300)}`);
-    });
-    return { ok: partes.length > 0, texto: partes.join("\n") };
+    return { answer: data.answer, results: data.results || [] };
   } catch (e) {
     console.error("Tavily error:", e);
-    return { ok: false, texto: "" };
+    return { results: [] };
   }
+}
+
+function formatearResultados(results: any[]): string {
+  return (results || []).slice(0, 5).map((r: any, i: number) => {
+    const sitio = (() => { try { return new URL(r.url).hostname; } catch { return r.url; } })();
+    return `${i + 1}. ${r.title} (${sitio}): ${String(r.content || "").slice(0, 300)}`;
+  }).join("\n");
+}
+
+// Busca en la web con Tavily (búsqueda general + resumen). Devuelve ok:false
+// si no hay API key configurada o si falla, para que el llamador use el mensaje
+// de respaldo en vez de romper el chat.
+async function buscarWeb(query: string): Promise<{ ok: boolean; texto: string }> {
+  if (!TAVILY_API_KEY) return { ok: false, texto: "" };
+  const data = await tavilySearch({ query, include_answer: true, max_results: 5 });
+  const partes: string[] = [];
+  if (data.answer) partes.push(`Resumen general: ${data.answer}`);
+  const listado = formatearResultados(data.results);
+  if (listado) partes.push(listado);
+  return { ok: partes.length > 0, texto: partes.join("\n") };
+}
+
+// Busca la MISMA consulta puntualmente en el sitio de cada supermercado grande
+// (en paralelo), para poder comparar precios entre cadenas — una búsqueda
+// general sola casi nunca trae resultados de más de una tienda a la vez.
+async function buscarEnSupermercados(query: string): Promise<{ ok: boolean; texto: string }> {
+  if (!TAVILY_API_KEY) return { ok: false, texto: "" };
+  const entradas = Object.entries(SUPERMERCADOS);
+  const porTienda = await Promise.all(entradas.map(async ([nombre, dominio]) => {
+    const data = await tavilySearch({ query, include_domains: [dominio], max_results: 3 });
+    const listado = formatearResultados(data.results);
+    return listado ? `## ${nombre} (${dominio})\n${listado}` : null;
+  }));
+  const secciones = porTienda.filter((s): s is string => !!s);
+  return { ok: secciones.length > 0, texto: secciones.join("\n\n") };
 }
 
 function extraerJson(texto: string): any {
@@ -222,17 +264,22 @@ Deno.serve(async (req) => {
       : null;
 
     if (parsed && typeof parsed.buscarWeb === "string" && parsed.buscarWeb.trim()) {
-      const busqueda = await buscarWeb(parsed.buscarWeb.trim());
-      if (busqueda.ok) {
+      const query = parsed.buscarWeb.trim();
+      // Búsqueda general + una puntual en cada supermercado grande (en paralelo),
+      // así si la pregunta es "qué super tiene mejor precio en X" hay chances
+      // reales de tener el dato de más de una cadena para comparar.
+      const [general, porTienda] = await Promise.all([buscarWeb(query), buscarEnSupermercados(query)]);
+      const texto = [general.texto, porTienda.texto].filter(Boolean).join("\n\n");
+      if (texto) {
         const contenido2 = await llamarNvidia(
-          [{ role: "system", content: systemPromptConBusqueda(mensaje, busqueda.texto) }],
-          250
+          [{ role: "system", content: systemPromptConBusqueda(mensaje, texto) }],
+          300
         );
         const parsed2 = contenido2 && extraerJson(contenido2);
         if (parsed2 && typeof parsed2.respuesta === "string") respuesta = parsed2.respuesta;
       }
-      // Si no hay TAVILY_API_KEY configurada o la búsqueda falló, se queda con
-      // el mensaje de respaldo que ya armó la IA en la primera pasada.
+      // Si no hay TAVILY_API_KEY configurada o ninguna búsqueda trajo resultados,
+      // se queda con el mensaje de respaldo que ya armó la IA en la primera pasada.
     }
 
     return json({ respuesta, registrar, presupuesto });
