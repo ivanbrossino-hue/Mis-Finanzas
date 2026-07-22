@@ -432,32 +432,47 @@ header { padding-top: env(safe-area-inset-top); }
 #fabToggleIcon { display: inline-block; transition: transform .25s cubic-bezier(.2,.7,.3,1); }
 .bottom-nav-fab.open #fabToggleIcon { transform: rotate(45deg); }
 
+/* IMPORTANTE: tiene que quedar por DEBAJO del z-index de .bottom-nav (130).
+   Antes estaba en 135 (por arriba) de cuando el "+" flotaba aparte con su
+   propio z-index de 140 — pero ahora que el botón y su popup viven ADENTRO
+   de .bottom-nav, ese 140 solo cuenta dentro del contexto de apilamiento de
+   .bottom-nav (130), así que si el backdrop queda arriba de 130 termina
+   tapando el popup y ninguna opción responde al toque, aunque se vean bien. */
 .fab-backdrop {
-  position: fixed; inset: 0; z-index: 135; background: rgba(26,28,28,0);
+  position: fixed; inset: 0; z-index: 120; background: rgba(26,28,28,0);
   opacity: 0; pointer-events: none; transition: opacity .25s, background .25s;
 }
 .fab-backdrop.show { opacity: 1; pointer-events: auto; background: rgba(26,28,28,.32); }
 
-/* El popup de acciones se ancla arriba a la derecha de este slot de la barra
-   (mismo punto de anclaje relativo que antes tenía al estar fijo en la
-   esquina) y crece hacia la izquierda — hay de sobra espacio a la izquierda
-   aunque el botón ahora esté más al centro de la pantalla. */
-.fab-actions {
-  position: absolute; right: -6px; bottom: calc(100% + 8px); z-index: 140;
-  display: flex; flex-direction: column; align-items: flex-end; gap: 12px;
-}
+/* Las 4 opciones se acomodan en semicírculo arriba del botón "+" (cada una
+   con su propio desplazamiento --fx/--fy calculado para formar el arco).
+   .fab-actions es solo un punto de anclaje (0x0) en el centro del botón;
+   cada .fab-action se posiciona con su propio transform relativo a ese punto. */
+.fab-actions { position: absolute; left: 50%; top: 50%; width: 0; height: 0; z-index: 140; }
 .fab-action {
-  display: flex; align-items: center; gap: 10px; border: none; background: transparent; padding: 0;
-  opacity: 0; transform: translateY(10px) scale(.85); pointer-events: none;
+  position: absolute; left: 0; top: 0; margin: 0; border: none; background: transparent; padding: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  opacity: 0; pointer-events: none; --fx: 0px; --fy: 0px;
+  transform: translate(-50%, -50%) translate(var(--fx), var(--fy)) scale(.3);
   transition: opacity .22s cubic-bezier(.2,.7,.3,1), transform .22s cubic-bezier(.2,.7,.3,1);
 }
-.bottom-nav-fab.open .fab-action { opacity: 1; transform: none; pointer-events: auto; }
+.bottom-nav-fab.open .fab-action {
+  opacity: 1; pointer-events: auto;
+  transform: translate(-50%, -50%) translate(var(--fx), var(--fy)) scale(1);
+}
+/* Arco de 30° a 150°, radio ~90px, 4 puntos parejos (ver comentario en JS/CSS
+   hermano si hace falta recalcular con otra cantidad de opciones). */
+#fabQR      { --fx: -78px; --fy: -45px; }
+#fabMes     { --fx: -31px; --fy: -85px; }
+#fabIngreso { --fx: 31px;  --fy: -85px; }
+#fabGasto   { --fx: 78px;  --fy: -45px; }
+
 .fab-action-label {
-  background: #fff; color: var(--on-surface); font-size: 12.5px; font-weight: 700;
-  padding: 7px 12px; border-radius: 999px; box-shadow: 0 4px 14px rgba(0,54,26,.16); white-space: nowrap;
+  background: #fff; color: var(--on-surface); font-size: 9.5px; font-weight: 700;
+  padding: 3px 8px; border-radius: 999px; box-shadow: 0 4px 10px rgba(0,54,26,.16); white-space: nowrap;
 }
 .fab-action-ic {
-  width: 44px; height: 44px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  width: 42px; height: 42px; border-radius: 50%; flex: none; display: grid; place-items: center;
   background: var(--secondary-container); color: var(--primary); box-shadow: 0 6px 16px -2px rgba(0,54,26,.35);
   transition: transform .15s;
 }
@@ -681,10 +696,15 @@ header { padding-top: env(safe-area-inset-top); }
   .bottom-nav a .material-symbols-outlined { font-size: 21px; }
   /* El botón "+" pasa a ser una fila más de la barra lateral, en vez de un
      círculo levantado (eso solo tiene sentido flotando sobre una barra
-     horizontal). El popup de acciones se abre a la derecha de la barra. */
+     horizontal). El semicírculo tampoco tiene sentido acá: el popup se
+     abre como una lista simple a la derecha de la barra. */
   .bottom-nav-fab { flex: none; flex-direction: row; justify-content: flex-start; gap: 12px; padding: 11px 12px; }
   .bottom-nav-fab .fab { margin-top: 0; width: 36px; height: 36px; }
-  .fab-actions { left: 100%; right: auto; bottom: auto; top: 0; margin-left: 10px; }
+  .fab-actions {
+    left: 100%; top: 50%; transform: translateY(-50%); margin-left: 12px;
+    width: auto; height: auto; display: flex; flex-direction: column; gap: 10px;
+  }
+  .fab-action, .bottom-nav-fab.open .fab-action { position: static; transform: none !important; }
 
   /* ---- Barra superior: arranca después de la sidebar ---- */
   header { left: 232px !important; width: calc(100% - 232px) !important; }
