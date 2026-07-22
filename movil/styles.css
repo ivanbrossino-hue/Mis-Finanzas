@@ -377,6 +377,44 @@ header { padding-top: env(safe-area-inset-top); }
 .bottom-nav a.active { color: var(--on-secondary-container); background: rgba(200,242,77,.35); }
 .bottom-nav a.active .material-symbols-outlined { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
 
+/* Botón "QR" flotando en el medio de la barra, al estilo Mercado Pago */
+.bottom-nav-qr { flex: 1; display: flex; align-items: center; justify-content: center; }
+.bottom-nav-qr button {
+  width: 50px; height: 50px; margin-top: -26px; border: none; border-radius: 50%;
+  background: var(--primary); color: #fff; display: grid; place-items: center;
+  box-shadow: 0 8px 20px -4px rgba(0,54,26,.5); transition: transform .15s;
+}
+.bottom-nav-qr button:active { transform: scale(.94); }
+.bottom-nav-qr .material-symbols-outlined { font-size: 24px; }
+
+/* Escáner de QR en vivo: cámara a pantalla completa + marco para encuadrar */
+.qr-scan-back {
+  position: fixed; inset: 0; z-index: 300; background: #000;
+  display: none; flex-direction: column;
+}
+.qr-scan-back.open { display: flex; }
+.qr-scan-topbar {
+  position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between;
+  padding: calc(14px + env(safe-area-inset-top)) 16px 14px; color: #fff; font-weight: 700;
+}
+.qr-scan-close {
+  width: 36px; height: 36px; border-radius: 50%; border: none; background: rgba(255,255,255,.15); color: #fff;
+  display: grid; place-items: center;
+}
+.qr-scan-back video {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+}
+.qr-scan-frame {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: min(70vw, 280px); height: min(70vw, 280px);
+  border: 3px solid var(--secondary-fixed-dim); border-radius: 24px;
+  box-shadow: 0 0 0 999px rgba(0,0,0,.45);
+}
+.qr-scan-hint {
+  position: absolute; left: 0; right: 0; bottom: calc(32px + env(safe-area-inset-bottom));
+  text-align: center; color: #fff; font-size: 13px; font-weight: 600; padding: 0 24px;
+}
+
 .fab-wrap {
   position: fixed; right: 16px; bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom) + 14px);
   z-index: 140; display: flex; flex-direction: column; align-items: flex-end; gap: 14px;

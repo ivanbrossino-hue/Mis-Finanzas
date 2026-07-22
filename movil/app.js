@@ -2599,6 +2599,77 @@
     } catch (e) { return null; }
   }
 
+  // ---------- Escáner de QR en vivo (ticket, desde el ícono de la barra) ----------
+  // A diferencia de "Escanear ticket" (que manda UNA foto a la IA de visión), esto
+  // lee el QR directo de la imagen de la cámara en tiempo real, sin sacar foto —
+  // apenas encuentra un código lo procesa. Solo sirve para el QR fiscal (fecha +
+  // importe exactos); para ver los artículos comprados sigue haciendo falta la
+  // foto completa del ticket, porque ese dato no está codificado en el QR.
+  var qrScanStream = null;
+  var qrScanRAF = null;
+
+  function abrirEscanerQR() {
+    if (!(modoCuenta && miProyectoId)) { toast('Iniciá sesión primero.'); return; }
+    if (!window.jsQR) { toast('No se pudo cargar el lector de QR.'); return; }
+    if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
+      toast('Tu navegador no permite usar la cámara acá.'); return;
+    }
+    var back = document.getElementById('qrScanBack');
+    var video = document.getElementById('qrScanVideo');
+    back.classList.add('open');
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(function (stream) {
+      qrScanStream = stream;
+      video.srcObject = stream;
+      video.play();
+      var canvas = document.createElement('canvas');
+      var ctx = canvas.getContext('2d');
+      function tick() {
+        if (!qrScanStream) return; // el usuario ya cerró el escáner
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+          var w = video.videoWidth, h = video.videoHeight;
+          if (w && h) {
+            var escala = Math.min(1, 720 / Math.max(w, h));
+            canvas.width = Math.round(w * escala);
+            canvas.height = Math.round(h * escala);
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            try {
+              var datos = ctx.getImageData(0, 0, canvas.width, canvas.height);
+              var code = window.jsQR(datos.data, canvas.width, canvas.height);
+              if (code && code.data) { manejarQRDetectado(code.data); return; }
+            } catch (err) { /* frame no legible, seguimos intentando con el siguiente */ }
+          }
+        }
+        qrScanRAF = requestAnimationFrame(tick);
+      }
+      tick();
+    }).catch(function () {
+      toast('No pude acceder a la cámara.');
+      cerrarEscanerQR();
+    });
+  }
+
+  function cerrarEscanerQR() {
+    document.getElementById('qrScanBack').classList.remove('open');
+    if (qrScanRAF) { cancelAnimationFrame(qrScanRAF); qrScanRAF = null; }
+    if (qrScanStream) { qrScanStream.getTracks().forEach(function (t) { t.stop(); }); qrScanStream = null; }
+    var video = document.getElementById('qrScanVideo');
+    if (video) video.srcObject = null;
+  }
+
+  function manejarQRDetectado(texto) {
+    cerrarEscanerQR();
+    var qr = leerQRTicket(texto);
+    if (qr && (qr.fecha || qr.monto)) {
+      modalGasto();
+      if (qr.fecha) document.getElementById('gFecha').value = qr.fecha;
+      if (qr.monto) document.getElementById('gMonto').value = formatInput(qr.monto);
+      toast('QR leído — completá el resto. Para ver los artículos, usá "Escanear ticket" con una foto.');
+    } else {
+      console.log('QR leído (formato no reconocido):', texto);
+      toast('Ese QR no tiene el formato de ticket fiscal que reconozco.');
+    }
+  }
+
   // Prepara una foto de ticket para el escaneo: busca el QR de AFIP a una
   // resolución más alta (para que se llegue a decodificar bien) y por separado
   // arma una versión más chica/comprimida para mandarle a la IA de visión (no
@@ -3049,6 +3120,8 @@
     document.getElementById('modalBack').addEventListener('click', function (e) {
       if (e.target === this) cerrarModal();
     });
+    document.getElementById('qrNavBtn').onclick = abrirEscanerQR;
+    document.getElementById('qrScanClose').onclick = cerrarEscanerQR;
     document.getElementById('chatFab').onclick = abrirChat;
     document.getElementById('chatClose').onclick = cerrarChat;
     document.getElementById('chatBack').addEventListener('click', function (e) {

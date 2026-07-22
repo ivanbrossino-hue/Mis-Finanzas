@@ -75,7 +75,7 @@
   .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; vertical-align: middle; }
   body { min-height: max(884px, 100dvh); font-family: 'Inter', sans-serif; }
 </style>
-<link rel="stylesheet" href="styles.css?v=21">
+<link rel="stylesheet" href="styles.css?v=22">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
 <body class="bg-background text-on-surface font-body-lg min-h-screen overflow-x-hidden">
@@ -381,6 +381,11 @@
       <span class="material-symbols-outlined">shopping_cart</span>
       <span class="font-label-caps text-label-caps">Gastos</span>
     </a>
+    <div class="bottom-nav-qr">
+      <button type="button" id="qrNavBtn" title="Escanear QR de un ticket">
+        <span class="material-symbols-outlined">qr_code_scanner</span>
+      </button>
+    </div>
     <a href="#deudas" data-page="deudas">
       <span class="material-symbols-outlined">credit_card</span>
       <span class="font-label-caps text-label-caps">Deudas</span>
@@ -417,6 +422,17 @@
   </div>
 </div>
 
+<!-- Escáner de QR (ticket de compra) -->
+<div class="qr-scan-back" id="qrScanBack">
+  <div class="qr-scan-topbar">
+    <span>Escaneá el QR del ticket</span>
+    <button type="button" id="qrScanClose" class="qr-scan-close"><span class="material-symbols-outlined">close</span></button>
+  </div>
+  <video id="qrScanVideo" playsinline autoplay muted></video>
+  <div class="qr-scan-frame"></div>
+  <div class="qr-scan-hint" id="qrScanHint">Encuadrá el QR del pie del ticket dentro del cuadro</div>
+</div>
+
 <!-- Modal -->
 <div class="modal-back" id="modalBack">
   <div class="modal glass-card" id="modal"></div>
@@ -450,7 +466,7 @@
 <input type="file" id="importFile" accept="application/json" style="display:none">
 
 <script src="datos-iniciales.js"></script>
-<script src="app.js?v=32"></script>
+<script src="app.js?v=33"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js'); });
