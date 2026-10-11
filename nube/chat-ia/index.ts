@@ -6,14 +6,15 @@
 //  dos partes: el texto para mostrar en el chat, y (si corresponde) los
 //  gastos que hay que registrar — el REGISTRO en sí lo hace el cliente
 //  con registrarCompra(), esta función nunca toca la tabla de proyectos.
-//  Modelo: NVIDIA NIM (API gratuita, compatible con OpenAI), build.nvidia.com
-//  Secrets: NVIDIA_API_KEY, TAVILY_API_KEY (opcional — sin ella el asistente
+//  Modelo: Claude (API Messages de Anthropic).
+//  Secrets: ANTHROPIC_API_KEY, CLAUDE_MODEL (opcional, por defecto
+//  claude-sonnet-5-5), TAVILY_API_KEY (opcional — sin ella el asistente
 //  sigue funcionando, solo no puede buscar promociones/descuentos reales)
 // ============================================================
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const NVIDIA_API_KEY = Deno.env.get("NVIDIA_API_KEY") ?? "";
-const NVIDIA_MODEL = "meta/llama-3.1-8b-instruct";
+const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
+const CLAUDE_MODEL = Deno.env.get("CLAUDE_MODEL") || "claude-sonnet-5-5";
 // Búsqueda web real para preguntas de promociones/descuentos (Tavily, tiene nivel
 // gratuito). Si no está configurada, el asistente sigue funcionando normal, solo
 // que no puede buscar nada en internet — avisa con honestidad en vez de inventar.
@@ -205,21 +206,53 @@ function extraerJson(texto: string): any {
   return null;
 }
 
-// Llama al modelo con una lista de mensajes ya armada y devuelve el contenido
-// crudo (string). null si falló la llamada — el llamador decide el fallback.
-async function llamarNvidia(messages: unknown, maxTokens = 300): Promise<string | null> {
-  const res = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${NVIDIA_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: NVIDIA_MODEL, messages, temperature: 0.2, top_p: 0.7, max_tokens: maxTokens }),
-  });
-  if (!res.ok) {
-    const detalle = await res.text().catch(() => "");
-    console.error("NVIDIA API error:", res.status, detalle);
+type MensajeChat = { role: "user" | "assistant"; content: string };
+
+// La API de Anthropic exige que el primer mensaje sea del usuario y que los roles
+// se alternen: descartamos vacíos, fusionamos turnos seguidos del mismo rol y
+// sacamos los "assistant" iniciales (el historial recortado puede arrancar ahí).
+function normalizarMensajes(mensajes: MensajeChat[]): MensajeChat[] {
+  const out: MensajeChat[] = [];
+  for (const m of mensajes) {
+    const content = String(m.content || "").trim();
+    if (!content) continue;
+    const ultimo = out[out.length - 1];
+    if (ultimo && ultimo.role === m.role) ultimo.content += "\n" + content;
+    else out.push({ role: m.role, content });
+  }
+  while (out.length && out[0].role !== "user") out.shift();
+  return out;
+}
+
+// Llama a Claude y devuelve el texto crudo de la respuesta (string). null si falló
+// la llamada (red, timeout, 4xx/5xx) — el llamador decide el fallback.
+async function llamarClaude(system: string, mensajes: MensajeChat[], maxTokens = 1024): Promise<string | null> {
+  const messages = normalizarMensajes(mensajes);
+  if (!messages.length) return null;
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: maxTokens, system, messages }),
+      signal: AbortSignal.timeout(45_000),
+    });
+    if (!res.ok) {
+      const detalle = await res.text().catch(() => "");
+      console.error("Anthropic API error:", res.status, detalle);
+      return null;
+    }
+    const data = await res.json();
+    if (data?.stop_reason === "max_tokens") console.warn("Anthropic: respuesta cortada por max_tokens");
+    const bloques: any[] = Array.isArray(data?.content) ? data.content : [];
+    return bloques.filter((b) => b?.type === "text").map((b) => String(b.text || "")).join("");
+  } catch (e) {
+    console.error("Anthropic fetch error:", e);
     return null;
   }
-  const data = await res.json();
-  return data?.choices?.[0]?.message?.content || "";
 }
 
 Deno.serve(async (req) => {
@@ -235,7 +268,7 @@ Deno.serve(async (req) => {
     });
     if (!userRes.ok) return json({ error: "sesión inválida" }, 401);
 
-    if (!NVIDIA_API_KEY) return json({ error: "el asistente no está configurado (falta NVIDIA_API_KEY)" }, 500);
+    if (!ANTHROPIC_API_KEY) return json({ error: "el asistente no está configurado (falta ANTHROPIC_API_KEY)" }, 500);
 
     const body = await req.json().catch(() => ({}));
     const mensaje = String(body.mensaje || "").trim();
@@ -243,16 +276,15 @@ Deno.serve(async (req) => {
     const contexto = body.contexto || {};
     if (!mensaje) return json({ error: "falta mensaje" }, 400);
 
-    const messages = [
-      { role: "system", content: systemPrompt(contexto) },
-      ...historial.slice(-10).map((h: any) => ({
+    const messages: MensajeChat[] = [
+      ...historial.slice(-10).map((h: any): MensajeChat => ({
         role: h.rol === "assistant" ? "assistant" : "user",
         content: String(h.texto || ""),
       })),
       { role: "user", content: mensaje },
     ];
 
-    const contenido = await llamarNvidia(messages);
+    const contenido = await llamarClaude(systemPrompt(contexto), messages);
     if (contenido === null) return json({ error: "el asistente no pudo responder ahora" }, 502);
     const parsed = extraerJson(contenido);
 
@@ -284,9 +316,9 @@ Deno.serve(async (req) => {
       const [general, porTienda] = await Promise.all([buscarWeb(query), buscarEnSupermercados(query)]);
       const texto = [general.texto, porTienda.texto].filter(Boolean).join("\n\n");
       if (texto) {
-        const contenido2 = await llamarNvidia(
-          [{ role: "system", content: systemPromptConBusqueda(mensaje, texto) }],
-          300
+        const contenido2 = await llamarClaude(
+          systemPromptConBusqueda(mensaje, texto),
+          [{ role: "user", content: mensaje }]
         );
         const parsed2 = contenido2 && extraerJson(contenido2);
         if (parsed2 && typeof parsed2.respuesta === "string") respuesta = parsed2.respuesta;

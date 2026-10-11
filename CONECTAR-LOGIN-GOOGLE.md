@@ -12,8 +12,8 @@ las URLs — copiá y pegá en vez de tipear a mano.
 Guardá estos 2 valores que vas a conseguir en el Paso 1:
 
 ```
-Client ID     = ______________________.apps.googleusercontent.com
-Client Secret = ______________________
+Client ID     = 453388695402-q8cgjm4g56iu92pbe0brfonec94r93kg.apps.googleusercontent.com
+Client Secret = TU_CLIENT_SECRET
 ```
 
 ---
