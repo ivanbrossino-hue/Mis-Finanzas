@@ -68,7 +68,7 @@ Consola sin errores. Se recorrieron: las 6 páginas, tema (persistencia + `theme
 - Las voces 1/2 sin ElevenLabs dependen de las voces instaladas en el dispositivo (acento y género pueden variar).
 - El contador de caracteres es por dispositivo; el consumo real de ElevenLabs es de la cuenta.
 - Se quitó la agrupación "Tarjetas / Préstamos" del prototipo en Deudas: el modelo de datos no distingue el tipo.
-- En escritorio la app es una columna centrada de 480 px (antes tenía barra lateral).
+- **Escritorio (PC, desde 900 px de ancho):** mismo diseño con barra lateral fija a la izquierda (Inicio, Gastos, Análisis, Deudas, Historial), contenido a todo el ancho en grillas (Inicio: evolución + dona lado a lado; Gastos y Deudas en dos columnas; Historial por días en dos columnas; Análisis de a pares; Ajustes en dos columnas), ventanas emergentes centradas y botones flotantes abajo a la derecha. Todo vive en un único bloque `@media (min-width: 900px)` al final de `movil/styles.css`, así el celular no cambia. Entre 520 y 899 px (tablet) queda la columna centrada de 480 px.
 
 ## Próximos pasos (anotados, NO hechos)
 1. Rutina mensual de plan de comida y lista de compras (tabla `planes_mensuales`, Edge Function `plan-mensual`, cron, pantalla "Comida del mes"). Los atajos del chat "Armar el plan del mes" / "Lista de compras" del prototipo no se agregaron porque todavía no existen.

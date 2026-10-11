@@ -38,12 +38,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-<link rel="stylesheet" href="styles.css?v=31">
+<link rel="stylesheet" href="styles.css?v=33">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
   /* Íconos de tema: sol en oscuro, luna en claro (lo que vas a activar al tocar) */
   html.claro .ic-sun, html:not(.claro) .ic-moon { display: none; }
-  #gastosBody, .stack { display: flex; flex-direction: column; gap: 12px; }
 </style>
 </head>
 <body>
@@ -390,6 +389,7 @@
 
   <!-- ===== Barra inferior (5 pestañas) ===== -->
   <nav class="nav" aria-label="Secciones">
+    <div class="side-brand"><img src="logo.png" alt="" width="30" height="30"><span>Mis Finanzas</span></div>
     <a class="navb on" href="#resumen" data-page="resumen" aria-label="Inicio">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-6 8 6v8a1 1 0 01-1 1h-4v-6h-6v6H5a1 1 0 01-1-1z"/></svg>Inicio
     </a>

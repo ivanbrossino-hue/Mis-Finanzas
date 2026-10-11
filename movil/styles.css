@@ -85,6 +85,8 @@ svg { flex-shrink: 0; }
 .page-view.view-hidden { display: none; }
 @keyframes pageIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 .page-view.page-entrando { animation: pageIn .35s cubic-bezier(.2,.7,.3,1); }
+/* Listas apiladas (en escritorio algunas pasan a grilla) */
+#gastosBody, .stack { display: flex; flex-direction: column; gap: 12px; }
 .footer-note { text-align: center; color: var(--muted); font-size: 12px; font-weight: 600; padding: 0 8px; margin: 4px 0 0; line-height: 1.5; }
 .footer-note b { color: var(--text); }
 
@@ -513,10 +515,96 @@ svg { flex-shrink: 0; }
 .chat-hist-fecha { font-size: 11.5px; font-weight: 600; color: var(--muted); }
 .chat-hist-vacio { color: var(--muted); font-size: 13px; text-align: center; padding: 24px 12px; }
 
-/* ---------- Pantallas anchas: la app es una columna centrada ---------- */
-@media (min-width: 520px) {
+/* ---------- Tablet / ventana angosta: la app es una columna centrada ---------- */
+@media (min-width: 520px) and (max-width: 899px) {
   body { background-attachment: fixed; }
   .shell { border-left: 1px solid var(--glassb); border-right: 1px solid var(--glassb); }
+}
+
+/* Marca de la barra lateral: solo se ve en escritorio */
+.side-brand { display: none; }
+
+/* ===========================================================
+   ESCRITORIO (PC, desde 900 px): mismo diseño, con barra lateral fija y
+   páginas en grillas. Nada de acá se aplica por debajo de 900 px, así que
+   el celular queda exactamente igual.
+   =========================================================== */
+@media (min-width: 900px) {
+  .shell { max-width: none; margin: 0; border: 0; padding-left: 244px; padding-bottom: 48px; }
+
+  /* ---- Barra de pestañas -> barra lateral fija ---- */
+  .nav {
+    left: 0; top: 0; bottom: 0; transform: none; width: 244px; max-width: none; height: 100vh; height: 100dvh;
+    flex-direction: column; justify-content: flex-start; align-items: stretch; gap: 4px;
+    padding: 24px 14px 20px; border-top: 0; border-right: 1px solid var(--glassb);
+  }
+  .side-brand { display: flex; align-items: center; gap: 12px; padding: 4px 12px 24px; font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
+  .side-brand img { border-radius: 10px; }
+  .navb { width: auto; height: 48px; flex-direction: row; justify-content: flex-start; gap: 14px; padding: 0 14px; font-size: 14.5px; border-radius: 16px; }
+  .navb:hover { background: var(--track); }
+  .navb.on:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+
+  /* ---- Encabezado y contenido: ancho real de la ventana ---- */
+  .hdr { padding: 26px 40px 12px; }
+  .ttl { font-size: 30px; }
+  .main { padding: 0 40px 24px; }
+  .canvas { max-width: 1180px; margin: 0 auto; }
+  .mnav { max-width: 520px; }
+
+  /* ---- Botones flotantes: esquina inferior derecha de la ventana ---- */
+  .fabs { right: 32px; bottom: 32px; }
+  .toast { bottom: 32px; left: calc(50% + 122px); }
+
+  /* ---- Gráficos un poco más altos ---- */
+  .evo-canvas-wrap { height: 270px; }
+  .flujo-canvas-wrap, .gastodias-canvas-wrap { height: 230px; }
+
+  /* :not(.view-hidden) importa: un #id le gana en especificidad a .page-view.view-hidden,
+     así que sin esto la página seguiría visible aunque no sea la activa. */
+
+  /* Inicio: resumen arriba a todo el ancho, evolución y dona lado a lado */
+  #vistaResumen:not(.view-hidden) { display: grid; grid-template-columns: 1.45fr 1fr; gap: 16px; align-items: start; }
+  #heroCard, #analiticasNavBtn, #vistaResumen .footer-note { grid-column: 1 / -1; }
+  .hero-num { font-size: 56px; }
+  .hero-actions { max-width: 560px; }
+
+  /* Gastos: totales y lista de categorías en dos columnas */
+  #vistaGastos:not(.view-hidden) { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  #vistaGastos > .duo, #vistaGastos > #ingresos, #vistaGastos > #gastos, #vistaGastos > #gastosBody, #vistaGastos > #gastosAddBtn { grid-column: 1 / -1; }
+  #gastosBody { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+  #gastosBody > .tip { grid-column: 1 / -1; }
+  #gastosAddBtn { width: auto; justify-self: start; padding: 0 28px; }
+
+  /* Deudas: tarjetas en grilla */
+  #vistaDeudas:not(.view-hidden) { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  #vistaDeudas > .hero, #vistaDeudas > .h2, #vistaDeudas > #deudasBody, #vistaDeudas > #deudasPendBody { grid-column: 1 / -1; }
+  #deudasBody { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; align-items: start; }
+
+  /* Historial: buscador y filtros en una fila, días en dos columnas */
+  #vistaHistorial:not(.view-hidden) { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; align-items: start; }
+  #vistaHistorial > .search { grid-column: 1; }
+  #vistaHistorial > .chips { grid-column: 2; align-self: center; }
+  #vistaHistorial > .sect-title, #vistaHistorial > #historialBody { grid-column: 1 / -1; }
+  #historialBody { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  #historialBody > .hist-list { grid-column: 1 / -1; }
+
+  /* Análisis: bloques principales a todo el ancho, el resto de a pares */
+  #vistaAnaliticas:not(.view-hidden) { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  #vistaAnaliticas > .chips, #vistaAnaliticas > #anaKpis, #vistaAnaliticas > #presupuestosCard { grid-column: 1 / -1; }
+  #presupuestosBody { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 36px; align-items: start; }
+  #presupuestosBody > .ring-row, #presupuestosBody > .sep, #presupuestosBody > .budget-more, #presupuestosBody > .asis-hint, #presupuestosBody > .empty-hint { grid-column: 1 / -1; }
+
+  /* Ajustes: apariencia y voz a la izquierda, cuenta a la derecha */
+  #vistaAjustes:not(.view-hidden) { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+  #vistaAjustes > .set-sect:nth-child(3) { grid-column: 2; grid-row: 1 / span 2; }
+
+  /* ---- Ventanas emergentes: centradas en vez de pegadas abajo ---- */
+  .modal-back { align-items: center; }
+  .modal { border-radius: 28px; border-bottom: 1px solid var(--glassb); max-width: 560px; max-height: 86vh; }
+
+  /* ---- Asistente: la columna de voz queda centrada; el chat de texto es más ancho ---- */
+  .asis-chat { max-width: 780px; }
+  .chat-historial-lista { max-width: 340px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
