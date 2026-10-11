@@ -7,21 +7,93 @@
   'use strict';
 
   // ---------- Configuración de categorías ----------
+  // `icon` (emoji) se sigue usando en los <option> de los selectores, donde no
+  // entra un SVG; `cn` es el color de categoría del rediseño (--c1 a --c7) y
+  // `svg` el trazo del ícono que se dibuja en las fichas de categoría.
   const CATEGORIAS = [
-    { id: 'vivienda',        nombre: 'Vivienda',              icon: '🏠', color: '#7000ff' },
-    { id: 'trabajo',         nombre: 'Trabajo',               icon: '💼', color: '#9b5cff' },
-    { id: 'alimentacion',    nombre: 'Alimentación',          icon: '🛒', color: '#00dbe9' },
-    { id: 'transporte',      nombre: 'Transporte',            icon: '🚗', color: '#4d7cff' },
-    { id: 'salud',           nombre: 'Salud',                 icon: '🏥', color: '#ff4fd8' },
-    { id: 'educacion',       nombre: 'Educación',             icon: '📚', color: '#b06cff' },
-    { id: 'mascota',         nombre: 'Mascota',               icon: '🐾', color: '#ff6b9d' },
-    { id: 'entretenimiento', nombre: 'Entretenimiento',       icon: '🎬', color: '#00b3ff' },
-    { id: 'ropa',            nombre: 'Ropa / Personal',       icon: '👕', color: '#ffb454' },
-    { id: 'seguros',         nombre: 'Seguros / Imprevistos', icon: '🛡️', color: '#8892b0' },
-    { id: 'ahorro',          nombre: 'Ahorro e Inversión',    icon: '💰', color: '#22e6a8' },
+    { id: 'vivienda',        nombre: 'Vivienda',              icon: '🏠', cn: 1, color: 'var(--c1)', svg: '<path d="M4 11l8-6 8 6v8a1 1 0 01-1 1h-4v-6h-6v6H5a1 1 0 01-1-1z"/>' },
+    { id: 'trabajo',         nombre: 'Trabajo',               icon: '💼', cn: 4, color: 'var(--c4)', svg: '<rect x="3" y="7" width="18" height="13" rx="2.5"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2M3 13h18"/>' },
+    { id: 'alimentacion',    nombre: 'Alimentación',          icon: '🛒', cn: 2, color: 'var(--c2)', svg: '<path d="M4 5h2l2 10h9l2-7H7"/><circle cx="9" cy="19" r="1.3"/><circle cx="17" cy="19" r="1.3"/>' },
+    { id: 'transporte',      nombre: 'Transporte',            icon: '🚗', cn: 3, color: 'var(--c3)', svg: '<path d="M5 17h14M6 17l1.4-5.2A2 2 0 019.3 10h5.4a2 2 0 011.9 1.8L18 17"/><circle cx="8" cy="17.5" r="1.4"/><circle cx="16" cy="17.5" r="1.4"/>' },
+    { id: 'salud',           nombre: 'Salud',                 icon: '🏥', cn: 5, color: 'var(--c5)', svg: '<path d="M12 20s-7-4.4-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.6-7 10-7 10z"/>' },
+    { id: 'educacion',       nombre: 'Educación',             icon: '📚', cn: 4, color: 'var(--c4)', svg: '<path d="M4 5.5A2.5 2.5 0 016.5 3H20v15H6.5A2.5 2.5 0 004 20.5z"/><path d="M4 20.5V5.5M8 7h8"/>' },
+    { id: 'mascota',         nombre: 'Mascota',               icon: '🐾', cn: 6, color: 'var(--c6)', svg: '<circle cx="6.5" cy="11" r="1.7"/><circle cx="10.5" cy="6.5" r="1.7"/><circle cx="15.5" cy="6.5" r="1.7"/><circle cx="19" cy="11" r="1.7"/><path d="M8 18c0-2.6 1.8-4.5 4-4.5s4 1.9 4 4.5c0 1.4-1.2 2.2-4 2.2s-4-.8-4-2.2z"/>' },
+    { id: 'entretenimiento', nombre: 'Entretenimiento',       icon: '🎬', cn: 7, color: 'var(--c7)', svg: '<path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.5 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z"/>' },
+    { id: 'ropa',            nombre: 'Ropa / Personal',       icon: '👕', cn: 5, color: 'var(--c5)', svg: '<path d="M8 4L3 7l2.5 4L8 10v10h8V10l2.5 1L21 7l-5-3a4 4 0 01-8 0z"/>' },
+    { id: 'seguros',         nombre: 'Seguros / Imprevistos', icon: '🛡️', cn: 6, color: 'var(--c6)', svg: '<path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/>' },
+    { id: 'ahorro',          nombre: 'Ahorro e Inversión',    icon: '💰', cn: 1, color: 'var(--c1)', svg: '<path d="M12 3v18M16 7.5C16 6 14.2 5 12 5S8 6 8 7.800c0 4 8 2.200 8 6.200C16 16 14.200 17 12 17s-4-1-4-2.500"/>' },
   ];
   const CAT_MAP = {};
   CATEGORIAS.forEach(function (c) { CAT_MAP[c.id] = c; });
+
+  // ---------- Íconos (trazo, 24x24) ----------
+  const ICONOS = {
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    x: '<path d="M6 6l12 12M18 6L6 18"/>',
+    pencil: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+    chevDown: '<path d="M6 9l6 6 6-6"/>',
+    trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 002 2h6a2 2 0 002-2l1-12M9 7V4h6v3"/>',
+    eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    eyeOff: '<path d="M3 3l18 18M10.6 6.1A9.800 9.800 0 0112 6c6.500 0 10 6 10 6a17 17 0 01-3.200 3.900M6.600 7.600C3.700 9.400 2 12 2 12s3.500 6 10 6c1.600 0 3-.3 4.300-.8"/><path d="M9.900 9.900a3 3 0 004.200 4.200"/>',
+    check: '<path d="M5 12l5 5 9-10"/>',
+    undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/>',
+    copy: '<rect x="8" y="8" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A1.5 1.5 0 016.5 5H15"/>',
+    volume: '<path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4z"/><path d="M15.5 9a4 4 0 010 6M18 6.5a7.5 7.5 0 010 11"/>',
+    volumeOff: '<path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/>',
+    camera: '<path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+    hourglass: '<path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9"/>',
+    card: '<rect x="3" y="6" width="18" height="12" rx="2.5"/><path d="M3 10h18"/>'
+  };
+  function ico(nombre, tam, grosor) {
+    tam = tam || 20;
+    return '<svg width="' + tam + '" height="' + tam + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + (grosor || 2) +
+      '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICONOS[nombre] || '') + '</svg>';
+  }
+  // Ficha cuadrada de categoría (ícono de trazo sobre el color de la categoría)
+  function tileCat(catId, chica) {
+    var c = CAT_MAP[catId];
+    var cn = c ? c.cn : 4;
+    var tam = chica ? 16 : 22;
+    var trazo = c ? c.svg : '<circle cx="12" cy="12" r="2"/>';
+    return '<span class="tile ct' + cn + (chica ? ' s' : '') + '"><svg width="' + tam + '" height="' + tam +
+      '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + trazo + '</svg></span>';
+  }
+  // Estado de un presupuesto según lo gastado: en rango (< 75 %), al límite (75–100 %) o excedida (> 100 %)
+  function estadoPresupuesto(gastado, tope) {
+    var ratio = tope > 0 ? gastado / tope : 0;
+    if (ratio > 1) return { clave: 'bad', texto: 'Excedida', color: 'var(--bad)', badge: 'b-bad', ratio: ratio };
+    if (ratio >= 0.75) return { clave: 'warn', texto: 'Al límite', color: 'var(--warn)', badge: 'b-warn', ratio: ratio };
+    return { clave: 'ok', texto: 'En rango', color: 'var(--ok)', badge: 'b-ok', ratio: ratio };
+  }
+
+  // ---------- Tema claro / oscuro ----------
+  const TEMA_KEY = 'misFinanzas_tema';
+  function temaActual() { return document.documentElement.classList.contains('claro') ? 'claro' : 'oscuro'; }
+  function temaPreferidoInicial() {
+    var t = null;
+    try { t = localStorage.getItem(TEMA_KEY); } catch (e) {}
+    if (t === 'claro' || t === 'oscuro') return t;
+    return (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'claro' : 'oscuro';
+  }
+  function aplicarTema(t, guardarEleccion) {
+    var h = document.documentElement;
+    h.classList.remove('oscuro', 'claro'); h.classList.add(t);
+    var meta = document.getElementById('metaTheme');
+    if (meta) meta.setAttribute('content', t === 'claro' ? '#F3FAF6' : '#04170F');
+    if (guardarEleccion) { try { localStorage.setItem(TEMA_KEY, t); } catch (e) {} }
+    var bc = document.getElementById('temaClaroBtn'), bo = document.getElementById('temaOscuroBtn');
+    if (bc) bc.classList.toggle('sel', t === 'claro');
+    if (bo) bo.classList.toggle('sel', t === 'oscuro');
+    var tb = document.getElementById('temaBtn');
+    if (tb) tb.setAttribute('aria-label', t === 'claro' ? 'Cambiar a tema oscuro' : 'Cambiar a tema claro');
+    // Los gráficos (Chart.js) pintan con colores concretos: hay que redibujarlos
+    if (estado) { try { render(false); } catch (e) {} }
+  }
+  // Colores de los gráficos leídos de las variables CSS del tema activo
+  function colorCss(nombre, respaldo) {
+    var v = getComputedStyle(document.documentElement).getPropertyValue(nombre).trim();
+    return v || respaldo;
+  }
 
   // Nombre de la línea "acumuladora" donde se suman las compras de cada categoría.
   // (Para Alimentación se junta con tu línea "Supermercado / almacén".)
@@ -278,13 +350,65 @@
   // funciona en Android e iPhone). Si el usuario apagó el sonido, no hace nada.
   // alTerminar (opcional): se llama cuando termina de hablar (o de una) — lo
   // usa el Modo Voz para retomar la escucha apenas termina de responder.
+  // asistente.js puede registrar su propio reproductor (voz elegida, cola de
+  // frases); si no hay, se usa la voz del navegador como siempre.
+  var chatVozExterna = null; // { hablar(texto, alTerminar), cancelar() }
   function chatHablar(texto, alTerminar) {
-    if (!chatVozActivada || !texto || !window.speechSynthesis) { if (alTerminar) alTerminar(); return; }
+    if (!chatVozActivada || !texto) { if (alTerminar) alTerminar(); return; }
+    if (chatVozExterna) { chatVozExterna.hablar(texto, alTerminar); return; }
+    if (!window.speechSynthesis) { if (alTerminar) alTerminar(); return; }
     window.speechSynthesis.cancel(); // no superponer con una lectura anterior
     var u = new SpeechSynthesisUtterance(texto);
     u.lang = 'es-AR';
     if (alTerminar) { u.onend = alTerminar; u.onerror = alTerminar; }
     window.speechSynthesis.speak(u);
+  }
+
+  // "Leer respuestas en voz alta": un solo estado, varios controles (chat, pantalla
+  // de voz y Ajustes) que se mantienen sincronizados.
+  function chatVozActualizarUI() {
+    ['chatVozToggle', 'vozLeerBtn'].forEach(function (id) {
+      var b = document.getElementById(id);
+      if (!b) return;
+      b.classList.toggle('muted', !chatVozActivada);
+      b.innerHTML = ico(chatVozActivada ? 'volume' : 'volumeOff', 22, 1.9);
+      b.setAttribute('aria-pressed', chatVozActivada ? 'true' : 'false');
+    });
+    var sw = document.getElementById('ajLeerSw');
+    if (sw) { sw.classList.toggle('on', chatVozActivada); sw.setAttribute('aria-checked', chatVozActivada ? 'true' : 'false'); }
+  }
+  function chatSetVoz(v) {
+    chatVozActivada = !!v;
+    try { localStorage.setItem('misFinanzas_chatVoz', chatVozActivada ? '1' : '0'); } catch (e) {}
+    chatVozActualizarUI();
+    if (!chatVozActivada) {
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
+      if (chatVozExterna && chatVozExterna.cancelar) chatVozExterna.cancelar();
+    }
+  }
+
+  // Voz elegida para el asistente ('1' mujer, '2' hombre): preferencia de este dispositivo
+  var VOZ_KEY = 'misFinanzas_vozAsistente';
+  var vozAsistente = (function () { try { return localStorage.getItem(VOZ_KEY) === '2' ? '2' : '1'; } catch (e) { return '1'; } })();
+  function setVozAsistente(v) {
+    vozAsistente = v === '2' ? '2' : '1';
+    try { localStorage.setItem(VOZ_KEY, vozAsistente); } catch (e) {}
+    renderAjustes();
+    if (window.MFAsis) window.MFAsis.alCambiarVoz(vozAsistente);
+  }
+  function renderAjustes() {
+    var r1 = document.getElementById('ajVoz1R'), r2 = document.getElementById('ajVoz2R');
+    var o1 = document.getElementById('ajVoz1'), o2 = document.getElementById('ajVoz2');
+    if (!r1 || !r2) return;
+    [[o1, r1, '1'], [o2, r2, '2']].forEach(function (x) {
+      var on = vozAsistente === x[2];
+      x[0].classList.toggle('sel', on); x[1].classList.toggle('on', on);
+      x[1].innerHTML = on ? ico('check', 14, 3.4) : '';
+    });
+    var tg = document.getElementById('telegramSub');
+    if (tg) tg.textContent = modoCuenta ? 'Cargá gastos escribiéndole al bot' : 'Conectá la nube para cargar gastos desde Telegram';
+    chatVozActualizarUI();
+    if (window.MFAsis && window.MFAsis.pintarUso) window.MFAsis.pintarUso(); // caracteres de voz premium usados este mes
   }
 
   // Dictado por voz (gratis, nativo) — no existe en Safari/iOS, ahí se oculta el botón.
@@ -459,8 +583,52 @@
     return out;
   }
 
-  function chatBurbujaHTML(rol, texto) {
-    return '<div class="chat-msg chat-msg-' + rol + '">' + linkifyEscaped(texto).replace(/\n/g, '<br>') + '</div>';
+  // Avance contra el tope de una categoría (mismo cálculo que progresoPresupuestoTexto, pero como datos)
+  function progresoPresupuestoDatos(categoria) {
+    var tope = Number((estado.presupuestos || {})[categoria]) || 0;
+    if (!tope) return null;
+    var base = ((estado.presupuestosDesde || {})[mesActivo] || {})[categoria] || 0;
+    var gastado = Math.max(0, (gastosPorCategoria(mesActivo)[categoria] || 0) - base);
+    return { tope: tope, gastado: gastado, pct: Math.round((gastado / tope) * 100) };
+  }
+
+  // Tarjeta de resultado cuando el asistente anota un gasto (se ve solo en esta
+  // sesión; al retomar una conversación vieja queda el texto con el "✅ …").
+  function chatTarjetaHTML(card, i, j) {
+    var cat = CAT_MAP[card.categoria];
+    var prog = progresoPresupuestoDatos(card.categoria);
+    var barra = '';
+    if (prog) {
+      var est = estadoPresupuesto(prog.gastado, prog.tope);
+      barra = '<div style="display:flex;flex-direction:column;gap:6px">' +
+        '<div class="rs" style="display:flex;justify-content:space-between"><span>Presupuesto de ' + escapeHtml(getCatNombre(card.categoria)) + '</span><span>' + prog.pct + '% usado</span></div>' +
+        '<div class="bar"><i style="width:' + Math.min(100, prog.pct) + '%;background:' + est.color + '"></i></div></div>';
+    }
+    return '<div class="card chat-card' + (card.deshecho ? ' deshecho' : '') + '"' + (card.deshecho ? ' style="opacity:.55"' : '') + '>' +
+      '<div class="row">' + tileCat(card.categoria) +
+      '<div class="grow"><div class="rs">' + escapeHtml(cat ? getCatNombre(card.categoria) : card.categoria) + '</div>' +
+      '<div class="rt">' + escapeHtml(card.nota || 'Gasto') + (card.deshecho ? ' · deshecho' : '') + '</div></div>' +
+      '<div style="font-size:17px;font-weight:800">' + fmt(card.monto) + '</div></div>' + barra + '</div>';
+  }
+
+  function chatBurbujaHTML(rol, texto, m, idx, idAnimado) {
+    if (rol === 'user') {
+      return '<div class="chat-msg chat-msg-user">' + linkifyEscaped(texto).replace(/\n/g, '<br>') + '</div>';
+    }
+    var tieneCards = m && m.cards && m.cards.length;
+    // Con tarjeta, el "✅ $ X en Categoría" textual sobra (la tarjeta ya lo dice)
+    var visible = tieneCards ? texto.replace(/\n\n✅ [^\n]*/, '') : texto;
+    var cuerpo = idAnimado
+      ? '<div class="chat-msg chat-msg-assistant" id="chatUltimaResp"></div>'
+      : '<div class="chat-msg chat-msg-assistant">' + linkifyEscaped(visible).replace(/\n/g, '<br>') + '</div>';
+    var tarjetas = tieneCards ? m.cards.map(function (c, j) { return chatTarjetaHTML(c, idx, j); }).join('') : '';
+    var hayDeshacer = tieneCards && m.cards.some(function (c) { return !c.deshecho && c.mvId; });
+    var acciones = '<div class="chat-actions">' +
+      '<button type="button" data-act="escuchar" data-i="' + idx + '" aria-label="Escuchar respuesta">' + ico('volume', 20) + '</button>' +
+      '<button type="button" data-act="copiar" data-i="' + idx + '" aria-label="Copiar respuesta">' + ico('copy', 20) + '</button>' +
+      (hayDeshacer ? '<button type="button" data-act="deshacer" data-i="' + idx + '" aria-label="Deshacer gasto">' + ico('undo', 20) + '</button>' : '') +
+      '</div>';
+    return '<div class="chat-line"><span class="mini"></span><div class="chat-col">' + cuerpo + tarjetas + acciones + '</div></div>';
   }
 
   function chatNombreUsuario() {
@@ -495,25 +663,52 @@
     box.classList.toggle('chat-vacio', !chatHistorial.length);
     if (!chatHistorial.length) {
       var nombre = chatNombreUsuario();
-      box.innerHTML = '<div class="chat-vacio-icon">✨</div>' +
+      box.innerHTML = '<div class="chat-vacio-icon"><span class="mini" style="width:56px;height:56px"></span></div>' +
         '<div class="chat-vacio-saludo">¿Qué necesitás' + (nombre ? ', ' + escapeHtml(nombre) : '') + '?</div>';
       return;
     }
     var ultimoIdx = chatHistorial.length - 1;
     var animar = animarUltimo && chatHistorial[ultimoIdx].rol === 'assistant';
     box.innerHTML = chatHistorial.map(function (m, i) {
-      if (animar && i === ultimoIdx) return '<div class="chat-msg chat-msg-assistant" id="chatUltimaResp"></div>';
-      return chatBurbujaHTML(m.rol, m.texto);
+      return chatBurbujaHTML(m.rol, m.texto, m, i, animar && i === ultimoIdx);
     }).join('') +
-      (chatEnviando ? '<div class="chat-msg chat-msg-assistant chat-typing">Escribiendo…</div>' : '');
+      (chatEnviando ? '<div class="chat-line"><span class="mini"></span><div class="chat-msg chat-msg-assistant chat-typing">Escribiendo…</div></div>' : '');
     chatScrollAbajo();
     if (animar) {
       var el = document.getElementById('chatUltimaResp');
-      if (el) animarTextoChat(el, chatHistorial[ultimoIdx].texto);
+      var ult = chatHistorial[ultimoIdx];
+      var textoAnim = (ult.cards && ult.cards.length) ? ult.texto.replace(/\n\n✅ [^\n]*/, '') : ult.texto;
+      if (el) animarTextoChat(el, textoAnim);
     }
   }
 
-  function abrirChat() {
+  // Acciones de cada respuesta: escuchar, copiar y deshacer un gasto recién anotado
+  function chatAccionMensaje(act, idx) {
+    var m = chatHistorial[idx];
+    if (!m) return;
+    if (act === 'escuchar') {
+      var limpio = (m.textoIA || m.texto || '');
+      if (chatVozExterna) chatVozExterna.hablar(limpio, null, true);
+      else if (window.speechSynthesis) { window.speechSynthesis.cancel(); var u = new SpeechSynthesisUtterance(limpio); u.lang = 'es-AR'; window.speechSynthesis.speak(u); }
+    } else if (act === 'copiar') {
+      var txt = (m.texto || '').replace(/\n\n✅ [^\n]*/, '');
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(function () { toast('Copiado'); }, function () { toast('No pude copiar'); });
+      else toast('Tu navegador no deja copiar acá');
+    } else if (act === 'deshacer') {
+      (m.cards || []).forEach(function (c) {
+        if (c.deshecho || !c.mvId) return;
+        c.deshecho = true;
+        var ix = chatYaRegistrados.indexOf(c.clave);
+        if (ix !== -1) chatYaRegistrados.splice(ix, 1); // si lo vuelve a pedir, se puede anotar de nuevo
+        eliminarMovimiento(c.mvId, c.mesKey);
+      });
+      renderChatMensajes();
+    }
+  }
+
+  // vista (opcional): 'voz' | 'chat'. asistente.js decide cuál mostrar si no se indica
+  // (voz si el navegador tiene dictado; si no, chat de texto).
+  function abrirChat(vista) {
     if (!modoCuenta || !miProyectoId) { toast('Iniciá sesión primero.'); return; }
     // Cada vez que se abre la burbuja arranca una conversación nueva — las
     // anteriores se retoman desde el ícono de historial, no automáticamente.
@@ -524,9 +719,13 @@
     if (panel) panel.classList.remove('modo-historial');
     document.getElementById('chatBack').classList.add('open');
     renderChatMensajes();
-    setTimeout(function () { var inp = document.getElementById('chatInput'); if (inp) inp.focus(); }, 150);
+    if (window.MFAsis) window.MFAsis.alAbrir(vista);
+    else if (panel) { panel.classList.add('on'); document.getElementById('chatBack').classList.add('modo-chat'); }
   }
-  function cerrarChat() { document.getElementById('chatBack').classList.remove('open'); }
+  function cerrarChat() {
+    document.getElementById('chatBack').classList.remove('open');
+    if (window.MFAsis) window.MFAsis.alCerrar();
+  }
 
   // alTerminar (opcional): se llama al final de todo el ciclo (con el texto
   // que dijo la IA, o null si falló) — lo usa el Modo Voz para saber cuándo
@@ -577,8 +776,14 @@
         estado.presupuestos[pres.categoria] = Math.round(Number(pres.monto));
         presupuestoTexto = '🎯 Presupuesto de ' + getCatNombre(pres.categoria) + ': ' + fmt(pres.monto) + ' este mes.';
       }
+      var tarjetas = [];
       registrados.forEach(function (it) {
         registrarCompra(it.categoria, it.monto, it.nota || null, null);
+        // el movimiento recién cargado queda al final de la lista del mes (para poder deshacerlo desde la tarjeta)
+        var movsMes = mesData().movimientos || [];
+        var mvNuevo = movsMes[movsMes.length - 1];
+        tarjetas.push({ categoria: it.categoria, monto: it.monto, nota: it.nota || null, mvId: mvNuevo ? mvNuevo.id : null, mesKey: mesActivo,
+          clave: it.categoria + '|' + it.monto + '|' + (it.nota || '') });
       });
       if (registrados.length || pres) { guardar(); actualizarCalculos(); }
       // Progreso contra presupuesto: una línea por cada categoría distinta que
@@ -597,15 +802,17 @@
       }
       if (presupuestoTexto) textoMostrado += '\n\n' + presupuestoTexto;
       if (progresoLineas.length) textoMostrado += '\n\n' + progresoLineas.join('\n');
-      chatHistorial.push({ rol: 'assistant', texto: textoMostrado, textoIA: textoIA });
+      // `cards` vive solo en memoria (chatPersistirLog no lo guarda): no cambia el modelo de datos
+      chatHistorial.push({ rol: 'assistant', texto: textoMostrado, textoIA: textoIA, cards: tarjetas.length ? tarjetas : undefined });
       chatPersistirLog();
       renderChatMensajes(true);
-      chatHablar(textoIA);
+      chatHablar(textoIA, function () { if (alTerminar) alTerminar(textoIA); });
     }).catch(function () {
       chatEnviando = false;
       chatHistorial.push({ rol: 'assistant', texto: 'No pude responder ahora, intentá de nuevo en un rato.' });
       chatPersistirLog();
       renderChatMensajes(true);
+      if (alTerminar) alTerminar(null);
     });
   }
 
@@ -1337,19 +1544,28 @@
     else if (vistaActual === 'analiticas') renderAnaliticas();
   }
 
-  // Marca qué destino está activo: los de la barra de abajo (Inicio/Gastos/
-  // Deudas/Historial) y el botón de Analíticas, que ahora vive aparte arriba
-  // (junto al selector de mes) en vez de ocupar un lugar en la barra.
+  // Marca qué pestaña de la barra de abajo está activa (en Ajustes no hay ninguna)
   function marcarNavActivo(pagina) {
-    document.querySelectorAll('.bottom-nav a').forEach(function (a) { a.classList.toggle('active', a.getAttribute('data-page') === pagina); });
-    var corner = document.getElementById('analiticasNavBtn');
-    if (corner) corner.classList.toggle('active', pagina === 'analiticas');
+    document.querySelectorAll('.nav a').forEach(function (a) {
+      var on = a.getAttribute('data-page') === pagina;
+      a.classList.toggle('on', on);
+      if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+    });
   }
 
   // Cambia entre las páginas completas de la app (no apiladas: solo una visible a la vez)
-  var PAGINAS = ['resumen', 'gastos', 'deudas', 'historial', 'analiticas'];
+  var PAGINAS = ['resumen', 'gastos', 'deudas', 'historial', 'analiticas', 'ajustes'];
+  var TITULOS_PAGINA = { resumen: 'Inicio', gastos: 'Gastos', deudas: 'Deudas', historial: 'Historial', analiticas: 'Análisis', ajustes: 'Ajustes' };
+  var paginaAntesDeAjustes = 'resumen';
   function mostrarPagina(nombre) {
+    if (nombre !== 'ajustes') paginaAntesDeAjustes = nombre;
     vistaActual = nombre;
+    var tit = document.getElementById('pageTitle'); if (tit) tit.textContent = TITULOS_PAGINA[nombre] || '';
+    // El selector de mes aplica a todo menos Historial (tiene su propio filtro) y Ajustes
+    var mnav = document.getElementById('mnav'); if (mnav) mnav.style.display = (nombre === 'historial' || nombre === 'ajustes') ? 'none' : '';
+    marcarNavActivo(nombre === 'ajustes' ? null : nombre);
+    var ajBtn = document.getElementById('ajustesBtn'); if (ajBtn) ajBtn.setAttribute('aria-pressed', nombre === 'ajustes' ? 'true' : 'false');
+    window.scrollTo(0, 0);
     PAGINAS.forEach(function (n) {
       var el = document.getElementById('vista' + n.charAt(0).toUpperCase() + n.slice(1));
       if (!el) return;
@@ -1364,6 +1580,7 @@
     });
     if (nombre === 'historial') renderHistorial();
     else if (nombre === 'analiticas') renderAnaliticas();
+    else if (nombre === 'ajustes') renderAjustes();
   }
 
   // Solo recalcula números y gráficos (sin re-dibujar listas: no pierde el foco al tipear)
@@ -1373,34 +1590,23 @@
     renderEvolucion(false);
     document.getElementById('gastosTotal').textContent = fmt(totalGastos(mesActivo));
     document.getElementById('ingresosTotal').textContent = fmt(totalIngresos(mesActivo));
-    // totales por categoría
+    // totales y barra por categoría
     var porCat = gastosPorCategoria(mesActivo);
+    var totalMes = totalGastos(mesActivo);
     document.querySelectorAll('.cat-group').forEach(function (el) {
       var cid = el.getAttribute('data-cat');
       var t = el.querySelector('.cat-total');
       if (t) t.textContent = fmt(porCat[cid] || 0);
+      actualizarBarraCategoria(el, cid, porCat[cid] || 0, totalMes);
     });
   }
 
   function renderKPIs(animate) {
-    var host = document.getElementById('kpis');
-    if (host.dataset.built !== '1') {
-      host.innerHTML =
-        kpiSkeleton('cyan', '💵', 'Ingresos', 'kpiIng', 'Total que entra este mes') +
-        kpiSkeleton('magenta', '🛒', 'Gastos + cuotas', 'kpiGas', '') +
-        kpiSkeleton('primary', '💳', 'Deuda total', 'kpiDeuda', '');
-      host.dataset.built = '1';
-    }
     updateKPIs(animate);
   }
 
-  function kpiSkeleton(accent, ic, top, id, sub) {
-    return '<div class="kpi accent-' + accent + '">' +
-      '<div class="k-top"><span class="k-ic">' + ic + '</span>' + top + '</div>' +
-      '<div class="k-val" id="' + id + 'Val" data-raw="0">$ 0</div>' +
-      '<div class="k-sub" id="' + id + 'Sub">' + sub + '</div></div>';
-  }
-
+  // Resumen del mes (hero de Inicio), totales de Gastos y totales de Deudas.
+  // Mismos números de siempre; solo cambia dónde y cómo se muestran.
   function updateKPIs(animate) {
     var ing = totalIngresos(mesActivo);
     var gas = totalGastos(mesActivo);
@@ -1409,17 +1615,18 @@
     var bal = ing - gas - pagadas;
     var pct = ing > 0 ? Math.round(((gas + pagadas) / ing) * 100) : 0;
 
-    countUp(document.getElementById('kpiIngVal'), ing, animate);
-    countUp(document.getElementById('kpiGasVal'), gas + pagadas, animate);
-    document.getElementById('kpiGasSub').textContent = fmt(gas) + ' gastos · ' + fmt(pagadas) + ' en cuotas pagadas';
-    countUp(document.getElementById('kpiDeudaVal'), totalDeuda(), animate);
-    document.getElementById('kpiDeudaSub').textContent = fmt(cuotasTotales) + ' por mes si pagás todas';
+    // Gastos: totales del mes
+    var gIng = document.getElementById('gIngTotal'); if (gIng) gIng.textContent = fmt(ing);
+    var gGas = document.getElementById('gGasTotal'); if (gGas) gGas.textContent = fmt(gas);
+    // Deudas: total adeudado y cuota mensual
+    var dTot = document.getElementById('deudaTotalVal'); if (dTot) dTot.textContent = fmt(totalDeuda());
+    var dMes = document.getElementById('deudaMesVal'); if (dMes) dMes.textContent = fmt(cuotasTotales);
 
     // Hero: balance del mes
     var pos = bal >= 0;
     document.getElementById('heroBalLabel').textContent = pos ? 'Te queda este mes' : 'Te pasaste este mes';
     var heroVal = document.getElementById('heroBalVal');
-    heroVal.style.color = pos ? 'var(--pos)' : 'var(--neg)';
+    heroVal.style.color = pos ? '' : 'var(--badt)';
     // en déficit mostramos el signo menos: -$ 37.907
     var fmtSigno = function (v) { return (pos ? '' : '-') + fmt(v); };
     if (saldoOculto) {
@@ -1429,11 +1636,21 @@
       countUp(heroVal, Math.abs(bal), animate, fmtSigno);
     }
     var heroEyeIcon = document.getElementById('heroEyeIcon');
-    if (heroEyeIcon) heroEyeIcon.textContent = saldoOculto ? 'visibility_off' : 'visibility';
-    document.getElementById('heroEyeBtn').title = saldoOculto ? 'Mostrar saldo' : 'Ocultar saldo';
-    document.getElementById('heroBalDelta').innerHTML =
-      '<span class="chip ' + (pos ? 'up' : 'down') + '">' + (pos ? '▲' : '▼') + ' ' + pct + '%</span>' +
-      '<span class="muted">' + (pos ? 'usado de tus ingresos' : 'gastaste más de lo que entró') + '</span>';
+    if (heroEyeIcon) heroEyeIcon.innerHTML = ico(saldoOculto ? 'eyeOff' : 'eye', 24);
+    var eyeBtn = document.getElementById('heroEyeBtn');
+    eyeBtn.title = saldoOculto ? 'Mostrar saldo' : 'Ocultar saldo';
+    eyeBtn.setAttribute('aria-label', eyeBtn.title);
+    // Barra de avance: cuánto de los ingresos ya se fue (gastos + cuotas pagadas)
+    var fill = document.getElementById('heroBarFill');
+    if (fill) {
+      fill.style.width = Math.min(100, pct) + '%';
+      fill.style.background = pct > 100 ? 'var(--bad)' : (pct >= 75 ? 'var(--warn)' : 'var(--accent)');
+    }
+    document.getElementById('heroBalDelta').innerHTML = ing > 0
+      ? '<span>Gastaste ' + (saldoOculto ? '$ ••••••' : fmt(gas + pagadas)) + ' de ' + (saldoOculto ? '$ ••••••' : fmt(ing)) + '</span><span>' + pct + '%</span>'
+      : '<span>Todavía no cargaste ingresos este mes</span><span></span>';
+    var desg = document.getElementById('heroDesglose');
+    if (desg) desg.textContent = saldoOculto ? '' : (fmt(gas) + ' en gastos · ' + fmt(pagadas) + ' en cuotas pagadas · deuda total ' + fmt(totalDeuda()));
   }
 
   // Anima un número de su valor anterior al nuevo (efecto "contador")
@@ -1467,34 +1684,36 @@
 
     var body = document.getElementById('donutBody');
     if (total === 0) {
-      body.innerHTML = '<p class="empty-hint">Todavía no cargaste gastos este mes. Agregalos abajo 👇</p>';
+      body.innerHTML = '<p class="empty-hint">Todavía no cargaste gastos este mes. Agregalos desde el botón “+”.</p>';
       return;
     }
 
-    var R = 74, C = 2 * Math.PI * R, off = 0, GAP = 1.5;
+    var R = 52, C = 2 * Math.PI * R, off = 0, GAP = 3;
     var segs = '';
     data.forEach(function (d) {
       var frac = d.v / total;
-      var len = Math.max(0.1, frac * C - GAP);
-      segs += '<circle cx="95" cy="95" r="' + R + '" fill="none" stroke="' + d.c.color +
-        '" stroke-width="18" stroke-linecap="round" stroke-dasharray="' + len + ' ' + (C - len) +
-        '" stroke-dashoffset="' + (-off) + '" transform="rotate(-90 95 95)"></circle>';
+      var len = Math.max(0.1, frac * C - (data.length > 1 ? GAP : 0));
+      segs += '<circle cx="60" cy="60" r="' + R + '" style="stroke:' + d.c.color + '" stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2) +
+        '" stroke-dashoffset="' + (-off).toFixed(2) + '"></circle>';
       off += frac * C;
     });
-    var svg = '<svg width="180" height="180" viewBox="0 0 190 190">' + segs +
-      '<text x="95" y="88" text-anchor="middle" font-size="11" style="fill:var(--text-mute);font-family:var(--mono);letter-spacing:1px">TOTAL</text>' +
-      '<text x="95" y="110" text-anchor="middle" font-size="18" font-weight="700" style="fill:var(--text);font-family:var(--mono)">' + fmtCorto(total) + '</text>' +
-      '</svg>';
+    var svg = '<div class="donut-box"><svg viewBox="0 0 120 120" width="140" height="140" role="img" aria-label="Gastos por categoría: ' + escapeAttr(fmt(total)) + ' en total">' +
+      '<circle cx="60" cy="60" r="52" fill="none" style="stroke:var(--track)" stroke-width="14"/>' +
+      '<g transform="rotate(-90 60 60)" fill="none" stroke-width="14">' + segs + '</g></svg>' +
+      '<div class="donut-center"><b>' + (saldoOculto ? '$ ••••' : fmtCorto(total)) + '</b><span class="rs">gastado</span></div></div>';
 
     var legend = '<div class="legend">';
-    data.forEach(function (d, i) {
+    data.slice(0, 6).forEach(function (d, i) {
       var pct = Math.round((d.v / total) * 100);
       legend += '<div class="legend-row" style="animation-delay:' + (0.15 + i * 0.05).toFixed(2) + 's">' +
         '<span class="legend-dot" style="background:' + d.c.color + '"></span>' +
-        '<span class="legend-name">' + d.c.icon + ' ' + escapeHtml(getCatNombre(d.c.id)) + '</span>' +
-        '<span class="legend-val">' + fmt(d.v) + '</span>' +
+        '<span class="legend-name">' + escapeHtml(getCatNombre(d.c.id)) + '</span>' +
         '<span class="legend-pct">' + pct + '%</span></div>';
     });
+    if (data.length > 6) {
+      var resto = data.slice(6).reduce(function (s, d) { return s + d.v; }, 0);
+      legend += '<div class="legend-row"><span class="legend-dot" style="background:var(--muted)"></span><span class="legend-name">Otras (' + (data.length - 6) + ')</span><span class="legend-pct">' + Math.round((resto / total) * 100) + '%</span></div>';
+    }
     legend += '</div>';
 
     body.innerHTML = '<div class="donut-wrap' + (animate ? ' donut-in' : '') + '">' + svg + legend + '</div>';
@@ -1570,11 +1789,31 @@
   }
 
   // ---- Gráfico de evolución (Chart.js: ingresos verde, gastos rojo) ----
+  // Colores y fuente de los gráficos, tomados del tema activo (oscuro/claro)
+  function conAlfa(color, a) {
+    color = (color || '').trim();
+    if (color.charAt(0) !== '#') return color;
+    if (color.length === 4) color = '#' + color[1] + color[1] + color[2] + color[2] + color[3] + color[3];
+    var r = parseInt(color.slice(1, 3), 16), g = parseInt(color.slice(3, 5), 16), b = parseInt(color.slice(5, 7), 16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+  }
+  function chartTema() {
+    var acc = colorCss('--accent', '#4DE0A0'), gas = colorCss('--c5', '#A78BFA');
+    var T = {
+      ing: acc, gas: gas, gasSuave: conAlfa(gas, 0.14), accSuave: conAlfa(acc, 0.45),
+      pico: colorCss('--warn', '#FBBF24'), muted: colorCss('--muted', '#8DB3A0'), text: colorCss('--text', '#EAF7F0'),
+      fuente: "'Manrope', system-ui, sans-serif"
+    };
+    if (typeof Chart !== 'undefined') { Chart.defaults.font.family = T.fuente; Chart.defaults.color = T.muted; }
+    return T;
+  }
+
   var evoChartInstance = null;
   function renderEvolucion(animate) {
     var canvas = document.getElementById('evoChart');
     if (!canvas || typeof Chart === 'undefined') return;
     if (evoChartInstance) { evoChartInstance.destroy(); evoChartInstance = null; }
+    var T = chartTema();
 
     if (evoModo === 'diario') {
       var sd = serieDiariaDelMes();
@@ -1583,7 +1822,7 @@
       for (var di = 1; di <= sd.diasEnMes; di++) {
         labelsD.push(String(di));
         dataD.push(sd.totalesPorDia[di]);
-        coloresD.push(di === sd.diaPico && sd.totalesPorDia[di] > 0 ? '#ba1a1a' : '#f0b4b4');
+        coloresD.push(di === sd.diaPico && sd.totalesPorDia[di] > 0 ? T.pico : T.accSuave);
       }
       evoChartInstance = new Chart(canvas, {
         type: 'bar',
@@ -1599,7 +1838,7 @@
             } },
           },
           scales: {
-            x: { grid: { display: false }, ticks: { font: { family: "'JetBrains Mono',monospace", size: 9 }, maxRotation: 0, autoSkipPadding: 6 } },
+            x: { grid: { display: false }, ticks: { font: { family: "'Manrope',sans-serif", size: 10, weight: 600 }, maxRotation: 0, autoSkipPadding: 6 } },
             y: { display: false },
           },
         },
@@ -1616,9 +1855,9 @@
           labels: semanas.map(function (s) { return s.label; }),
           datasets: [{
             label: 'Gastos', data: semanas.map(function (s) { return s.gas; }),
-            borderColor: '#ba1a1a', backgroundColor: 'rgba(186,26,26,.15)', borderWidth: 2.5,
+            borderColor: T.gas, backgroundColor: T.gasSuave, borderWidth: 2.5,
             pointRadius: semanas.map(function (s) { return s.active ? 6 : 4; }), pointHoverRadius: 7,
-            pointBackgroundColor: '#ba1a1a', tension: 0.25, fill: true,
+            pointBackgroundColor: T.gas, tension: 0.25, fill: true,
           }],
         },
         options: {
@@ -1632,7 +1871,7 @@
             } },
           },
           scales: {
-            x: { grid: { display: false }, ticks: { font: { family: "'JetBrains Mono',monospace", size: 10 } } },
+            x: { grid: { display: false }, ticks: { font: { family: "'Manrope',sans-serif", size: 10, weight: 600 } } },
             y: { display: false },
           },
         },
@@ -1652,13 +1891,13 @@
         datasets: [
           {
             label: 'Ingresos', data: serie.map(function (p) { return p.ing; }),
-            borderColor: '#16a34a', backgroundColor: 'transparent', borderWidth: 2.5,
-            pointRadius: radios, pointHoverRadius: 7, pointBackgroundColor: '#16a34a', tension: 0.25,
+            borderColor: T.ing, backgroundColor: 'transparent', borderWidth: 2.5,
+            pointRadius: radios, pointHoverRadius: 7, pointBackgroundColor: T.ing, tension: 0.25,
           },
           {
             label: 'Gastos', data: serie.map(function (p) { return p.gas; }),
-            borderColor: '#ba1a1a', backgroundColor: 'rgba(186,26,26,.12)', borderWidth: 2.5,
-            pointRadius: radios, pointHoverRadius: 7, pointBackgroundColor: '#ba1a1a', tension: 0.25, fill: true,
+            borderColor: T.gas, backgroundColor: T.gasSuave, borderWidth: 2.5,
+            pointRadius: radios, pointHoverRadius: 7, pointBackgroundColor: T.gas, tension: 0.25, fill: true,
           },
         ],
       },
@@ -1667,11 +1906,11 @@
         animation: animate ? { duration: 500 } : false,
         interaction: { mode: 'index', intersect: false },
         plugins: {
-          legend: { position: 'top', align: 'start', labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, font: { family: "'Inter',sans-serif", size: 12 } } },
+          legend: { position: 'top', align: 'start', labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, font: { family: "'Manrope',sans-serif", size: 12, weight: 600 } } },
           tooltip: { callbacks: { label: function (ctx) { return ' ' + ctx.dataset.label + ': ' + fmt(ctx.parsed.y); } } },
         },
         scales: {
-          x: { grid: { display: false }, ticks: { font: { family: "'JetBrains Mono',monospace", size: 10 } } },
+          x: { grid: { display: false }, ticks: { font: { family: "'Manrope',sans-serif", size: 10, weight: 600 } } },
           y: { display: false },
         },
         onClick: function (evt, elements) {
@@ -1684,27 +1923,50 @@
   }
 
   // ---- Lista de gastos por categoría ----
+  // Barra de cada categoría: contra su presupuesto si tiene uno (con color de estado),
+  // y si no, qué parte del total del mes representa.
+  function datosBarraCategoria(cid, gastado, totalMes) {
+    var tope = Number((estado.presupuestos || {})[cid]) || 0;
+    if (tope > 0) {
+      var est = estadoPresupuesto(gastado, tope);
+      var p = Math.round((gastado / tope) * 100);
+      return { ancho: Math.min(100, p), color: est.color, texto: p + '%', titulo: p + '% de tu presupuesto de ' + fmt(tope) };
+    }
+    var s = totalMes > 0 ? Math.round((gastado / totalMes) * 100) : 0;
+    return { ancho: s, color: (CAT_MAP[cid] || {}).color || 'var(--accent)', texto: s + '%', titulo: s + '% de los gastos del mes' };
+  }
+  function actualizarBarraCategoria(el, cid, gastado, totalMes) {
+    var d = datosBarraCategoria(cid, gastado, totalMes);
+    var bar = el.querySelector('.cat-bar'); if (bar) { bar.style.width = d.ancho + '%'; bar.style.background = d.color; }
+    var pct = el.querySelector('.cat-pct'); if (pct) { pct.textContent = d.texto; pct.title = d.titulo; }
+  }
+
   function renderGastos() {
     var m = mesData();
     document.getElementById('gastosTotal').textContent = fmt(totalGastos(mesActivo));
     var porCat = gastosPorCategoria(mesActivo);
+    var totalMes = totalGastos(mesActivo);
     var body = document.getElementById('gastosBody');
-    var html = '<div class="tip">💡 En el monto podés escribir una cuenta y se calcula sola. Ej: escribí <b>200+120</b> y queda <b>320</b>.</div>';
+    var html = '<div class="tip">En el monto podés escribir una cuenta y se calcula sola. Ej: escribí <b>200+120</b> y queda <b>320</b>.</div>';
     CATEGORIAS.forEach(function (c) {
       var items = m.gastos.filter(function (g) { return g.categoria === c.id; });
-      var colapsada = colapsadas[c.id] ? ' collapsed' : '';
-      html += '<div class="cat-group' + colapsada + '" data-cat="' + c.id + '">';
-      html += '<div class="cat-head" data-toggle="' + c.id + '">' +
-        '<span class="cat-ic">' + c.icon + '</span>' +
-        '<span class="cat-name-wrap"><span class="cat-name">' + escapeHtml(getCatNombre(c.id)) + '</span>' +
-        '<button class="cat-edit" data-editcat="' + c.id + '" title="Cambiar nombre">✎</button></span>' +
-        '<span class="cat-total">' + fmt(porCat[c.id] || 0) + '</span>' +
-        '<span class="cat-caret">▾</span></div>';
+      // Las categorías vacías arrancan cerradas para que la lista no sea eterna
+      var estaCerrada = colapsadas[c.id] === undefined ? items.length === 0 : colapsadas[c.id];
+      var colapsada = estaCerrada ? ' collapsed' : '';
+      var gastado = porCat[c.id] || 0;
+      var bd = datosBarraCategoria(c.id, gastado, totalMes);
+      html += '<div class="card cat-group' + colapsada + '" data-cat="' + c.id + '">';
+      html += '<div class="cat-head" data-toggle="' + c.id + '">' + tileCat(c.id) +
+        '<div class="cat-mid"><span class="cat-name-wrap"><span class="cat-name">' + escapeHtml(getCatNombre(c.id)) + '</span>' +
+        '<button class="cat-edit" data-editcat="' + c.id + '" title="Cambiar nombre" aria-label="Cambiar nombre de la categoría">' + ico('pencil', 15) + '</button></span>' +
+        '<div class="bar" style="height:6px"><i class="cat-bar" style="width:' + bd.ancho + '%;background:' + bd.color + '"></i></div></div>' +
+        '<div class="cat-right"><div class="amt cat-total">' + fmt(gastado) + '</div><div class="rs cat-pct" title="' + escapeAttr(bd.titulo) + '">' + bd.texto + '</div></div>' +
+        '<span class="cat-caret">' + ico('chevDown', 18, 2.4) + '</span></div>';
       html += '<div class="cat-items">';
       items.forEach(function (g) {
         html += itemRowHTML(g.id, g.nombre, g.monto) + metaGastoHTML(g);
       });
-      html += '<button class="add-line" data-addgasto="' + c.id + '">＋ Agregar en ' + escapeHtml(getCatNombre(c.id)) + '</button>';
+      html += '<button class="add-line" data-addgasto="' + c.id + '">' + ico('plus', 16, 2.6) + ' Agregar en ' + escapeHtml(getCatNombre(c.id)) + '</button>';
       html += '</div></div>';
     });
     body.innerHTML = html;
@@ -1714,8 +1976,7 @@
       el.addEventListener('click', function (ev) {
         if (ev.target.closest('input, button')) return;
         var cid = el.getAttribute('data-toggle');
-        colapsadas[cid] = !colapsadas[cid];
-        el.parentElement.classList.toggle('collapsed');
+        colapsadas[cid] = el.parentElement.classList.toggle('collapsed');
       });
     });
     // renombrar categoría
@@ -1771,9 +2032,9 @@
     var m = mesData();
     document.getElementById('ingresosTotal').textContent = fmt(totalIngresos(mesActivo));
     var body = document.getElementById('ingresosBody');
-    var html = '<div class="cat-items" style="padding-left:10px">';
+    var html = '<div class="ing-list">';
     m.ingresos.forEach(function (i) { html += itemRowHTML(i.id, i.nombre, i.monto); });
-    html += '<button class="add-line" data-addingreso="1">＋ Agregar ingreso</button></div>';
+    html += '<button class="add-line" data-addingreso="1">' + ico('plus', 16, 2.6) + ' Agregar ingreso</button></div>';
     body.innerHTML = html;
 
     body.querySelector('[data-addingreso]').addEventListener('click', agregarIngresoRapido);
@@ -1796,7 +2057,7 @@
       '<input class="i-name" type="text" placeholder="Concepto…" value="' + escapeAttr(nombre) + '">' +
       '<div class="i-amount-box"><span class="cur">$</span>' +
       '<input class="i-amount" type="text" inputmode="text" title="Podés escribir una cuenta, ej: 200+120" value="' + (monto ? formatInput(monto) : '') + '" placeholder="0"></div>' +
-      '<button class="del" title="Eliminar">✕</button></div>';
+      '<button class="del" title="Eliminar" aria-label="Eliminar">' + ico('x', 18, 2.2) + '</button></div>';
   }
 
   // Fecha corta "Lun 22/06" a partir de un ISO YYYY-MM-DD
@@ -1806,6 +2067,20 @@
     var d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2]));
     var dias = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
     return dias[d.getUTCDay()] + ' ' + p[2] + '/' + p[1];
+  }
+  // "Hoy · vie 9 oct", "Ayer · jue 8 oct" o "mié 7 oct" a partir de un ISO YYYY-MM-DD
+  function etiquetaDia(iso) {
+    if (!iso) return 'Sin fecha';
+    var p = iso.split('-'); if (p.length < 3) return iso;
+    var d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2]));
+    var dias = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+    var base = dias[d.getUTCDay()] + ' ' + (+p[2]) + ' ' + MESES_NOMBRE[+p[1] - 1].slice(0, 3).toLowerCase();
+    var hoy = isoHoyApp();
+    var ay = new Date(); ay.setDate(ay.getDate() - 1);
+    var ayer = ay.getFullYear() + '-' + String(ay.getMonth() + 1).padStart(2, '0') + '-' + String(ay.getDate()).padStart(2, '0');
+    if (iso === hoy) return 'Hoy · ' + base;
+    if (iso === ayer) return 'Ayer · ' + base;
+    return base.charAt(0).toUpperCase() + base.slice(1);
   }
   // Subtítulo con el historial del gasto (fecha, nota, productos) — solo si viene del bot
   function metaGastoHTML(g) {
@@ -1874,48 +2149,44 @@
   // pago abajo) — una tabla de columnas no entra bien en una pantalla angosta.
   function renderDeudas() {
     var body = document.getElementById('deudasBody');
+    renderDeudasPendientes();
     if (!estado.deudas.length) {
-      body.innerHTML = '<p class="empty-hint">No tenés deudas cargadas. 🎉 Si tenés cuotas o préstamos, agregalos con el botón de arriba.</p>';
+      body.innerHTML = '<p class="empty-hint">No tenés deudas cargadas. Si tenés cuotas o préstamos, agregalos con el botón “Agregar”.</p>';
       return;
     }
     var html = '';
-    var totSaldo = 0, totCuota = 0;
-    estado.deudas.forEach(function (d) {
-      totSaldo += Number(d.saldo) || 0;
-      if (d.activa !== false) totCuota += Number(d.cuotaMensual) || 0;
-      var pill = '', prog = '';
-      if (d.cuotaActual && d.cuotaTotal) {
-        var terminada = d.cuotaActual >= d.cuotaTotal;
-        pill = '<span class="cuota-pill' + (terminada ? ' done' : '') + '">' + d.cuotaActual + '/' + d.cuotaTotal + '</span>';
-        var p = Math.min(100, Math.round((d.cuotaActual / d.cuotaTotal) * 100));
-        prog = '<div class="mini-progress"><span style="width:' + p + '%"></span></div>';
-      }
+    var tonos = [4, 5, 6, 3];
+    estado.deudas.forEach(function (d, idx) {
+      var cn = tonos[idx % tonos.length];
       var finalizada = d.cuotaActual && d.cuotaTotal && d.cuotaActual >= d.cuotaTotal;
       var pagada = deudaPagadaEnMes(d.id, mesActivo);
+      var sub = (d.cuotaActual && d.cuotaTotal ? 'Cuota ' + d.cuotaActual + ' de ' + d.cuotaTotal + ' · ' : '') + fmt(d.cuotaMensual) + '/mes';
+      var badge = finalizada ? '<span class="badge b-ok">Saldada</span>'
+        : (pagada ? '<span class="badge b-ok">Pagada este mes</span>' : '<span class="badge b-warn">Pendiente</span>');
+      var prog = '';
+      if (d.cuotaActual && d.cuotaTotal) {
+        var p = Math.min(100, Math.round((d.cuotaActual / d.cuotaTotal) * 100));
+        var restan = Math.max(0, d.cuotaTotal - d.cuotaActual);
+        prog = '<div style="display:flex;flex-direction:column;gap:6px"><div class="bar"><i style="width:' + p + '%;background:var(--c' + cn + ')"></i></div>' +
+          '<div style="display:flex;justify-content:space-between" class="rs"><span>' + p + '% pagado</span><span>' + (restan === 0 ? 'Sin cuotas pendientes' : 'Restan ' + restan + (restan === 1 ? ' cuota' : ' cuotas')) + '</span></div></div>';
+      }
       var accion = pagada
-        ? '<span class="pagado-chip">✓ Pagado</span><button class="revert-btn" data-revertir="' + d.id + '" title="Revertir pago">↩ Revertir</button>'
+        ? '<button class="revert-btn" data-revertir="' + d.id + '" title="Revertir pago">' + ico('undo', 16) + ' Revertir</button>'
         : '<button class="pay-btn" data-pagar="' + d.id + '"' + (finalizada ? ' disabled' : '') + '>Registrar pago</button>';
-      html += '<div class="deuda-card' + (pagada ? ' pagada' : '') + '" data-id="' + d.id + '">' +
-        '<div class="deuda-card-top">' +
-          '<div class="deuda-card-title"><span class="d-name">' + escapeHtml(d.nombre) + '</span>' + pill + '</div>' +
-          '<div class="deuda-card-icons">' +
-            '<button class="d-edit" data-editdeuda="' + d.id + '" title="Editar">✎</button>' +
-            '<button class="del" data-deldeuda="' + d.id + '" title="Eliminar">✕</button>' +
-          '</div>' +
-        '</div>' +
+      html += '<div class="card deuda-card' + (pagada ? ' pagada' : '') + '" data-id="' + d.id + '">' +
+        '<div class="row"><span class="tile ct' + cn + '">' + ico('card', 22) + '</span>' +
+          '<div class="grow"><div class="d-name">' + escapeHtml(d.nombre) + '</div><div class="rs">' + sub + '</div></div>' +
+          '<div class="tr"><div class="amt">' + fmt(d.saldo) + '</div>' + badge + '</div></div>' +
         prog +
-        '<div class="deuda-card-bottom">' +
-          '<div class="deuda-card-nums">' +
-            '<span class="deuda-saldo">' + fmt(d.saldo) + '</span>' +
-            '<span class="deuda-permes">' + fmt(d.cuotaMensual) + '<small>/mes</small></span>' +
+        '<div class="deuda-bottom">' +
+          '<div class="d-actions">' +
+            '<button class="d-edit" data-editdeuda="' + d.id + '" title="Editar" aria-label="Editar deuda">' + ico('pencil', 17) + '</button>' +
+            '<button class="del" data-deldeuda="' + d.id + '" title="Eliminar" aria-label="Eliminar deuda">' + ico('trash', 17) + '</button>' +
           '</div>' +
-          '<div class="deuda-card-accion">' + accion + '</div>' +
+          '<div class="deuda-accion">' + accion + '</div>' +
         '</div>' +
       '</div>';
     });
-    html += '<div class="deuda-total-row"><span>Total</span>' +
-      '<span class="deuda-saldo">' + fmt(totSaldo) + '</span>' +
-      '<span class="deuda-permes">' + fmt(totCuota) + '<small>/mes</small></span></div>';
     body.innerHTML = html;
 
     body.querySelectorAll('[data-pagar]').forEach(function (b) {
@@ -1937,6 +2208,21 @@
         });
       });
     });
+  }
+
+  // Lista simple de las cuotas del mes con la marca de pagada / pendiente
+  function renderDeudasPendientes() {
+    var body = document.getElementById('deudasPendBody');
+    if (!body) return;
+    var activas = estado.deudas.filter(function (d) { return d.activa !== false; });
+    if (!activas.length) { body.innerHTML = '<p class="empty-hint" style="padding:12px 0">No hay cuotas activas este mes.</p>'; return; }
+    body.innerHTML = activas.map(function (d, i) {
+      var pagada = deudaPagadaEnMes(d.id, mesActivo);
+      var cuotaTxt = d.cuotaActual && d.cuotaTotal ? 'Cuota ' + d.cuotaActual + ' de ' + d.cuotaTotal : 'Cuota mensual';
+      return (i ? '<hr class="sep">' : '') + '<div class="row pend-row"><div class="grow"><div class="rt">' + escapeHtml(d.nombre) + '</div><div class="rs">' + cuotaTxt + '</div></div>' +
+        '<div class="amt">' + fmt(d.cuotaMensual) + '</div>' +
+        '<span class="radio' + (pagada ? ' on' : '') + '" role="img" aria-label="' + (pagada ? 'Pagada' : 'Pendiente') + '">' + (pagada ? ico('check', 14, 3.4) : '') + '</span></div>';
+    }).join('');
   }
 
   function registrarPago(id) {
@@ -2032,24 +2318,37 @@
       body.innerHTML = '<p class="empty-hint">No hay movimientos que coincidan. Cargá una compra desde <b>＋ Agregar gasto</b> o desde el bot de Telegram y aparecen acá 📲</p>';
       return;
     }
-    var html = '<table class="hist-table"><tbody>';
-    lista.forEach(function (r) {
+    function filaMovimientoHTML(r, conFecha) {
       var mv = r.mv;
-      var c = CAT_MAP[mv.categoria] || { icon: '•', nombre: mv.categoria };
       var desc = mv.fila || mv.nota || (mv.items && mv.items.length ? mv.items.map(function (i) { return i.nombre; }).join(', ') : 'Compra');
       var sub = [];
       if (mv.nota && mv.nota !== desc) sub.push(escapeHtml(mv.nota));
       if (mv.items && mv.items.length > 1) sub.push(escapeHtml(mv.items.map(function (i) { return i.nombre; }).join(' · ')));
       var detItems = sub.length ? '<span class="h-items">' + sub.join(' — ') + '</span>' : '';
-      html += '<tr class="hist-row" data-mv="' + mv.id + '" data-mes="' + r.mesKey + '" title="Tocá para editar">' +
-        '<td class="h-fecha">' + fechaCortaApp(mv.fecha) + '</td>' +
-        '<td class="h-cat" title="' + escapeAttr(getCatNombre(mv.categoria)) + '"><span class="h-ic">' + c.icon + '</span></td>' +
-        '<td class="h-desc"><b>' + escapeHtml(desc) + '</b>' + detItems + '</td>' +
-        '<td class="h-monto num">' + fmt(mv.monto) + '</td>' +
-        '<td class="h-del"><button class="del" data-delmov="' + mv.id + '" data-delmes="' + r.mesKey + '" title="Eliminar del historial">✕</button></td>' +
-        '</tr>';
-    });
-    html += '</tbody></table>';
+      var fechaTxt = conFecha ? (fechaCortaApp(mv.fecha) + ' · ') : '';
+      return '<div class="hist-row" data-mv="' + mv.id + '" data-mes="' + r.mesKey + '" title="Tocá para editar" role="button" tabindex="0">' +
+        tileCat(mv.categoria) +
+        '<div class="h-desc"><div class="rt">' + escapeHtml(desc) + '</div><div class="rs">' + fechaTxt + escapeHtml(getCatNombre(mv.categoria)) + '</div>' + detItems + '</div>' +
+        '<div class="amt">- ' + fmt(mv.monto) + '</div>' +
+        '<button class="del" data-delmov="' + mv.id + '" data-delmes="' + r.mesKey + '" title="Eliminar del historial" aria-label="Eliminar movimiento">' + ico('trash', 17) + '</button></div>';
+    }
+    var html = '';
+    if (orden === 'reciente' || orden === 'lejana') {
+      // Agrupado por día, con el total de cada día
+      var grupos = [], porFecha = {};
+      lista.forEach(function (r) {
+        var f = r.mv.fecha || '';
+        if (!porFecha[f]) { porFecha[f] = { fecha: f, filas: [], total: 0 }; grupos.push(porFecha[f]); }
+        porFecha[f].filas.push(r);
+        porFecha[f].total += Number(r.mv.monto) || 0;
+      });
+      grupos.forEach(function (g) {
+        html += '<div class="dia-grp"><div class="dia-head sub"><span>' + etiquetaDia(g.fecha) + '</span><span>' + fmt(g.total) + '</span></div>' +
+          '<div class="card hist-list">' + g.filas.map(function (r) { return filaMovimientoHTML(r, false); }).join('') + '</div></div>';
+      });
+    } else {
+      html = '<div class="card hist-list">' + lista.map(function (r) { return filaMovimientoHTML(r, true); }).join('') + '</div>';
+    }
     body.innerHTML = html;
     body.querySelectorAll('[data-delmov]').forEach(function (b) {
       b.addEventListener('click', function (e) {
@@ -2150,6 +2449,7 @@
   //  Página de Analíticas (flujo de caja, presupuestos, simulador)
   // ============================================================
   function renderAnaliticas() {
+    renderAnaKpis();
     renderFlujoCaja();
     renderGastoDias();
     renderPresupuestos();
@@ -2158,6 +2458,21 @@
     renderRecurrentes();
     renderEficiencia();
     renderPendientes();
+  }
+
+  // Los dos números clave de arriba de Análisis: lo que te queda y el gasto promedio por día
+  function renderAnaKpis() {
+    var ing = totalIngresos(mesActivo), bal = balanceMes(mesActivo), gas = totalGastos(mesActivo);
+    var partes = mesActivo.split('-');
+    var diasMes = new Date(+partes[0], +partes[1], 0).getDate();
+    var esActual = mesActivo === mesActualKey();
+    var dias = esActual ? Math.max(1, new Date().getDate()) : diasMes;
+    var elBal = document.getElementById('anaBal'); if (!elBal) return;
+    elBal.textContent = (bal < 0 ? '-' : '') + fmt(Math.abs(bal));
+    elBal.style.color = bal >= 0 ? 'var(--okt)' : 'var(--badt)';
+    document.getElementById('anaBalSub').textContent = ing > 0 ? Math.round((bal / ing) * 100) + '% del ingreso' : 'Sin ingresos cargados';
+    document.getElementById('anaProm').textContent = fmt(gas / dias);
+    document.getElementById('anaPromSub').textContent = 'en ' + dias + (dias === 1 ? ' día' : ' días');
   }
 
   // Gastos que se repiten mes a mes (mismo nombre + monto parecido, sin IA).
@@ -2187,9 +2502,11 @@
       body.innerHTML = '<p class="empty-hint">Todavía no hay suficiente historial para detectar recurrentes (hace falta al menos 2 meses seguidos).</p>';
       return;
     }
-    body.innerHTML = lista.map(function (g) {
-      return '<div class="rec-row"><span class="rec-nombre">' + escapeHtml(g.nombre) + '</span>' +
-        '<span class="rec-monto">' + fmt(g.monto) + '</span></div>';
+    var totalRec = lista.reduce(function (s, g) { return s + (Number(g.monto) || 0); }, 0);
+    body.innerHTML = '<div class="sub" style="padding-bottom:6px">' + fmt(totalRec) + ' por mes</div>' + lista.map(function (g, i) {
+      return (i ? '<hr class="sep">' : '') + '<div class="row" style="padding:10px 0">' + tileCat(g.categoria) +
+        '<div class="grow"><div class="rt">' + escapeHtml(g.nombre) + '</div><div class="rs">Se repite cada mes</div></div>' +
+        '<div class="amt">' + fmt(g.monto) + '</div></div>';
     }).join('');
   }
 
@@ -2219,9 +2536,10 @@
 
   function renderEficiencia() {
     var score = calcularPuntajeEficiencia();
-    var color = score >= 7 ? 'var(--pos)' : (score >= 4.5 ? 'var(--amber)' : 'var(--neg)');
+    var color = score >= 7 ? 'var(--okt)' : (score >= 4.5 ? 'var(--warnt)' : 'var(--badt)');
+    var cn = score >= 7 ? 1 : (score >= 4.5 ? 6 : 7);
     document.getElementById('eficienciaBody').innerHTML =
-      '<div class="eficiencia-ic">📈</div>' +
+      '<span class="tile ct' + cn + '"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8M15 7h6v6"/></svg></span>' +
       '<div class="eficiencia-txt"><p>Puntaje de eficiencia</p>' +
       '<div class="eficiencia-val" style="color:' + color + '">' + score.toFixed(1) + '<span>/10</span></div></div>';
   }
@@ -2263,6 +2581,7 @@
     if (!canvas || typeof Chart === 'undefined') return;
     var keys = mesesOrdenados().slice(-8);
     if (flujoChartInstance) { flujoChartInstance.destroy(); flujoChartInstance = null; }
+    var T = chartTema();
     if (!keys.length) { document.getElementById('flujoBadge').textContent = ''; return; }
 
     var ingresos = keys.map(function (k) { return totalIngresos(k); });
@@ -2275,18 +2594,18 @@
       data: {
         labels: keys.map(function (k) { return mesCortoConAnio(k); }),
         datasets: [
-          { label: 'Ingresos', data: ingresos, backgroundColor: '#16a34a', borderRadius: 4, maxBarThickness: 22 },
-          { label: 'Gastos', data: gastos, backgroundColor: '#ba1a1a', borderRadius: 4, maxBarThickness: 22 },
+          { label: 'Ingresos', data: ingresos, backgroundColor: T.ing, borderRadius: 6, maxBarThickness: 22 },
+          { label: 'Gastos', data: gastos, backgroundColor: T.gas, borderRadius: 6, maxBarThickness: 22 },
         ],
       },
       options: {
         responsive: true, maintainAspectRatio: false,
         plugins: {
-          legend: { position: 'top', align: 'start', labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, font: { family: "'Inter',sans-serif", size: 12 } } },
+          legend: { position: 'top', align: 'start', labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, font: { family: "'Manrope',sans-serif", size: 12, weight: 600 } } },
           tooltip: { callbacks: { label: function (ctx) { return ' ' + ctx.dataset.label + ': ' + fmt(ctx.parsed.y); } } },
         },
         scales: {
-          x: { grid: { display: false }, ticks: { font: { family: "'JetBrains Mono',monospace", size: 10 } } },
+          x: { grid: { display: false }, ticks: { font: { family: "'Manrope',sans-serif", size: 10, weight: 600 } } },
           y: { display: false },
         },
         onClick: function (evt, elements) {
@@ -2305,6 +2624,7 @@
     if (!canvas || typeof Chart === 'undefined') return;
     document.getElementById('gastoDiasMes').textContent = mesKeyLabel(mesActivo);
     if (gastoDiasChartInstance) { gastoDiasChartInstance.destroy(); gastoDiasChartInstance = null; }
+    var T = chartTema();
 
     var resumenEl = document.getElementById('gastoDiasResumen');
     var s = serieDiariaDelMes();
@@ -2317,7 +2637,7 @@
     for (var i = 1; i <= s.diasEnMes; i++) {
       labels.push(String(i));
       data.push(s.totalesPorDia[i]);
-      colores.push(i === s.diaPico && s.totalesPorDia[i] > 0 ? '#ba1a1a' : '#f0b4b4');
+      colores.push(i === s.diaPico && s.totalesPorDia[i] > 0 ? T.pico : T.accSuave);
     }
 
     gastoDiasChartInstance = new Chart(canvas, {
@@ -2330,7 +2650,7 @@
           tooltip: { callbacks: { label: function (ctx) { return fmt(ctx.parsed.y); } } },
         },
         scales: {
-          x: { grid: { display: false }, ticks: { font: { family: "'JetBrains Mono',monospace", size: 9 }, maxRotation: 0, autoSkipPadding: 6 } },
+          x: { grid: { display: false }, ticks: { font: { family: "'Manrope',sans-serif", size: 10, weight: 600 }, maxRotation: 0, autoSkipPadding: 6 } },
           y: { display: false },
         },
       },
@@ -2351,33 +2671,85 @@
     var body = document.getElementById('presupuestosBody');
     var porCat = gastosPorCategoria(mesActivo);
     var presupuestos = estado.presupuestos || {};
-    var definidos = 0;
-    var html = '';
+    var filas = [], sinPres = 0, totalTope = 0, totalGastado = 0;
     CATEGORIAS.forEach(function (c) {
       var gastado = porCat[c.id] || 0;
-      var budget = Number(presupuestos[c.id]) || 0;
-      var claseExtra = '', contenido;
-      if (budget > 0) {
-        definidos++;
-        var pct = Math.min(100, Math.round((gastado / budget) * 100));
-        claseExtra = gastado > budget ? ' over' : (pct >= 80 ? ' near' : '');
-        contenido = '<div class="budget-top"><span class="budget-ic">' + c.icon + '</span>' +
-          '<span class="budget-name">' + escapeHtml(getCatNombre(c.id)) + '</span>' +
-          '<span class="budget-amounts"><b>' + fmt(gastado) + '</b> / ' + fmt(budget) + '</span></div>' +
-          '<div class="budget-bar"><span style="width:' + pct + '%"></span></div>';
-      } else {
-        contenido = '<div class="budget-top"><span class="budget-ic">' + c.icon + '</span>' +
-          '<span class="budget-name">' + escapeHtml(getCatNombre(c.id)) + '</span>' +
-          '<span class="budget-empty">+ Definir presupuesto</span></div>';
-      }
-      html += '<div class="budget-row' + claseExtra + '" data-editpres="' + c.id + '">' + contenido + '</div>';
+      var tope = Number(presupuestos[c.id]) || 0;
+      if (tope > 0) {
+        totalTope += tope; totalGastado += gastado;
+        filas.push({ c: c, gastado: gastado, tope: tope, est: estadoPresupuesto(gastado, tope) });
+      } else sinPres++;
     });
-    document.getElementById('presupuestosBadge').textContent = definidos
-      ? (definidos + (definidos === 1 ? ' categoría' : ' categorías') + ' con presupuesto')
-      : '';
+    // Las filas más cerca (o más allá) del tope van primero
+    filas.sort(function (a, b) { return b.est.ratio - a.est.ratio; });
+
+    var html = '';
+    if (filas.length) {
+      var estTotal = estadoPresupuesto(totalGastado, totalTope);
+      var pctTotal = Math.round((totalGastado / totalTope) * 100);
+      var CIRC = 2 * Math.PI * 48;
+      var dash = Math.min(1, totalGastado / totalTope) * CIRC;
+      var excedidas = filas.filter(function (f) { return f.est.clave === 'bad'; }).length;
+      var limite = filas.filter(function (f) { return f.est.clave === 'warn'; }).length;
+      var partes = mesActivo.split('-');
+      var diasMes = new Date(+partes[0], +partes[1], 0).getDate();
+      var queda = totalTope - totalGastado;
+      var restoTxt = queda >= 0 ? 'Quedan ' + fmt(queda) : 'Te pasaste ' + fmt(-queda);
+      if (mesActivo === mesActualKey()) {
+        var diasRest = diasMes - new Date().getDate();
+        restoTxt += ' y ' + diasRest + (diasRest === 1 ? ' día' : ' días') + ' de mes';
+      }
+      html += '<div class="ring-row"><div class="ring-box"><svg viewBox="0 0 120 120" width="96" height="96" role="img" aria-label="' + pctTotal + '% del presupuesto usado">' +
+        '<circle cx="60" cy="60" r="48" fill="none" style="stroke:var(--track)" stroke-width="14"/>' +
+        '<circle cx="60" cy="60" r="48" fill="none" style="stroke:' + estTotal.color + '" stroke-width="14" stroke-linecap="round" stroke-dasharray="' + dash.toFixed(1) + ' ' + CIRC.toFixed(1) + '" transform="rotate(-90 60 60)"/></svg>' +
+        '<div class="ring-center">' + pctTotal + '%</div></div>' +
+        '<div class="ring-info"><div><span style="font-size:20px;font-weight:800">' + fmt(totalGastado) + '</span><span class="sub"> de ' + fmt(totalTope) + '</span></div>' +
+        '<div class="rs">' + restoTxt + '</div>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+          (excedidas ? '<span class="badge b-bad">' + excedidas + (excedidas === 1 ? ' excedida' : ' excedidas') + '</span>' : '') +
+          (limite ? '<span class="badge b-warn">' + limite + ' al límite</span>' : '') +
+          (!excedidas && !limite ? '<span class="badge b-ok">Todo en rango</span>' : '') +
+        '</div></div></div><hr class="sep">';
+      filas.forEach(function (f) {
+        var quedan = f.tope - f.gastado;
+        var etiqueta = f.est.clave === 'bad' ? 'Excedida +' + fmt(-quedan) : (f.est.clave === 'warn' && quedan <= 0 ? 'Al límite' : 'Quedan ' + fmt(quedan));
+        html += '<div class="budget-row" data-editpres="' + f.c.id + '" role="button" tabindex="0" title="Tocá para editar el presupuesto">' +
+          '<div class="budget-top">' + tileCat(f.c.id) +
+          '<div class="grow"><div class="rt">' + escapeHtml(getCatNombre(f.c.id)) + '</div><div class="rs">' + fmt(f.gastado) + ' de ' + fmt(f.tope) + '</div></div>' +
+          '<span class="badge ' + f.est.badge + '">' + etiqueta + '</span></div>' +
+          '<div class="bar"><i style="width:' + Math.min(100, Math.round(f.est.ratio * 100)) + '%;background:' + f.est.color + '"></i></div></div>';
+      });
+    } else {
+      html += '<p class="empty-hint">Todavía no definiste presupuestos. Elegí un tope mensual para cada categoría y acá ves cómo vas.</p>';
+    }
+    if (sinPres) {
+      html += '<button class="budget-more" id="presMasBtn" type="button"><span class="tile s ct4"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>' +
+        '<span class="grow rt" style="font-size:14px">Definir presupuesto en ' + (filas.length ? 'otra categoría' : 'una categoría') + '</span><span class="rs">' + sinPres + ' sin tope</span></button>';
+    }
+    html += '<button class="asis-hint" id="presAsisBtn" type="button"><span class="mini"></span>' +
+      '<span class="t">Pedíselo al asistente: <b>“poné 200000 en comida”</b></span></button>';
     body.innerHTML = html;
     body.querySelectorAll('[data-editpres]').forEach(function (el) {
       el.addEventListener('click', function () { modalPresupuesto(el.getAttribute('data-editpres')); });
+    });
+    var mas = document.getElementById('presMasBtn'); if (mas) mas.onclick = modalElegirPresupuesto;
+    var asis = document.getElementById('presAsisBtn'); if (asis) asis.onclick = function () { abrirChat('chat'); };
+  }
+
+  // Lista de todas las categorías con su tope, para elegir cuál editar
+  function modalElegirPresupuesto() {
+    var presupuestos = estado.presupuestos || {};
+    var filas = CATEGORIAS.map(function (c) {
+      var tope = Number(presupuestos[c.id]) || 0;
+      return '<button class="arow" type="button" data-pres="' + c.id + '" style="padding:10px 4px;min-height:60px">' + tileCat(c.id) +
+        '<span class="grow"><div class="rt">' + escapeHtml(getCatNombre(c.id)) + '</div><div class="rs">' + (tope ? 'Tope ' + fmt(tope) + ' por mes' : 'Sin tope definido') + '</div></span>' +
+        ico('pencil', 17) + '</button>';
+    }).join('<hr class="sep">');
+    abrirModal('<h3>Presupuestos</h3><p class="sub">Elegí una categoría para definir o cambiar su tope mensual.</p>' + filas +
+      '<div class="modal-actions"><button class="btn btn-ghost" id="mCancel">Cerrar</button></div>');
+    document.getElementById('mCancel').onclick = cerrarModal;
+    document.querySelectorAll('#modal [data-pres]').forEach(function (b) {
+      b.onclick = function () { modalPresupuesto(b.getAttribute('data-pres')); };
     });
   }
 
@@ -2463,16 +2835,13 @@
       return;
     }
     var html = '';
-    lista.forEach(function (r) {
+    lista.forEach(function (r, i) {
       var mv = r.mv;
-      var c = CAT_MAP[mv.categoria] || { icon: '•' };
       var desc = mv.fila || mv.nota || 'Compra';
-      html += '<div class="mini-mov">' +
-        '<span class="mm-ic">' + c.icon + '</span>' +
-        '<div class="mm-txt"><b>' + escapeHtml(desc) + '</b><span>' + fechaCortaApp(mv.fecha) +
-        (mv.nota && mv.nota !== desc ? ' · ' + escapeHtml(mv.nota) : '') + '</span></div>' +
-        '<span class="mm-monto">' + fmt(mv.monto) + '</span>' +
-        '</div>';
+      html += (i ? '<hr class="sep">' : '') + '<div class="row" style="padding:10px 0">' + tileCat(mv.categoria) +
+        '<div class="grow"><div class="rt">' + escapeHtml(desc) + '</div><div class="rs">' + etiquetaDia(mv.fecha) +
+        (mv.nota && mv.nota !== desc ? ' · ' + escapeHtml(mv.nota) : '') + '</div></div>' +
+        '<div class="amt">- ' + fmt(mv.monto) + '</div></div>';
     });
     body.innerHTML = html;
   }
@@ -2762,7 +3131,7 @@
     abrirModal('<h3>Agregar gasto</h3><p class="sub">Se suma solo al total de la categoría que elijas.</p>' +
       (puedeEscanear
         ? '<button type="button" class="btn btn-ghost" id="gEscanearBtn" style="width:100%">' +
-          '<span class="material-symbols-outlined text-[18px]">photo_camera</span> Escanear ticket</button>' +
+          ico('camera', 18) + ' Escanear ticket</button>' +
           '<p class="sub" style="margin:4px 0 12px">Que se vea el ticket completo, incluido el QR del pie.</p>' +
           '<input type="file" accept="image/*" capture="environment" id="gTicketInput" style="display:none">'
         : '') +
@@ -2788,10 +3157,10 @@
         ticketInput.value = '';
         if (!file) return;
         escanearBtn.disabled = true;
-        escanearBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">hourglass_top</span> Leyendo ticket…';
+        escanearBtn.innerHTML = ico('hourglass', 18) + ' Leyendo ticket…';
         var restaurarBtn = function () {
           escanearBtn.disabled = false;
-          escanearBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">photo_camera</span> Escanear ticket';
+          escanearBtn.innerHTML = ico('camera', 18) + ' Escanear ticket';
         };
         procesarFotoTicket(file, function (foto) {
           if (!foto.dataUrl) { toast('No pude leer esa imagen.'); restaurarBtn(); return; }
@@ -2883,6 +3252,21 @@
     };
   }
 
+  // Abre Telegram con el link de vinculación (lo usan Ajustes y el menú de datos)
+  function vincularTelegram() {
+    // Hay que abrir la pestaña YA, en el mismo click — si se abre recién
+    // después de esperar la respuesta del servidor, el navegador la bloquea.
+    var ventana = window.open('', '_blank');
+    toast('Generando link de Telegram…');
+    generarLinkTelegram().then(function (link) {
+      if (ventana) ventana.location.href = link; else location.href = link;
+      cerrarModal();
+    }).catch(function (e) {
+      if (ventana) ventana.close();
+      toast('No se pudo generar el link (' + (e && e.message ? e.message : 'error') + ')');
+    });
+  }
+
   function modalMenu() {
     var estadoNube = modoCuenta
       ? '<span style="color:var(--text-mute)">Vinculá el chat para cargar gastos por Telegram</span>'
@@ -2906,19 +3290,7 @@
         '</div></div>' +
       '<div class="modal-actions"><button class="btn btn-ghost" id="mCancel">Cerrar</button></div>');
     document.getElementById('mCancel').onclick = cerrarModal;
-    document.getElementById('mNube').onclick = modoCuenta ? function () {
-      // Hay que abrir la pestaña YA, en el mismo click — si se abre recién
-      // después de esperar la respuesta del servidor, el navegador la bloquea.
-      var ventana = window.open('', '_blank');
-      toast('Generando link de Telegram…');
-      generarLinkTelegram().then(function (link) {
-        if (ventana) ventana.location.href = link; else location.href = link;
-        cerrarModal();
-      }).catch(function (e) {
-        if (ventana) ventana.close();
-        toast('No se pudo generar el link (' + (e && e.message ? e.message : 'error') + ')');
-      });
-    } : modalNube;
+    document.getElementById('mNube').onclick = modoCuenta ? vincularTelegram : modalNube;
     document.getElementById('mExport').onclick = exportar;
     document.getElementById('mImport').onclick = function () { document.getElementById('importFile').click(); };
     document.getElementById('mReset').onclick = function () {
@@ -3115,6 +3487,7 @@
     function fabAbierto(v) {
       fabWrap.classList.toggle('open', v);
       if (fabBackdrop) fabBackdrop.classList.toggle('show', v);
+      document.getElementById('fabToggle').setAttribute('aria-expanded', v ? 'true' : 'false');
     }
     document.getElementById('fabToggle').onclick = function () { fabAbierto(!fabWrap.classList.contains('open')); };
     if (fabBackdrop) fabBackdrop.onclick = function () { fabAbierto(false); };
@@ -3147,6 +3520,38 @@
       mostrarPagina('analiticas');
       marcarNavActivo('analiticas');
     };
+    document.getElementById('gastosAddBtn').onclick = function () { modalGasto(); };
+
+    // ---- Tema (botón del encabezado + selector de Ajustes) ----
+    aplicarTema(temaPreferidoInicial(), false);
+    document.getElementById('temaBtn').onclick = function () { aplicarTema(temaActual() === 'claro' ? 'oscuro' : 'claro', true); };
+    document.getElementById('temaClaroBtn').onclick = function () { aplicarTema('claro', true); };
+    document.getElementById('temaOscuroBtn').onclick = function () { aplicarTema('oscuro', true); };
+
+    // ---- Ajustes (la rueda del encabezado alterna entre Ajustes y la página anterior) ----
+    document.getElementById('ajustesBtn').onclick = function () {
+      mostrarPagina(vistaActual === 'ajustes' ? paginaAntesDeAjustes : 'ajustes');
+    };
+    document.getElementById('ajVoz1').onclick = function () { setVozAsistente('1'); };
+    document.getElementById('ajVoz2').onclick = function () { setVozAsistente('2'); };
+    document.getElementById('ajLeerSw').onclick = function () { chatSetVoz(!chatVozActivada); };
+    // Cuenta y compartir: lo que antes estaba en el encabezado y en los modales, ahora en Ajustes
+    document.getElementById('cuentaInvitarBtn').onclick = function () {
+      if (!modoCuenta || !miUsuario) { toast('Iniciá sesión con Google para compartir tu proyecto.'); return; }
+      modalCuenta();
+    };
+    document.getElementById('notifBtn').onclick = activarNotificaciones;
+    document.getElementById('telegramBtn').onclick = function () { if (modoCuenta) vincularTelegram(); else modalNube(); };
+
+    // ---- Análisis: chips que llevan a cada bloque + editar presupuestos ----
+    document.querySelectorAll('#anaChips [data-ir]').forEach(function (b) {
+      b.onclick = function () {
+        document.querySelectorAll('#anaChips [data-ir]').forEach(function (x) { x.classList.toggle('on', x === b); });
+        var dest = document.getElementById(b.getAttribute('data-ir'));
+        if (dest) dest.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
+    });
+    document.getElementById('presEditarBtn').onclick = modalElegirPresupuesto;
 
     // toggle del gráfico: semanal / mensual / anual
     document.querySelectorAll('#evoToggle button').forEach(function (b) {
@@ -3160,36 +3565,35 @@
       if (e.target === this) cerrarModal();
     });
     document.getElementById('qrScanClose').onclick = cerrarEscanerQR;
-    document.getElementById('chatFab').onclick = abrirChat;
+    document.getElementById('chatFab').onclick = function () { abrirChat(); };
     document.getElementById('chatClose').onclick = cerrarChat;
-    document.getElementById('chatBack').addEventListener('click', function (e) {
-      if (e.target === this) cerrarChat();
-    });
     (function () {
       var inp = document.getElementById('chatInput');
       function enviarYLimpiar() { enviarMensajeChat(inp.value); inp.value = ''; }
       document.getElementById('chatSendBtn').onclick = enviarYLimpiar;
       inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') enviarYLimpiar(); });
+      // Atajos de preguntas (mandan el mensaje) y de inicio de frase (lo dejan escrito)
+      document.querySelectorAll('#chatChips [data-q], #chatChips [data-pre]').forEach(function (b) {
+        b.onclick = function () {
+          var q = b.getAttribute('data-q');
+          if (q) enviarMensajeChat(q);
+          else { inp.value = b.getAttribute('data-pre'); inp.focus(); }
+        };
+      });
+      // Acciones de cada respuesta del asistente (escuchar, copiar, deshacer)
+      document.getElementById('chatMensajes').addEventListener('click', function (e) {
+        var b = e.target.closest('[data-act]');
+        if (b) chatAccionMensaje(b.getAttribute('data-act'), parseInt(b.getAttribute('data-i'), 10));
+      });
     })();
     var chatHistorialBtn = document.getElementById('chatHistorialBtn');
     if (chatHistorialBtn) chatHistorialBtn.onclick = chatToggleHistorialVista;
     var chatHistBackdrop = document.getElementById('chatHistBackdrop');
     if (chatHistBackdrop) chatHistBackdrop.onclick = chatCerrarHistorialVista;
     var chatVozBtn = document.getElementById('chatVozToggle');
-    if (chatVozBtn) {
-      var chatVozIcon = chatVozBtn.querySelector('.material-symbols-outlined');
-      function chatVozActualizarIcono() {
-        chatVozBtn.classList.toggle('muted', !chatVozActivada);
-        if (chatVozIcon) chatVozIcon.textContent = chatVozActivada ? 'volume_up' : 'volume_off';
-      }
-      chatVozActualizarIcono();
-      chatVozBtn.onclick = function () {
-        chatVozActivada = !chatVozActivada;
-        localStorage.setItem('misFinanzas_chatVoz', chatVozActivada ? '1' : '0');
-        chatVozActualizarIcono();
-        if (!chatVozActivada && window.speechSynthesis) window.speechSynthesis.cancel();
-      };
-    }
+    if (chatVozBtn) chatVozBtn.onclick = function () { chatSetVoz(!chatVozActivada); };
+    chatVozActualizarUI();
+    renderAjustes();
     var chatMicBtn = document.getElementById('chatMicBtn');
     if (chatMicBtn) {
       if (!chatMicDisponible()) chatMicBtn.style.display = 'none';
@@ -3203,7 +3607,7 @@
 
     // Barra de navegación inferior: cada sección es su propia página completa
     // (ya no hay cajón lateral ni scroll-anchors — todo pasa por mostrarPagina).
-    var navLinks = Array.prototype.slice.call(document.querySelectorAll('.bottom-nav a'));
+    var navLinks = Array.prototype.slice.call(document.querySelectorAll('.nav a'));
     navLinks.forEach(function (a) {
       a.addEventListener('click', function (e) {
         e.preventDefault();
@@ -3246,6 +3650,39 @@
       setTimeout(abrirChat, 700);
     }
   }
+
+  // Puente mínimo hacia asistente.js (pantalla de voz y reproductor): le da acceso
+  // al chat existente sin duplicar su lógica ni exponer el estado de la app.
+  window.MisFinanzas = {
+    enviarMensaje: enviarMensajeChat,
+    puedeUsarChat: function () { return !!(modoCuenta && miProyectoId); },
+    estaEnviando: function () { return chatEnviando; },
+    registrarVoz: function (v) { chatVozExterna = v; },
+    vozActivada: function () { return chatVozActivada; },
+    setVozActivada: chatSetVoz,
+    getVoz: function () { return vozAsistente; },
+    setVoz: setVozAsistente,
+    micDisponible: chatMicDisponible,
+    // Pide el audio de una frase a la Edge Function `tts` (ElevenLabs). Usa la sesión
+    // de Google del usuario; devuelve la Response (el llamador lee el blob).
+    ttsFetch: function (cuerpo, senal) {
+      if (!sbClient) return Promise.reject(new Error('sin sesión'));
+      return sbClient.auth.getSession().then(function (r) {
+        var s = r.data && r.data.session;
+        if (!s) throw new Error('sin sesión');
+        return fetch(CUENTA_URL + '/functions/v1/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + s.access_token, 'apikey': CUENTA_ANON_KEY },
+          body: JSON.stringify(cuerpo),
+          signal: senal
+        });
+      });
+    },
+    abrir: abrirChat,
+    cerrar: cerrarChat,
+    toast: toast,
+    ico: ico
+  };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();

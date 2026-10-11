@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es-AR">
+<html lang="es-AR" class="oscuro">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -8,7 +8,7 @@
 
 <!-- ===== PWA: instalable en Android/iPhone desde el navegador ===== -->
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#00361a">
+<meta name="theme-color" content="#04170F" id="metaTheme">
 <meta name="mobile-web-app-capable" content="yes">
 <!-- iOS no lee manifest.json para el modo standalone/ícono: hace falta esto aparte -->
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -16,118 +16,41 @@
 <meta name="apple-mobile-web-app-title" content="Mis Finanzas">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<script id="tailwind-config">
-  tailwind.config = {
-    darkMode: "class",
-    theme: {
-      extend: {
-        colors: {
-          "on-background": "#1a1c1c", "surface-container-low": "#f3f3f4", "surface-dim": "#dadada",
-          "on-tertiary": "#ffffff", "on-error": "#ffffff", "secondary": "#4f6600", "on-secondary": "#ffffff",
-          "surface-container": "#eeeeee", "on-surface": "#1a1c1c", "primary": "#00361a",
-          "surface-container-lowest": "#ffffff", "primary-fixed-dim": "#9dd3aa", "surface-container-high": "#e8e8e8",
-          "primary-container": "#1a4d2e", "secondary-fixed": "#c8f24d", "tertiary": "#2b2f2e",
-          "on-secondary-container": "#556d00", "inverse-on-surface": "#f0f1f1", "background": "#f9f9f9",
-          "on-primary-fixed-variant": "#1d5031", "inverse-primary": "#9dd3aa", "secondary-container": "#c8f24d",
-          "on-secondary-fixed": "#161f00", "surface-bright": "#f9f9f9", "outline": "#717971",
-          "tertiary-fixed": "#e0e3e1", "on-primary-container": "#88bd95", "outline-variant": "#c1c9bf",
-          "on-error-container": "#93000a", "on-primary-fixed": "#00210e", "surface": "#f9f9f9",
-          "surface-container-highest": "#e2e2e2", "on-secondary-fixed-variant": "#3b4d00", "surface-variant": "#e2e2e2",
-          "surface-tint": "#366847", "on-tertiary-fixed-variant": "#434846", "primary-fixed": "#b8f0c5",
-          "tertiary-container": "#414544", "on-tertiary-container": "#afb2b0", "error": "#ba1a1a",
-          "on-primary": "#ffffff", "inverse-surface": "#2f3131", "secondary-fixed-dim": "#add531",
-          "error-container": "#ffdad6", "tertiary-fixed-dim": "#c4c7c5", "on-surface-variant": "#414942",
-          "on-tertiary-fixed": "#181c1b"
-        },
-        borderRadius: { DEFAULT: "0.25rem", lg: "0.5rem", xl: "0.75rem", full: "9999px" },
-        spacing: { xs: "4px", xxl: "64px", lg: "24px", md: "16px", xl: "32px", sm: "8px" },
-        fontFamily: {
-          "label-caps": ["Inter"], "headline-lg-mobile": ["Inter"], "body-sm": ["Inter"], "numeric-data": ["JetBrains Mono"],
-          "body-lg": ["Inter"], "title-md": ["Inter"], "display-lg": ["Inter"], "headline-lg": ["Inter"]
-        },
-        fontSize: {
-          "label-caps": ["12px", { lineHeight: "16px", letterSpacing: "0.05em", fontWeight: "700" }],
-          "headline-lg-mobile": ["24px", { lineHeight: "30px", fontWeight: "700" }],
-          "body-sm": ["14px", { lineHeight: "20px", fontWeight: "400" }],
-          "numeric-data": ["16px", { lineHeight: "24px", fontWeight: "600" }],
-          "body-lg": ["16px", { lineHeight: "24px", fontWeight: "400" }],
-          "title-md": ["18px", { lineHeight: "26px", fontWeight: "700" }],
-          "display-lg": ["38px", { lineHeight: "44px", letterSpacing: "-0.02em", fontWeight: "700" }],
-          "headline-lg": ["30px", { lineHeight: "38px", letterSpacing: "-0.01em", fontWeight: "600" }]
-        }
-      }
-    }
-  }
-</script>
-<style>
-  @keyframes fadeInUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-  .animate-fade-in-up { animation: fadeInUp .5s cubic-bezier(.22,1,.36,1) both; }
-  .glass-card {
-    background: rgba(255,255,255,.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(0,54,26,.08); box-shadow: 0 4px 20px rgba(26,77,46,.06);
-  }
-  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; vertical-align: middle; }
-  body { min-height: max(884px, 100dvh); font-family: 'Inter', sans-serif; }
-</style>
-<link rel="stylesheet" href="styles.css?v=28">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-</head>
-<body class="bg-background text-on-surface font-body-lg min-h-screen overflow-x-hidden">
-
-<!-- ===== Fondo animado (shader) ===== -->
-<div class="fixed inset-0 z-0 pointer-events-none opacity-40">
-  <canvas id="shaderCanvas" style="display:block;width:100%;height:100%"></canvas>
-</div>
+<!-- Tema claro/oscuro: se aplica antes de pintar para que no parpadee.
+     Elección guardada > preferencia del sistema > oscuro. -->
 <script>
 (function () {
-  var canvas = document.getElementById('shaderCanvas');
-  function syncSize() {
-    var w = canvas.clientWidth || 1280, h = canvas.clientHeight || 720;
-    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
-  }
-  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(syncSize).observe(canvas);
-  syncSize();
-  var gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-  if (!gl) return;
-  var vs = 'attribute vec2 a_position;varying vec2 v_texCoord;void main(){v_texCoord=a_position*0.5+0.5;gl_Position=vec4(a_position,0.0,1.0);}';
-  var fs = 'precision highp float;uniform float u_time;varying vec2 v_texCoord;' +
-    'void main(){vec2 uv=v_texCoord;vec3 color1=vec3(1.0,1.0,1.0);vec3 color2=vec3(0.10,0.30,0.18);vec3 color3=vec3(0.83,1.0,0.35);' +
-    'float noise=sin(uv.x*5.0+u_time*0.5)*cos(uv.y*3.0-u_time*0.3);' +
-    'float wave1=smoothstep(0.4,0.6,sin(uv.y*10.0+uv.x*5.0+u_time)*0.5+0.5+noise*0.2);' +
-    'float wave2=smoothstep(0.3,0.7,cos(uv.x*8.0-uv.y*4.0+u_time*0.7)*0.5+0.5+noise*0.3);' +
-    'vec3 finalColor=mix(color1,color2,wave1*0.1);finalColor=mix(finalColor,color3,wave2*0.05);gl_FragColor=vec4(finalColor,1.0);}';
-  function cs(type, src) { var s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; }
-  var prog = gl.createProgram();
-  gl.attachShader(prog, cs(gl.VERTEX_SHADER, vs));
-  gl.attachShader(prog, cs(gl.FRAGMENT_SHADER, fs));
-  gl.linkProgram(prog);
-  gl.useProgram(prog);
-  var buf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
-  var pos = gl.getAttribLocation(prog, 'a_position');
-  gl.enableVertexAttribArray(pos);
-  gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
-  var uTime = gl.getUniformLocation(prog, 'u_time');
-  function render(t) {
-    gl.viewport(0, 0, canvas.width, canvas.height);
-    if (uTime) gl.uniform1f(uTime, t * 0.001);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    requestAnimationFrame(render);
-  }
-  render(0);
+  try {
+    var t = localStorage.getItem('misFinanzas_tema');
+    if (t !== 'claro' && t !== 'oscuro') {
+      t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'claro' : 'oscuro';
+    }
+    var h = document.documentElement;
+    h.classList.remove('oscuro', 'claro'); h.classList.add(t);
+    var m = document.getElementById('metaTheme');
+    if (m) m.setAttribute('content', t === 'claro' ? '#F3FAF6' : '#04170F');
+  } catch (e) {}
 })();
 </script>
 
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<link rel="stylesheet" href="styles.css?v=31">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  /* Íconos de tema: sol en oscuro, luna en claro (lo que vas a activar al tocar) */
+  html.claro .ic-sun, html:not(.claro) .ic-moon { display: none; }
+  #gastosBody, .stack { display: flex; flex-direction: column; gap: 12px; }
+</style>
+</head>
+<body>
+
 <!-- ===== Pantalla de login ===== -->
 <div id="loginGate" class="login-gate" style="display:none">
-  <div class="login-card glass-card">
+  <div class="login-card card">
     <img src="logo.png" alt="" width="64" height="64">
     <h1>Mis Finanzas</h1>
     <p id="loginGateMsg">Iniciá sesión para ver tus datos en cualquier dispositivo.</p>
@@ -136,97 +59,90 @@
       Iniciar sesión con Google
     </button>
     <button class="btn-invitado" id="loginInvitadoBtn" type="button">Continuar como invitado</button>
-    <p class="login-note">Con Google, tus datos siguen a cualquier dispositivo. Como invitado quedan solo en este — podés vincularlos a tu cuenta más adelante.</p>
+    <p class="login-note sub">Con Google, tus datos siguen a cualquier dispositivo. Como invitado quedan solo en este — podés vincularlos a tu cuenta más adelante.</p>
   </div>
 </div>
 
-<div id="appRoot">
+<div id="appRoot" class="shell">
 
-  <!-- ===== TopAppBar ===== -->
-  <header class="fixed top-0 w-full z-40 bg-surface-container-lowest/90 backdrop-blur-xl border-b border-outline-variant/10 shadow-sm shadow-primary/5">
-    <div class="flex justify-between items-center px-md py-sm">
-      <div class="flex items-center gap-sm">
-        <div class="w-10 h-10 rounded-full overflow-hidden border border-outline-variant bg-white flex items-center justify-center flex-shrink-0">
-          <img class="w-7 h-7 object-contain" src="logo.png" alt="">
-        </div>
-        <h1 class="font-display-lg text-headline-lg-mobile text-primary tracking-tighter">Mis Finanzas</h1>
-      </div>
-      <div class="flex items-center gap-xs">
-        <button class="w-9 h-9 flex items-center justify-center rounded-full hover:bg-primary/5 transition-colors active:scale-95 text-on-surface-variant" id="menuBtn" title="Copia de seguridad">
-          <span class="material-symbols-outlined text-[20px]">cloud_download</span>
-        </button>
-        <button class="btn-conectar-google" id="conectarGoogleBtn" type="button" style="display:none">Vincular</button>
-        <div class="user-chip" id="userChip">
-          <div class="avatar" id="userAvatar">?</div>
-        </div>
-        <button class="w-9 h-9 flex items-center justify-center rounded-full hover:bg-primary/5 transition-colors active:scale-95 text-on-surface-variant" id="cerrarSesionBtn" title="Cerrar sesión" style="display:none">
-          <span class="material-symbols-outlined text-[20px]">logout</span>
-        </button>
-      </div>
-    </div>
-    <div class="flex items-center justify-center gap-2 pb-sm" style="position:relative">
-      <button class="month-nav-btn" id="prevMonth" title="Mes anterior"><span class="material-symbols-outlined text-[18px]">chevron_left</span></button>
-      <span class="month-label" id="monthLabel">—</span>
-      <button class="month-nav-btn" id="nextMonth" title="Mes siguiente"><span class="material-symbols-outlined text-[18px]">chevron_right</span></button>
-      <button class="month-nav-btn" id="hoyBtn" title="Volver al mes actual" style="display:none;width:auto;padding:0 10px;font-size:11px;font-weight:700">Hoy</button>
-      <button class="analiticas-corner-btn" id="analiticasNavBtn" title="Analíticas">
-        <span class="material-symbols-outlined text-[18px]">insights</span>
+  <!-- ===== Encabezado ===== -->
+  <header class="hdr">
+    <div class="ttl" id="pageTitle">Inicio</div>
+    <div class="hdr-btns">
+      <button class="ibtn" id="temaBtn" type="button" aria-label="Cambiar entre tema claro y oscuro">
+        <svg class="ic-sun" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/></svg>
+        <svg class="ic-moon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z"/></svg>
+      </button>
+      <button class="ibtn" id="ajustesBtn" type="button" aria-label="Ajustes">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 01-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 01-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 01-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 010-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 012.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 014 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 012.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 010 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>
       </button>
     </div>
   </header>
 
   <!-- ===== Contenido ===== -->
-  <main class="relative z-10 pt-32 pb-32 px-md max-w-2xl mx-auto">
+  <main class="main">
     <div class="canvas">
 
-      <!-- ============ RESUMEN ============ -->
+      <!-- Selector de mes (se oculta en Historial y Ajustes) -->
+      <div class="mnav" id="mnav">
+        <button class="mb" id="prevMonth" type="button" aria-label="Mes anterior"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <span class="month-label" id="monthLabel">—</span>
+        <button class="mb hoy" id="hoyBtn" type="button" style="display:none" aria-label="Volver al mes actual">Hoy</button>
+        <button class="mb" id="nextMonth" type="button" aria-label="Mes siguiente"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+      </div>
+
+      <!-- ============ INICIO ============ -->
       <div id="vistaResumen" class="page-view">
-        <section class="glass-card rounded-xl p-lg relative overflow-hidden animate-fade-in-up" id="heroCard">
-          <div class="absolute -top-12 -right-12 w-48 h-48 bg-secondary-container/30 blur-3xl rounded-full pointer-events-none"></div>
-          <div class="relative z-10 space-y-xs">
-            <span class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest" id="heroBalLabel">Te queda este mes</span>
-            <div class="flex items-center gap-2">
-              <h2 class="font-display-lg text-display-lg text-primary" id="heroBalVal" data-raw="0">$ 0</h2>
-              <button class="hero-eye-btn" id="heroEyeBtn" title="Ocultar saldo" type="button">
-                <span class="material-symbols-outlined" id="heroEyeIcon">visibility</span>
-              </button>
-            </div>
+        <section class="card hero" id="heroCard">
+          <div class="hero-glow"></div>
+          <div class="sub" id="heroBalLabel" style="font-size:14px">Te queda este mes</div>
+          <div class="hero-val">
+            <h2 class="hero-num" id="heroBalVal" data-raw="0">$ 0</h2>
+            <button class="hero-eye" id="heroEyeBtn" type="button" title="Ocultar saldo" aria-label="Ocultar saldo">
+              <span id="heroEyeIcon" style="display:flex"></span>
+            </button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <div class="bar" style="height:10px"><i id="heroBarFill" style="width:0%;background:var(--accent)"></i></div>
             <div class="hero-delta" id="heroBalDelta"></div>
-            <div class="flex gap-sm mt-lg flex-wrap">
-              <button class="btn-stitch-primary" id="heroAddGasto">
-                <span class="material-symbols-outlined text-[18px]">add</span> Agregar gasto
-              </button>
-              <button class="btn-stitch-ghost" id="heroBackup">Respaldar</button>
+          </div>
+          <div class="k-sub" id="heroDesglose"></div>
+          <div class="hero-actions">
+            <button class="btnp" id="heroAddGasto" type="button">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Agregar gasto
+            </button>
+            <button class="btng" id="heroBackup" type="button">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Respaldar
+            </button>
+          </div>
+        </section>
+
+        <section class="card pad" id="evoCard">
+          <div class="card-head">
+            <div class="h2">Evolución</div>
+            <div class="sg" id="evoToggle">
+              <button class="sgb" data-modo="diario" type="button">Día</button>
+              <button class="sgb" data-modo="semanal" type="button">Sem</button>
+              <button class="sgb active" data-modo="mensual" type="button">Mes</button>
+              <button class="sgb" data-modo="anual" type="button">Año</button>
             </div>
           </div>
+          <div class="evo-canvas-wrap"><canvas id="evoChart" role="img" aria-label="Evolución de ingresos y gastos"></canvas></div>
         </section>
 
-        <section class="kpis" id="kpis"></section>
-
-        <section class="glass-card rounded-xl p-lg animate-fade-in-up" id="evoCard">
-          <div class="flex justify-between items-center mb-md">
-            <h3 class="font-title-md text-title-md text-primary flex items-center gap-2">
-              <span class="material-symbols-outlined text-secondary">show_chart</span>Evolución
-            </h3>
-            <div class="evo-toggle" id="evoToggle">
-              <button data-modo="diario">Día</button>
-              <button data-modo="semanal">Sem</button>
-              <button data-modo="mensual" class="active">Mes</button>
-              <button data-modo="anual">Año</button>
-            </div>
+        <section class="card pad" id="donutCard">
+          <div class="card-head">
+            <div class="h2">En qué se va la plata</div>
+            <div class="sub" id="donutTotal"></div>
           </div>
-          <div class="evo-canvas-wrap"><canvas id="evoChart"></canvas></div>
+          <div id="donutBody"></div>
         </section>
 
-        <section class="glass-card rounded-xl p-lg animate-fade-in-up" id="donutCard">
-          <div class="flex justify-between items-center mb-md">
-            <h3 class="font-title-md text-title-md text-primary flex items-center gap-2">
-              <span class="material-symbols-outlined text-secondary">donut_large</span>En qué se va la plata
-            </h3>
-            <span class="badge" id="donutTotal"></span>
-          </div>
-          <div class="panel-body" id="donutBody"></div>
-        </section>
+        <button class="card navcard" id="analiticasNavBtn" type="button">
+          <div class="tile ct1"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></div>
+          <div class="grow"><div class="rt">Análisis y presupuestos</div><div class="rs">Gráficos, límites por categoría y simulador</div></div>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
 
         <p class="footer-note">
           Tus datos se guardan solos en este navegador. Usá <b>Respaldar</b> cada tanto para bajar una copia.
@@ -235,196 +151,283 @@
 
       <!-- ============ GASTOS (con Ingresos arriba de todo) ============ -->
       <div id="vistaGastos" class="page-view view-hidden">
-        <div class="page-head">
-          <div>
-            <h2><span class="material-symbols-outlined text-primary align-middle mr-1">shopping_cart</span>Gastos</h2>
-            <p>Tus ingresos y todo lo que se te fue este mes, por categoría.</p>
+        <div class="duo">
+          <div class="card">
+            <div class="row" style="gap:8px"><span class="tile s ct1"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></span><span class="sub">Ingresos</span></div>
+            <div class="big" id="gIngTotal">$ 0</div>
+          </div>
+          <div class="card">
+            <div class="row" style="gap:8px"><span class="tile s ct7"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7l10 10M17 9v8H9"/></svg></span><span class="sub">Gastos</span></div>
+            <div class="big" id="gGasTotal">$ 0</div>
           </div>
         </div>
-        <section class="glass-card rounded-xl p-lg" id="ingresos">
-          <div class="flex justify-between items-center mb-md">
-            <h3 class="font-title-md text-title-md text-primary flex items-center gap-2">
-              <span class="material-symbols-outlined text-secondary">payments</span>Ingresos del mes
-            </h3>
-            <span class="badge" id="ingresosTotal"></span>
+
+        <section class="card pad" id="ingresos">
+          <div class="card-head">
+            <div class="h2">Ingresos del mes</div>
+            <div class="sub" id="ingresosTotal"></div>
           </div>
-          <div class="panel-body" id="ingresosBody"></div>
+          <div id="ingresosBody"></div>
         </section>
-        <section class="glass-card rounded-xl p-lg" id="gastos">
-          <div class="flex justify-between items-center mb-md">
-            <h3 class="font-title-md text-title-md text-primary">Gastos del mes</h3>
-            <span class="badge" id="gastosTotal"></span>
-          </div>
-          <div class="panel-body" id="gastosBody"></div>
-        </section>
+
+        <div class="sect-title" id="gastos">
+          <div class="h2">Gastos del mes</div>
+          <div class="sub" id="gastosTotal"></div>
+        </div>
+        <div id="gastosBody"></div>
+
+        <button class="btnp" id="gastosAddBtn" type="button" style="height:52px;width:100%">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Agregar gasto
+        </button>
       </div>
 
       <!-- ============ DEUDAS ============ -->
       <div id="vistaDeudas" class="page-view view-hidden">
-        <div class="page-head">
-          <div>
-            <h2><span class="material-symbols-outlined text-primary align-middle mr-1">credit_card</span>Deudas</h2>
-            <p>Tarjetas, préstamos y cuotas pendientes.</p>
+        <section class="card hero">
+          <div class="hero-glow"></div>
+          <div class="sub" style="font-size:14px">Total que debés</div>
+          <div class="hero-num" id="deudaTotalVal" style="font-size:42px">$ 0</div>
+          <div class="row" style="gap:10px">
+            <div class="grow rs">Este mes pagás<br><span id="deudaMesVal" style="font-size:17px;font-weight:800;color:var(--text)">$ 0</span></div>
+            <button class="btnp" id="addDeudaBtn" type="button" style="height:46px">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Agregar
+            </button>
           </div>
-          <button class="btn-stitch-primary btn-sm" id="addDeudaBtn">
-            <span class="material-symbols-outlined text-[16px]">add</span> Agregar
-          </button>
-        </div>
-        <section class="glass-card rounded-xl p-lg">
-          <div class="panel-body" id="deudasBody"></div>
         </section>
+        <div class="h2" style="padding:4px 4px 0">Tarjetas, préstamos y cuotas</div>
+        <div id="deudasBody" class="stack"></div>
+        <div class="h2" style="padding:4px 4px 0">Cuotas pendientes</div>
+        <div class="card pad-sm" id="deudasPendBody" style="padding:6px 16px"></div>
       </div>
 
       <!-- ============ HISTORIAL ============ -->
       <div id="vistaHistorial" class="page-view view-hidden">
-        <div class="page-head">
-          <div>
-            <h2><span class="material-symbols-outlined text-primary align-middle mr-1">history</span>Historial</h2>
-            <p>Todos los movimientos que fuiste cargando, mes a mes.</p>
-          </div>
-        </div>
-        <div class="hist-toolbar glass-card rounded-xl">
-          <input type="text" id="histBuscar" placeholder="Buscar por nota, fila o producto…">
-          <select id="histFiltroMes"><option value="">Todos los meses</option></select>
-          <select id="histFiltroCat"><option value="">Todas las categorías</option></select>
-          <select id="histOrden">
-            <option value="reciente">Fecha más reciente</option>
-            <option value="lejana">Fecha más lejana</option>
+        <label class="search">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <input type="text" id="histBuscar" placeholder="Buscar por nota, fila o producto…" aria-label="Buscar movimientos">
+        </label>
+        <div class="chips">
+          <div class="fchip"><select id="histFiltroMes" aria-label="Filtrar por mes"><option value="">Todos los meses</option></select><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></div>
+          <div class="fchip"><select id="histFiltroCat" aria-label="Filtrar por categoría"><option value="">Todas las categorías</option></select><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></div>
+          <div class="fchip"><select id="histOrden" aria-label="Ordenar movimientos">
+            <option value="reciente">Más reciente</option>
+            <option value="lejana">Más lejana</option>
             <option value="mayor">Mayor gasto</option>
             <option value="menor">Menor gasto</option>
-          </select>
+          </select><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></div>
         </div>
-        <section class="glass-card rounded-xl p-lg">
-          <div class="flex justify-between items-center mb-md hist-mov-header">
-            <h3 class="font-title-md text-title-md text-primary">Movimientos</h3>
-            <span class="badge" id="historialTotal"></span>
-          </div>
-          <div class="panel-body" id="historialBody"></div>
-        </section>
+        <div class="sect-title">
+          <div class="h2">Movimientos</div>
+          <div class="sub" id="historialTotal"></div>
+        </div>
+        <div id="historialBody" class="stack"></div>
       </div>
 
-      <!-- ============ ANALÍTICAS ============ -->
+      <!-- ============ ANÁLISIS ============ -->
       <div id="vistaAnaliticas" class="page-view view-hidden">
-        <div class="page-head">
-          <div>
-            <h2><span class="material-symbols-outlined text-primary align-middle mr-1">insights</span>Analíticas</h2>
-            <p>Cómo se mueve tu plata: flujo mensual, presupuestos y proyecciones.</p>
-          </div>
-          <button class="btn-stitch-ghost btn-sm" id="exportarAnaliticasBtn">
-            <span class="material-symbols-outlined text-[16px]">download</span> Exportar
+        <div class="chips" id="anaChips">
+          <button class="chip on" type="button" data-ir="anaKpis">Resumen</button>
+          <button class="chip" type="button" data-ir="presupuestosCard">Presupuestos</button>
+          <button class="chip" type="button" data-ir="gastoDiasCard">Por día</button>
+          <button class="chip" type="button" data-ir="simuladorCard">Inversión</button>
+          <button class="chip" type="button" data-ir="recurrentesCard">Recurrentes</button>
+          <button class="chip" type="button" id="exportarAnaliticasBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Exportar
           </button>
         </div>
 
-        <section class="glass-card rounded-xl p-lg" id="flujoCard">
-          <div class="flex justify-between items-center mb-md">
-            <h3 class="font-title-md text-title-md text-primary">Ingresos y gastos por mes</h3>
-            <span class="badge" id="flujoBadge"></span>
+        <div class="duo" id="anaKpis">
+          <div class="card">
+            <div class="sub">Te queda</div>
+            <div class="big" id="anaBal">$ 0</div>
+            <div class="rs" id="anaBalSub"></div>
           </div>
-          <div class="flujo-canvas-wrap"><canvas id="flujoChart"></canvas></div>
-        </section>
-
-        <section class="glass-card rounded-xl p-lg" id="presupuestosCard">
-          <div class="flex justify-between items-center mb-md">
-            <h3 class="font-title-md text-title-md text-primary">Presupuesto por categoría</h3>
-            <span class="badge" id="presupuestosBadge"></span>
+          <div class="card">
+            <div class="sub">Promedio por día</div>
+            <div class="big" id="anaProm">$ 0</div>
+            <div class="rs" id="anaPromSub"></div>
           </div>
-          <div class="panel-body" id="presupuestosBody"></div>
-        </section>
+        </div>
 
-        <section class="glass-card rounded-xl p-lg" id="gastoDiasCard">
-          <div class="flex justify-between items-center mb-md">
-            <h3 class="font-title-md text-title-md text-primary">Gastos por día — <span id="gastoDiasMes"></span></h3>
+        <section class="card pad" id="presupuestosCard">
+          <div class="card-head">
+            <div class="h2">Presupuesto por categoría</div>
+            <button class="chip sm" id="presEditarBtn" type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>Editar
+            </button>
           </div>
-          <div class="gastodias-canvas-wrap"><canvas id="gastoDiasChart"></canvas></div>
-          <p class="sub" id="gastoDiasResumen" style="margin:10px 2px 0"></p>
+          <div id="presupuestosBody" style="display:flex;flex-direction:column;gap:16px"></div>
         </section>
 
-        <section class="glass-card rounded-xl p-lg" id="simuladorCard">
-          <h3 class="font-title-md text-title-md text-primary mb-md">Simulador de inversión</h3>
-          <div class="panel-body" id="simuladorBody"></div>
-        </section>
-
-        <section class="glass-card rounded-xl p-lg" id="ultimosMovsCard">
-          <div class="flex justify-between items-center mb-md">
-            <h3 class="font-title-md text-title-md text-primary">Últimos movimientos</h3>
-            <button class="btn-stitch-ghost btn-sm" id="verHistorialBtn">Ver todo →</button>
+        <section class="card pad" id="flujoCard">
+          <div class="card-head">
+            <div class="h2">Ingresos y gastos por mes</div>
+            <div class="sub" id="flujoBadge"></div>
           </div>
-          <div class="panel-body" id="ultimosMovsBody"></div>
+          <div class="flujo-canvas-wrap"><canvas id="flujoChart" role="img" aria-label="Ingresos y gastos por mes"></canvas></div>
         </section>
 
-        <section class="glass-card rounded-xl p-lg" id="recurrentesCard">
-          <h3 class="font-title-md text-title-md text-primary mb-md">Gastos recurrentes</h3>
-          <div class="panel-body" id="recurrentesBody"></div>
+        <section class="card pad" id="gastoDiasCard">
+          <div class="card-head">
+            <div class="h2">Gastos por día</div>
+            <div class="sub" id="gastoDiasMes"></div>
+          </div>
+          <div class="gastodias-canvas-wrap"><canvas id="gastoDiasChart" role="img" aria-label="Gasto por día del mes"></canvas></div>
+          <p class="note" id="gastoDiasResumen" style="margin:0"></p>
         </section>
 
-        <section class="glass-card rounded-xl p-lg" id="eficienciaCard">
-          <div class="panel-body eficiencia-body" id="eficienciaBody"></div>
+        <section class="card pad" id="simuladorCard">
+          <div class="card-head">
+            <div class="h2">Simulador de inversión</div>
+            <span class="badge b-ok">Estimación</span>
+          </div>
+          <div id="simuladorBody"></div>
+          <div class="note">Estimación con interés compuesto, sin impuestos ni inflación. No es una recomendación de inversión.</div>
         </section>
 
-        <section class="glass-card rounded-xl p-lg" id="pendientesCard">
-          <h3 class="font-title-md text-title-md text-primary mb-md">Cuotas pendientes</h3>
-          <div class="panel-body" id="pendientesBody"></div>
+        <section class="card pad" id="ultimosMovsCard">
+          <div class="card-head">
+            <div class="h2">Últimos movimientos</div>
+            <button class="linkbtn" id="verHistorialBtn" type="button">Ver todo</button>
+          </div>
+          <div id="ultimosMovsBody"></div>
         </section>
+
+        <section class="card pad" id="recurrentesCard">
+          <div class="h2">Gastos recurrentes</div>
+          <div id="recurrentesBody"></div>
+        </section>
+
+        <section class="card pad" id="eficienciaCard">
+          <div class="eficiencia-body" id="eficienciaBody"></div>
+        </section>
+
+        <section class="card pad" id="pendientesCard">
+          <div class="h2">Cuotas pendientes</div>
+          <div id="pendientesBody"></div>
+        </section>
+      </div>
+
+      <!-- ============ AJUSTES ============ -->
+      <div id="vistaAjustes" class="page-view view-hidden">
+
+        <div class="set-sect">
+          <div class="set-lab">Apariencia</div>
+          <div class="theme-opts">
+            <button class="opt" id="temaClaroBtn" type="button">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/></svg>
+              <span style="font-size:15px;font-weight:800">Claro</span>
+            </button>
+            <button class="opt" id="temaOscuroBtn" type="button">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z"/></svg>
+              <span style="font-size:15px;font-weight:800">Oscuro</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="set-sect">
+          <div class="set-lab">Voz del asistente</div>
+          <button class="opt voz-opt" id="ajVoz1" type="button">
+            <span class="mini"></span>
+            <span class="grow"><span style="display:block;font-size:16px;font-weight:800">Voz 1 · Mujer</span><span class="rs" style="display:block;font-weight:500;line-height:1.4">Cálida y clara, con acento porteño</span></span>
+            <span class="radio" id="ajVoz1R"></span>
+          </button>
+          <button class="opt voz-opt" id="ajVoz2" type="button">
+            <span class="mini v2"></span>
+            <span class="grow"><span style="display:block;font-size:16px;font-weight:800">Voz 2 · Hombre</span><span class="rs" style="display:block;font-weight:500;line-height:1.4">Tranquila y amigable, con acento porteño</span></span>
+            <span class="radio" id="ajVoz2R"></span>
+          </button>
+          <div class="card pad-sm row" style="gap:14px">
+            <div class="grow"><div style="font-size:16px;font-weight:800">Leer respuestas en voz alta</div><div class="rs" style="font-weight:500;line-height:1.4">El asistente te habla cada vez que responde</div></div>
+            <button class="sw" id="ajLeerSw" type="button" role="switch" aria-checked="true" aria-label="Leer respuestas en voz alta"><span></span></button>
+          </div>
+          <div class="rs" id="ajVozUso" style="padding:0 4px;line-height:1.4"></div>
+        </div>
+
+        <div class="set-sect">
+          <div class="set-lab">Cuenta y compartir</div>
+          <div class="card group">
+            <button class="user-chip" id="userChip" type="button">
+              <div class="avatar" id="userAvatar">?</div>
+              <div class="user-meta"><div class="n" id="userNombre">Invitado</div><div class="r" id="userSub">Tus datos están solo en este dispositivo</div></div>
+            </button>
+            <hr class="sep">
+            <button class="arow" id="conectarGoogleBtn" type="button" style="display:none">
+              <span class="tile ct4"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3A4 4 0 0011 18.7l1-1"/></svg></span>
+              <span class="grow"><div class="t">Vincular con Google</div><div class="s">Tus datos siguen a cualquier dispositivo</div></span>
+            </button>
+            <button class="arow" id="cuentaInvitarBtn" type="button">
+              <span class="tile ct1"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.4 3.2-5.5 6.5-5.5s5.9 2.1 6.5 5.5M18 8v6M15 11h6"/></svg></span>
+              <span class="grow"><div class="t">Invitar a tu pareja o a alguien más</div><div class="s">Por mail o link de WhatsApp, con permiso de edición o solo lectura</div></span>
+            </button>
+            <hr class="sep">
+            <button class="arow" id="notifBtn" type="button">
+              <span class="tile ct6"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 17V11a6 6 0 1112 0v6l1.5 2h-15zM10 21h4"/></svg></span>
+              <span class="grow"><div class="t">Notificaciones</div><div class="s">Avisos de actividad compartida y resumen semanal</div></span>
+            </button>
+            <hr class="sep">
+            <button class="arow" id="telegramBtn" type="button">
+              <span class="tile ct3"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4L3 11l6 2 2 6 3-4 5 3z"/><path d="M9 13l12-9"/></svg></span>
+              <span class="grow"><div class="t">Vincular Telegram</div><div class="s" id="telegramSub">Cargá gastos escribiéndole al bot</div></span>
+            </button>
+            <hr class="sep">
+            <button class="arow" id="menuBtn" type="button">
+              <span class="tile ct5"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></span>
+              <span class="grow"><div class="t">Respaldar y restaurar</div><div class="s">Descargá una copia, restaurala o limpiá meses</div></span>
+            </button>
+            <hr class="sep">
+            <button class="arow peligro" id="cerrarSesionBtn" type="button" style="display:none">
+              <span class="tile ct7"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H6a2 2 0 01-2-2V5a2 2 0 012-2h3M16 17l5-5-5-5M21 12H9"/></svg></span>
+              <span class="grow"><div class="t">Cerrar sesión</div></span>
+            </button>
+          </div>
+        </div>
+
       </div>
 
     </div>
   </main>
 
-  <!-- ===== BottomNavBar ===== -->
-  <nav class="bottom-nav">
-    <div class="side-brand">
-      <img src="logo.png" alt="" width="26" height="26">
-      <span>Mis Finanzas</span>
-    </div>
-    <a href="#resumen" data-page="resumen" class="active">
-      <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">dashboard</span>
-      <span class="font-label-caps text-label-caps">Inicio</span>
+  <!-- ===== Barra inferior (5 pestañas) ===== -->
+  <nav class="nav" aria-label="Secciones">
+    <a class="navb on" href="#resumen" data-page="resumen" aria-label="Inicio">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-6 8 6v8a1 1 0 01-1 1h-4v-6h-6v6H5a1 1 0 01-1-1z"/></svg>Inicio
     </a>
-    <a href="#gastos" data-page="gastos">
-      <span class="material-symbols-outlined">shopping_cart</span>
-      <span class="font-label-caps text-label-caps">Gastos</span>
+    <a class="navb" href="#gastos" data-page="gastos" aria-label="Gastos">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h2l2 10h9l2-7H7"/><circle cx="9" cy="19" r="1.3"/><circle cx="17" cy="19" r="1.3"/></svg>Gastos
     </a>
-    <div class="bottom-nav-fab" id="fabWrap">
-      <div class="fab-actions" id="fabActions">
-        <button class="fab-action" id="fabQR" style="transition-delay:0ms">
-          <span class="fab-action-ic"><span class="material-symbols-outlined">qr_code_scanner</span></span>
-          <span class="fab-action-label">Escanear QR</span>
-        </button>
-        <button class="fab-action" id="fabMes" style="transition-delay:30ms">
-          <span class="fab-action-ic"><span class="material-symbols-outlined">calendar_add_on</span></span>
-          <span class="fab-action-label">Nuevo mes</span>
-        </button>
-        <button class="fab-action" id="fabIngreso" style="transition-delay:60ms">
-          <span class="fab-action-ic"><span class="material-symbols-outlined">payments</span></span>
-          <span class="fab-action-label">Nuevo ingreso</span>
-        </button>
-        <button class="fab-action" id="fabGasto" style="transition-delay:90ms">
-          <span class="fab-action-ic"><span class="material-symbols-outlined">shopping_cart</span></span>
-          <span class="fab-action-label">Nuevo gasto</span>
-        </button>
-      </div>
-      <button class="fab" id="fabToggle" title="Agregar">
-        <span class="material-symbols-outlined text-[22px]" id="fabToggleIcon">add</span>
-      </button>
-    </div>
-    <a href="#deudas" data-page="deudas">
-      <span class="material-symbols-outlined">credit_card</span>
-      <span class="font-label-caps text-label-caps">Deudas</span>
+    <a class="navb" href="#analiticas" data-page="analiticas" aria-label="Análisis">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Análisis
     </a>
-    <a href="#historial" data-page="historial">
-      <span class="material-symbols-outlined">history</span>
-      <span class="font-label-caps text-label-caps">Historial</span>
+    <a class="navb" href="#deudas" data-page="deudas" aria-label="Deudas">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2.5"/><path d="M3 10h18"/></svg>Deudas
+    </a>
+    <a class="navb" href="#historial" data-page="historial" aria-label="Historial">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>Historial
     </a>
   </nav>
 
+  <!-- ===== Botones flotantes: asistente + "+" con menú rápido ===== -->
   <div class="fab-backdrop" id="fabBackdrop"></div>
+  <div class="fabs" id="fabWrap">
+    <div class="dial">
+      <button class="dialb" id="fabQR" type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 012-2h2M16 4h2a2 2 0 012 2v2M20 16v2a2 2 0 01-2 2h-2M8 20H6a2 2 0 01-2-2v-2M8 12h8"/></svg>Escanear ticket</button>
+      <button class="dialb" id="fabMes" type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Nuevo mes</button>
+      <button class="dialb" id="fabIngreso" type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg>Nuevo ingreso</button>
+      <button class="dialb" id="fabGasto" type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7l10 10M17 9v8H9"/></svg>Nuevo gasto</button>
+    </div>
+    <button class="fabo" id="chatFab" type="button" aria-label="Hablar con el asistente"><i style="left:14px"></i><i style="right:14px"></i></button>
+    <button class="fabp" id="fabToggle" type="button" aria-label="Agregar" aria-expanded="false">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+  </div>
 </div>
 
 <!-- Escáner de QR (ticket de compra) -->
 <div class="qr-scan-back" id="qrScanBack">
   <div class="qr-scan-topbar">
     <span>Escaneá el QR del ticket</span>
-    <button type="button" id="qrScanClose" class="qr-scan-close"><span class="material-symbols-outlined">close</span></button>
+    <button type="button" id="qrScanClose" class="qr-scan-close" aria-label="Cerrar el escáner"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </div>
   <video id="qrScanVideo" playsinline autoplay muted></video>
   <div class="qr-scan-frame"></div>
@@ -433,38 +436,111 @@
 
 <!-- Modal -->
 <div class="modal-back" id="modalBack">
-  <div class="modal glass-card" id="modal"></div>
+  <div class="modal" id="modal" role="dialog" aria-modal="true"></div>
 </div>
 
-<!-- Asistente de chat -->
-<button class="chat-fab" id="chatFab" title="Asistente">
-  <img src="chat-logo.png" alt="" class="chat-fab-icon">
-</button>
-<div class="chat-back" id="chatBack">
-  <div class="chat-panel glass-card" id="chatPanel">
-    <div class="chat-header">
-      <button class="chat-historial-btn" id="chatHistorialBtn" title="Conversaciones anteriores"><span class="material-symbols-outlined">menu</span></button>
-      <div class="chat-header-right">
-        <button class="chat-voz-toggle" id="chatVozToggle" title="Leer respuestas en voz alta"><span class="material-symbols-outlined">volume_up</span></button>
-        <button class="chat-close" id="chatClose"><span class="material-symbols-outlined">close</span></button>
+<!-- ===== Asistente (pantalla completa): voz, elegir voz y chat de texto ===== -->
+<div class="asis" id="chatBack" role="dialog" aria-modal="true" aria-label="Asistente">
+
+  <!-- Voz -->
+  <section class="asis-view" id="vConv">
+    <div class="v-top">
+      <button class="vtop" id="vozLeerBtn" type="button" aria-label="Leer respuestas en voz alta"></button>
+      <button class="vtop" id="vozElegirBtn" type="button" aria-label="Elegir una voz">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>
+      </button>
+    </div>
+    <div class="v-mid">
+      <button class="cwrap idle v1" id="orbBtn" type="button" aria-label="Tocá el círculo para hablar o para que se calle">
+        <span class="cloud"><span class="cswirl"><span class="blob bl1"></span><span class="blob bl2"></span><span class="blob bl3"></span><span class="blob bl4"></span><span class="blob bl5"></span></span></span>
+      </button>
+      <div class="cstatus" id="orbStatus" role="status" aria-live="polite"></div>
+      <div class="vtext" id="orbText"></div>
+    </div>
+    <div class="v-bottom">
+      <button class="vbtn" id="vMicBtn" type="button" aria-label="Hablar con el asistente">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0013 0M12 18v3"/></svg>
+      </button>
+      <button class="vbtn" id="vTecladoBtn" type="button" aria-label="Escribirle al asistente">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2.5"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/></svg>
+      </button>
+      <button class="vbtn" id="vCerrarBtn" type="button" aria-label="Cerrar el asistente">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+  </section>
+
+  <!-- Elegir una voz -->
+  <section class="asis-view" id="vElegir">
+    <div class="v-pick">
+      <div class="v-pick-head">
+        <button class="vtop" id="vElegirVolver" type="button" aria-label="Volver"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <div style="font-size:17px;font-weight:600">Elige una voz</div>
+        <div style="width:44px;height:44px"></div>
+      </div>
+      <div style="margin-top:34px">
+        <button class="cwrap idle v1" id="orbPickBtn" type="button" aria-label="Tocá el círculo para escuchar una muestra">
+          <span class="cloud"><span class="cswirl"><span class="blob bl1"></span><span class="blob bl2"></span><span class="blob bl3"></span><span class="blob bl4"></span><span class="blob bl5"></span></span></span>
+        </button>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:6px">
+        <div class="v-pick-name" id="vPickNombre">Voz 1 · Mujer</div>
+        <div class="v-pick-desc" id="vPickDesc">Cálida y clara, con acento porteño</div>
+      </div>
+      <div style="display:flex;margin-top:14px">
+        <button class="dotb" id="dot1Btn" type="button" aria-label="Voz 1"><i class="dot on"></i></button>
+        <button class="dotb" id="dot2Btn" type="button" aria-label="Voz 2"><i class="dot"></i></button>
+      </div>
+      <div class="sub" style="margin-top:4px">Tocá el círculo para escuchar una muestra</div>
+      <div style="flex:1"></div>
+      <div style="width:100%;padding:0 24px calc(40px + env(safe-area-inset-bottom))">
+        <button class="btnv" id="vUsarBtn" type="button">Usar esta voz</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Chat de texto -->
+  <section class="asis-view asis-chat" id="chatPanel">
+    <div class="chat-head">
+      <button class="ibtn" id="chatClose" type="button" aria-label="Cerrar el asistente"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+      <button class="chat-who" id="chatWhoBtn" type="button" aria-label="Cambiar la voz del asistente">
+        <span class="mini" id="chatMini"></span>
+        <span><span class="n" style="display:block">Asistente</span><span class="v" id="chatVozNombre" style="display:block">Voz 1</span></span>
+      </button>
+      <div class="chat-head-right">
+        <button class="ibtn" id="chatHistorialBtn" type="button" aria-label="Conversaciones anteriores">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+        </button>
+        <button class="ibtn chat-voz-toggle" id="chatVozToggle" type="button" aria-label="Leer respuestas en voz alta"></button>
       </div>
     </div>
     <div class="chat-mensajes" id="chatMensajes"></div>
     <div class="chat-hist-backdrop" id="chatHistBackdrop"></div>
     <div class="chat-historial-lista" id="chatHistorialLista"></div>
-    <div class="chat-input-bar" id="chatForm">
-      <button type="button" class="chat-mic" id="chatMicBtn" title="Hablar"><span class="material-symbols-outlined">mic</span></button>
-      <input type="text" id="chatInput" placeholder="Preguntame o contame un gasto…" autocomplete="one-time-code" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true">
-      <button type="button" class="chat-send" id="chatSendBtn"><span class="material-symbols-outlined">send</span></button>
+    <div class="chat-chips" id="chatChips">
+      <button class="chip" type="button" data-q="¿Cuánto gasté este mes?">¿Cuánto gasté?</button>
+      <button class="chip" type="button" data-q="¿En qué categoría gasto más?">¿En qué gasto más?</button>
+      <button class="chip" type="button" data-q="¿Cómo voy con los presupuestos?">Mis presupuestos</button>
+      <button class="chip" type="button" data-pre="Gasté ">Anotar un gasto</button>
     </div>
-  </div>
+    <div class="chat-input-bar" id="chatForm">
+      <input type="text" id="chatInput" placeholder="Escribile al asistente" aria-label="Mensaje para el asistente" autocomplete="one-time-code" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true">
+      <button type="button" class="chat-send" id="chatSendBtn" aria-label="Enviar mensaje">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3L10 14M21 3l-7 18-4-7-7-4z"/></svg>
+      </button>
+      <button type="button" class="chat-mic" id="chatMicBtn" aria-label="Hablar con el asistente">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0013 0M12 18v3"/></svg>
+      </button>
+    </div>
+  </section>
 </div>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 <input type="file" id="importFile" accept="application/json" style="display:none">
 
 <script src="datos-iniciales.js"></script>
-<script src="app.js?v=35"></script>
+<script src="app.js?v=37"></script>
+<script src="asistente.js?v=3"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js'); });
