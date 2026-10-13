@@ -34,77 +34,80 @@ const CATEGORIAS: Record<string, string> = {
   ropa: "Ropa / Personal", seguros: "Seguros / Imprevistos", ahorro: "Ahorro e Inversión",
 };
 
-function systemPrompt(contexto: unknown): string {
+function systemPrompt(contexto: unknown, modo: string): string {
   const listaCategorias = Object.entries(CATEGORIAS).map(([id, nombre]) => `${id} (${nombre})`).join(", ");
+  const estiloVoz = modo === "voz"
+    ? [
+      "ESTÁS HABLANDO EN VOZ ALTA con el usuario (la app lee tu \"respuesta\" con una voz). Respondé en 1 a 3 frases cortas y naturales, como en una charla,",
+      "SIN listas, SIN markdown, SIN emojis ni símbolos raros. Los montos escribilos igual que siempre ($ 12.300): la app los lee bien. Sin enumerar más de 3 cosas.",
+    ]
+    : [
+      "Estás en un chat de texto: respondé breve y claro (1 a 4 oraciones). Podés usar saltos de línea, pero NO uses markdown (nada de **negritas**, #, tablas ni listas con asteriscos).",
+    ];
   return [
-    "Sos el asistente financiero personal de la app \"Mis Finanzas\", en español rioplatense, tono cercano y conversador.",
-    "Tenés dos trabajos: (1) responder preguntas sobre las finanzas del usuario usando SOLO los datos del CONTEXTO de abajo, sin inventar números; ",
-    "(2) cuando el usuario te cuenta que hizo una compra o gasto (ej. \"gasté 5000 en nafta\", \"compré pan 1500 y coca 3000\"), identificarlo para anotarlo.",
-    "Además sos conversador para el trato social normal: si te saluda (\"hola\", \"buenas\", \"cómo estás\", \"todo bien?\") respondé el saludo",
-    "con calidez y preguntá en qué lo ayudás, y si se despide (\"nos vemos\", \"chau\", \"gracias\", \"listo, eso es todo\") despedite de forma",
-    "breve y amable. Estas dos cosas NO son \"fuera de tema\" — son charla normal, no las rechaces nunca. \"registrar\" siempre [] en estos casos.",
-    "Lo que SÍ rechazás con amabilidad es cuando te piden ayuda de verdad con algo que no tiene nada que ver con las finanzas de este usuario",
-    "ni es una simple cortesía social (ej: pedirte una receta de cocina, un dato de cultura general, ayuda con código, el clima). Ahí en una",
-    "frase decí que sos un asistente financiero y no podés ayudar con eso, y ofrecé hablar de sus gastos/ingresos/presupuestos. \"registrar\": [] también en ese caso.",
-    "IMPORTANTE sobre el campo \"respuesta\": nunca contestes con una sola palabra o número suelto. Escribí SIEMPRE una oración completa y natural",
-    "(1 o 2 oraciones como máximo, nunca un párrafo largo). Ejemplo de un buen \"respuesta\" a \"¿cuánto gasté en alquiler?\": \"Este mes gastaste $ 412.542 en alquiler.\"",
-    "Ejemplo de uno MALO (no hagas esto): \"412542\". Los montos en la respuesta siempre con el signo $ y puntos de miles, ej: $ 412.542.",
-    "Los usuarios muchas veces preguntan DOS cosas en un mismo mensaje (ej: \"¿cuánto gasté y en qué?\"). Fijate bien cuántas preguntas hay",
-    "y respondé TODAS, una por una, en la misma \"respuesta\" — nunca contestes solo la primera parte e ignores el resto.",
-    "\"gastosPorCategoria\" del contexto tiene el desglose por categoría del mes activo: usalo para responder \"¿en qué gasté más/menos?\" o \"¿en qué categorías gasté?\".",
-    "\"balanceDelMes\" es lo que le queda disponible al usuario este mes (ingresos menos gastos menos cuotas pagadas) — es la cifra a usar",
-    "cuando pregunte \"¿cuánto puedo ahorrar?\", \"¿cuánto me sobra?\" o similar; NO digas que te falta información si ese dato ya está en el contexto.",
-    "NUNCA recalcules ni sumes vos los montos del contexto de una manera distinta a como ya vienen (ej: \"totalGastos\" es EL monto gastado en el mes,",
-    "no lo multipliques ni le agregues ceros) — copiá los números tal cual están, solo dales formato con $ y puntos de miles.",
-    "Los montos en pesos argentinos de esta app SIEMPRE son números enteros, nunca con decimales — si en algún momento un cálculo te da",
-    "decimales, es que te equivocaste; redondeá y revisá que estés usando el número correcto del contexto.",
-    "Cuando el usuario te pide anotar un gasto (\"registrar\" no vacío), la \"respuesta\" tiene que confirmar ESE gasto puntual",
-    "(ej: \"Anotado: $ 12.300 en Alimentación.\"), nunca un dato genérico como el total gastado en el mes — eso no es lo que preguntó.",
-    "Los mensajes anteriores del historial que empiezan con \"Anotado\" o dicen que algo ya se registró son gastos que YA SE CARGARON",
-    "en un turno anterior. Si el usuario solo pregunta \"¿ya lo anotaste?\" o algo similar, respondé que sí (si corresponde) con \"registrar\": [],",
-    "NUNCA vuelvas a incluir en \"registrar\" un gasto que el historial muestra que ya se anotó — eso lo duplicaría.",
-    `Categorías válidas (usá SIEMPRE el id, nunca el nombre): ${listaCategorias}.`,
+    "Sos el asistente personal de la app \"Mis Finanzas\", en español rioplatense (vos), con tono cercano, amable y directo. Sos inteligente y práctico:",
+    "entendés lo que el usuario quiere decir aunque lo escriba o lo dicte mal, razonás los números con cuidado y no inventás nada.",
+    ...estiloVoz,
     "",
-    "TERCER trabajo: presupuestos por chat. Si el usuario te dice cuánto quiere gastar como máximo en una categoría",
-    "(ej. \"voy a hacer la compra mensual y quiero gastar 200000 solo en comida\", \"que la nafta no pase de 40000 este mes\",",
-    "\"ponele un tope de 30000 a entretenimiento\"), eso NO es un gasto para registrar — es fijar un presupuesto. Devolvé",
-    '"presupuesto": { "categoria": "id válido", "monto": 200000 } (un solo objeto, no un array) y "registrar": [] para ese mensaje,',
-    "y en \"respuesta\" confirmá el tope de forma natural (ej. \"Listo, te aviso cuando te vayas acercando a los $ 200.000 en Alimentación.\").",
-    "Si el usuario no está fijando un tope nuevo, \"presupuesto\" tiene que ser null. El progreso contra el presupuesto (cuánto lleva",
-    "gastado de cuánto tiene disponible) NO lo calculás vos — te lo agrega la app automáticamente después de tu respuesta, así que",
-    "no repitas ni inventes ese número en \"respuesta\".",
+    "=== QUÉ SABÉS HACER ===",
+    "1) RESPONDER preguntas sobre las finanzas del usuario usando SOLO los datos del CONTEXTO (gastos, ingresos, filas, movimientos, presupuestos, deudas, meses).",
+    "   Los totales y promedios ya vienen calculados en el CONTEXTO: usalos tal cual, no los recalcules ni los modifiques. Si un dato no está, decilo con honestidad.",
+    "   Podés comparar, sumar entre categorías, buscar el mayor gasto, estimar cuánto queda por día, etc., siempre con los números del CONTEXTO.",
+    "2) ANOTAR GASTOS nuevos (\"gasté 5000 en nafta\", \"compré pan 1500 y coca 3000\") -> campo \"registrar\".",
+    "3) MODIFICAR la app (agregar, editar, sacar, marcar) -> campos \"registrar\", \"presupuesto\", \"pagosDeudas\" y \"acciones\" (detalle abajo).",
+    "4) Charla social normal (saludos, gracias, chau): respondé con calidez y brevedad, sin tocar nada. Si te piden algo que no tiene nada que ver con sus finanzas",
+    "   (recetas, código, clima, cultura general), decí en una frase que sos un asistente financiero y ofrecé ayudar con sus gastos, ingresos, presupuestos o deudas.",
+    "5) Promociones/descuentos y comparar precios de supermercados: NUNCA de memoria. Devolvé \"buscarWeb\" (ver más abajo).",
     "",
-    "CUARTO trabajo: promociones/descuentos reales de comercios (ej. \"¿qué día tiene descuento Coto?\", \"hay alguna promo en",
-    "Carrefour esta semana\") Y comparar precios de un producto entre supermercados (ej. \"qué súper tiene mejor precio en",
-    "fideos\", \"dónde me conviene comprar arroz\", \"comparame el precio de la yerba entre Coto y Dia\"). Para esto NO tenés",
-    "información propia — cualquier dato que \"recuerdes\" sobre precios o promociones puede estar desactualizado o directamente",
-    "inventado, así que NUNCA respondas esto de memoria, ni un precio ni una promo ni cuál es más barato.",
-    'En su lugar devolvé "buscarWeb" con una consulta de búsqueda corta y simple (el producto o la promo, SIN nombrar un',
-    'supermercado en particular — el sistema ya busca sola en los sitios de Coto, Día, Carrefour, Jumbo y Vea) — ej.',
-    '"precio fideos 500g" o "descuentos supermercados esta semana". En "respuesta" poné un mensaje corto tipo "Dejame',
-    'fijarme..." (por si la búsqueda no está disponible, ese será el mensaje que vea el usuario). Si la pregunta NO es sobre',
-    "promos/descuentos/precios/comercios, \"buscarWeb\" tiene que ser null. Nunca pongas algo en \"buscarWeb\" y en \"registrar\"",
-    "o \"presupuesto\" a la vez en el mismo mensaje.",
+    "=== REGLA DE ORO: SOLO CAMBIÁS LO QUE TE PIDEN ===",
+    "Modificás datos ÚNICAMENTE cuando el usuario lo pide de forma explícita (\"anotá\", \"agregá\", \"borrá\", \"sacá\", \"cambiá\", \"corregí\", \"poné\", \"marcá\", \"ya pagué\", etc.).",
+    "Una pregunta (\"¿cuánto gasté?\", \"¿qué pasaría si...?\") o un comentario NUNCA modifica nada. Si no estás seguro de que sea un pedido, preguntá antes de actuar.",
+    "- Si falta un dato imprescindible (el monto, a qué fila/deuda/ingreso se refiere, cuál de dos parecidos), NO adivines: preguntá en \"respuesta\" y dejá los campos de cambios vacíos.",
+    "- Para sacar/borrar UN elemento concreto que el usuario nombró con claridad, hacelo. Para borrar VARIOS elementos, \"todo\", un mes entero o algo que no se pueda identificar",
+    "  con seguridad, pedí confirmación primero (\"¿Confirmás que borre X, Y y Z?\") sin devolver cambios; recién cuando el usuario diga que sí, devolvé las acciones.",
+    "- Después de hacer cambios, decí en la \"respuesta\" qué hiciste, en una frase. La app le muestra un botón para deshacer, así que no hace falta que lo menciones.",
+    "- No repitas cambios que el historial muestra que ya se hicieron (lo que dice \"Anotado\", \"Marqué\", etc. YA SE CARGÓ en un turno anterior).",
+    "- Nunca devuelvas cambios para algo que solo estás explicando o simulando.",
     "",
-    "QUINTO trabajo: marcar pagos de deudas/tarjetas. El CONTEXTO trae \"deudas\" (nombre, saldo, cuotaMensual, activa y pagadaEsteMes).",
-    "Si el usuario dice que ya pagó una deuda o tarjeta (ej. \"ya pagué la tarjeta naranja, marcala como pagado\", \"pagué el préstamo\") devolvé",
-    '"pagosDeudas": [ { "deuda": "nombre EXACTO como figura en el CONTEXTO", "accion": "pagar" } ] (una entrada por cada deuda que mencione).',
-    'Si pide deshacer o desmarcar un pago (ej. "desmarcá la visa, me equivoqué") usá "accion": "revertir".',
-    "Elegí siempre la deuda cuyo nombre más se parezca a lo que dijo el usuario. Si ninguna se parece, o dos se parecen igual de bien, NO inventes:",
-    "dejá \"pagosDeudas\" afuera y en \"respuesta\" preguntale a cuál se refiere (nombrando las opciones del CONTEXTO). Si la deuda ya figura con pagadaEsteMes",
-    "en true y pide marcarla, igual devolvé la entrada (la app avisa que ya estaba pagada). Pagar una tarjeta NO es un gasto nuevo: no lo pongas en \"registrar\"",
-    "(salvo que además cuente una compra concreta aparte). En \"respuesta\" confirmá en una frase qué deuda marcaste, sin repetir montos que no estén en el CONTEXTO.",
-    "CONTEXTO (datos financieros reales del usuario, en pesos argentinos):",
+    "=== FORMATO DE LA RESPUESTA (JSON válido, nada fuera del JSON, sin markdown) ===",
+    "{ \"analisis\": \"notas internas breves\", \"respuesta\": \"texto para el usuario\", \"registrar\": [...], \"presupuesto\": {...}, \"pagosDeudas\": [...], \"acciones\": [...], \"buscarWeb\": \"...\" }",
+    "- \"respuesta\" es OBLIGATORIA en todas tus respuestas, siempre una oración completa y natural (nunca una palabra o número suelto). Los demás campos son opcionales: poné solo los que correspondan.",
+    "- \"analisis\" (opcional, máx. 300 caracteres, el usuario NO lo ve): usalo para pensar antes de responder cuando haya cuentas, comparaciones o un pedido ambiguo.",
+    "- Montos siempre como números enteros en pesos argentinos, sin signos ni puntos de miles, y sin decimales. En textos, con el formato $ 12.300.",
+    `- Categorías válidas (usá SIEMPRE el id, nunca el nombre): ${listaCategorias}.`,
+    "- Si el usuario hace dos preguntas en un mismo mensaje, respondé las dos. Si pregunta algo de varias cosas a la vez, no contestes solo la primera.",
+    "- Si anotás un gasto, la \"respuesta\" confirma ESE gasto (\"Anotado: $ 12.300 en Alimentación.\"), no un dato genérico.",
+    "",
+    "=== CAMPOS DE CAMBIOS ===",
+    "\"registrar\": gastos NUEVOS. Cada ítem: { \"categoria\": id, \"monto\": entero, \"nota\": \"texto corto\" (opcional), \"fila\": \"nombre de una fila existente de esa categoría\" (opcional, solo si el usuario la nombra),",
+    "   \"fecha\": \"YYYY-MM-DD\" (opcional: \"ayer\", \"el lunes\"... calculala con \"hoy\" del CONTEXTO; nunca una fecha futura) }. Un ítem por cada compra distinta.",
+    "\"presupuesto\": { \"categoria\": id, \"monto\": entero } cuando el usuario fija un tope mensual (\"quiero gastar 200000 en comida\"). Es un tope, NO un gasto: \"registrar\" va vacío en ese caso. Si no fija un tope, no lo pongas.",
+    "\"pagosDeudas\": [ { \"deuda\": \"nombre EXACTO como figura en \\\"deudas\\\" del CONTEXTO\", \"accion\": \"pagar\" | \"revertir\" } ] cuando dice que pagó una deuda/tarjeta (\"ya pagué la naranja\")",
+    "   o que desmarques un pago (\"desmarcá la visa\"). Pagar una tarjeta NO es un gasto nuevo: no lo pongas en \"registrar\" salvo que además cuente una compra aparte.",
+    "   Elegí la deuda cuyo nombre más se parezca; si ninguna o dos se parecen igual, preguntá cuál (nombrando las opciones) y no devuelvas nada.",
+    "\"acciones\": lista de otros cambios, en el orden en que deben hacerse. Cada una con \"tipo\" y sus campos. Usá los nombres/ids tal como figuran en el CONTEXTO:",
+    "  { \"tipo\": \"mes_ir\", \"mes\": \"YYYY-MM\" }  cambia el mes que se está viendo (solo meses que existan en \"mesesDisponibles\"); las acciones siguientes se aplican a ese mes.",
+    "  { \"tipo\": \"mes_nuevo\" }  crea el mes siguiente copiando el último.",
+    "  { \"tipo\": \"movimiento_editar\", \"id\": \"id del movimiento\", \"monto\"?: n, \"nota\"?: \"texto\", \"categoria\"?: id, \"fila\"?: \"nombre\" }  corrige un gasto ya anotado (ids en \"movimientosRecientes\").",
+    "  { \"tipo\": \"movimiento_eliminar\", \"id\": \"id del movimiento\" }  borra un gasto anotado.",
+    "  { \"tipo\": \"fila_agregar\", \"categoria\": id, \"fila\": \"nombre\", \"monto\"?: n }  agrega una fila de gasto (por ejemplo un gasto fijo como \"Internet\").",
+    "  { \"tipo\": \"fila_editar\", \"categoria\": id, \"fila\": \"nombre actual\", \"monto\"?: n, \"nuevoNombre\"?: \"texto\" }  cambia el monto o el nombre de una fila.",
+    "  { \"tipo\": \"fila_eliminar\", \"categoria\": id, \"fila\": \"nombre\" }  saca una fila de gastos.",
+    "  { \"tipo\": \"ingreso_agregar\", \"nombre\": \"texto\", \"monto\": n }  { \"tipo\": \"ingreso_editar\", \"nombre\": \"actual\", \"monto\"?: n, \"nuevoNombre\"?: \"texto\" }  { \"tipo\": \"ingreso_eliminar\", \"nombre\": \"actual\" }",
+    "  { \"tipo\": \"deuda_agregar\", \"nombre\": \"texto\", \"saldo\": n, \"cuotaMensual\": n, \"cuotaActual\"?: n, \"cuotaTotal\"?: n }",
+    "  { \"tipo\": \"deuda_editar\", \"deuda\": \"nombre actual\", \"saldo\"?: n, \"cuotaMensual\"?: n, \"cuotaActual\"?: n, \"cuotaTotal\"?: n, \"nuevoNombre\"?: \"texto\" }  { \"tipo\": \"deuda_eliminar\", \"deuda\": \"nombre\" }",
+    "  { \"tipo\": \"presupuesto_quitar\", \"categoria\": id }  saca el tope de una categoría.   { \"tipo\": \"categoria_renombrar\", \"categoria\": id, \"nombre\": \"texto\" }  cambia cómo se llama una categoría (nombre vacío = el original).",
+    "No existen otras acciones: si te piden algo que no está acá, decí con honestidad que eso todavía no lo podés hacer desde el chat y cómo hacerlo a mano en la app.",
+    "",
+    "=== BÚSQUEDA WEB (promos y precios) ===",
+    "Para promociones/descuentos reales de comercios (\"¿qué día tiene descuento Coto?\") y para comparar precios entre supermercados, NUNCA respondas de memoria.",
+    "Devolvé \"buscarWeb\" con una consulta corta y simple (el producto o la promo, SIN nombrar un supermercado: el sistema ya busca en Coto, Día, Carrefour, Jumbo y Vea).",
+    "En \"respuesta\" poné algo como \"Dejame fijarme...\" (por si la búsqueda no está disponible). Si la pregunta no es de promos/precios, \"buscarWeb\" no va. Nunca lo combines con cambios.",
+    "",
+    "=== CONTEXTO (datos reales del usuario, pesos argentinos; todo calculado por la app) ===",
     JSON.stringify(contexto),
     "",
-    "Respondé ÚNICAMENTE con un objeto JSON válido (sin texto antes ni después, sin markdown, sin explicaciones fuera del JSON).",
-    'La clave "respuesta" es OBLIGATORIA en TODAS tus respuestas, sin excepción — nunca la omitas, nunca mandes el JSON sin ella.',
-    'Las otras claves ("registrar", "presupuesto", "buscarWeb", "pagosDeudas") son OPCIONALES: agregalas solo cuando corresponda a lo que',
-    "el usuario pidió en ESTE mensaje; si no aplican, directamente no las incluyas (no hace falta poner [] o null a la fuerza).",
-    'Ejemplo mínimo (una simple pregunta o charla): { "respuesta": "Este mes gastaste $ 412.542 en alquiler." }',
-    'Ejemplo con un gasto: { "respuesta": "Anotado: $ 12.300 en Alimentación.", "registrar": [ { "categoria": "alimentacion", "monto": 12300, "nota": "super" } ] }',
-    "Si te cuenta varias compras en el mismo mensaje, agregá un ítem de \"registrar\" por cada una. \"monto\" siempre un número entero, sin signos ni puntos de miles.",
-    "Si preguntó algo que de verdad no está en el contexto, decilo con honestidad en vez de inventar.",
+    "Respondé ÚNICAMENTE con el objeto JSON.",
   ].join("\n");
 }
 
@@ -208,6 +211,100 @@ async function buscarEnSupermercados(query: string): Promise<{ ok: boolean; text
   return { ok: secciones.length > 0, texto: secciones.join("\n\n"), urls };
 }
 
+// ---- Acciones que el asistente puede pedirle a la app (se validan acá y se vuelven a validar en el cliente) ----
+function txt(v: unknown, max = 80): string { return typeof v === "string" ? v.trim().slice(0, max) : ""; }
+function ent(v: unknown): number | undefined { const n = Number(v); return Number.isFinite(n) ? Math.round(n) : undefined; }
+function catValida(v: unknown): string { return typeof v === "string" && CATEGORIAS[v] ? v : ""; }
+
+function sanearAcciones(lista: unknown): any[] {
+  if (!Array.isArray(lista)) return [];
+  const out: any[] = [];
+  for (const a of lista.slice(0, 12) as any[]) {
+    if (!a || typeof a !== "object") continue;
+    const tipo = txt(a.tipo, 40);
+    const it: any = { tipo };
+    switch (tipo) {
+      case "mes_ir": {
+        const mes = txt(a.mes, 7);
+        if (/^\d{4}-(0[1-9]|1[0-2])$/.test(mes)) { it.mes = mes; out.push(it); }
+        break;
+      }
+      case "mes_nuevo": out.push(it); break;
+      case "movimiento_editar": {
+        it.id = txt(a.id, 60); if (!it.id) break;
+        const monto = ent(a.monto); if (monto !== undefined && monto > 0) it.monto = monto;
+        if (typeof a.nota === "string") it.nota = txt(a.nota);
+        const cat = catValida(a.categoria); if (cat) it.categoria = cat;
+        const fila = txt(a.fila); if (fila) it.fila = fila;
+        out.push(it);
+        break;
+      }
+      case "movimiento_eliminar": { it.id = txt(a.id, 60); if (it.id) out.push(it); break; }
+      case "fila_agregar": {
+        it.categoria = catValida(a.categoria); it.fila = txt(a.fila);
+        if (!it.categoria || !it.fila) break;
+        const monto = ent(a.monto); if (monto !== undefined && monto >= 0) it.monto = monto;
+        out.push(it);
+        break;
+      }
+      case "fila_editar": {
+        it.categoria = catValida(a.categoria); it.fila = txt(a.fila);
+        if (!it.categoria || !it.fila) break;
+        const monto = ent(a.monto); if (monto !== undefined && monto >= 0) it.monto = monto;
+        const nuevo = txt(a.nuevoNombre); if (nuevo) it.nuevoNombre = nuevo;
+        if (it.monto === undefined && !it.nuevoNombre) break;
+        out.push(it);
+        break;
+      }
+      case "fila_eliminar": {
+        it.categoria = catValida(a.categoria); it.fila = txt(a.fila);
+        if (it.categoria && it.fila) out.push(it);
+        break;
+      }
+      case "ingreso_agregar": {
+        it.nombre = txt(a.nombre); const monto = ent(a.monto);
+        if (it.nombre && monto !== undefined && monto >= 0) { it.monto = monto; out.push(it); }
+        break;
+      }
+      case "ingreso_editar": {
+        it.nombre = txt(a.nombre); if (!it.nombre) break;
+        const monto = ent(a.monto); if (monto !== undefined && monto >= 0) it.monto = monto;
+        const nuevo = txt(a.nuevoNombre); if (nuevo) it.nuevoNombre = nuevo;
+        if (it.monto === undefined && !it.nuevoNombre) break;
+        out.push(it);
+        break;
+      }
+      case "ingreso_eliminar": { it.nombre = txt(a.nombre); if (it.nombre) out.push(it); break; }
+      case "deuda_agregar": {
+        it.nombre = txt(a.nombre); if (!it.nombre) break;
+        it.saldo = Math.max(0, ent(a.saldo) ?? 0); it.cuotaMensual = Math.max(0, ent(a.cuotaMensual) ?? 0);
+        const ca = ent(a.cuotaActual), ct = ent(a.cuotaTotal);
+        if (ca !== undefined && ct !== undefined && ca > 0 && ct > 0) { it.cuotaActual = ca; it.cuotaTotal = ct; }
+        out.push(it);
+        break;
+      }
+      case "deuda_editar": {
+        it.deuda = txt(a.deuda); if (!it.deuda) break;
+        for (const k of ["saldo", "cuotaMensual", "cuotaActual", "cuotaTotal"]) { const n = ent(a[k]); if (n !== undefined && n >= 0) it[k] = n; }
+        const nuevo = txt(a.nuevoNombre); if (nuevo) it.nuevoNombre = nuevo;
+        if (Object.keys(it).length <= 2) break;
+        out.push(it);
+        break;
+      }
+      case "deuda_eliminar": { it.deuda = txt(a.deuda); if (it.deuda) out.push(it); break; }
+      case "presupuesto_quitar": { it.categoria = catValida(a.categoria); if (it.categoria) out.push(it); break; }
+      case "categoria_renombrar": {
+        it.categoria = catValida(a.categoria); if (!it.categoria) break;
+        it.nombre = txt(a.nombre, 40);
+        out.push(it);
+        break;
+      }
+      default: break; // tipo desconocido: se descarta
+    }
+  }
+  return out;
+}
+
 function extraerJson(texto: string): any {
   try { return JSON.parse(texto); } catch { /* sigue abajo */ }
   const m = texto.match(/\{[\s\S]*\}/);
@@ -283,17 +380,19 @@ Deno.serve(async (req) => {
     const mensaje = String(body.mensaje || "").trim();
     const historial = Array.isArray(body.historial) ? body.historial : [];
     const contexto = body.contexto || {};
+    const modo = body.modo === "voz" ? "voz" : "texto";
     if (!mensaje) return json({ error: "falta mensaje" }, 400);
 
+    // Más memoria de la charla (20 mensajes), con cada uno acotado para no inflar el pedido
     const messages: MensajeChat[] = [
-      ...historial.slice(-10).map((h: any): MensajeChat => ({
+      ...historial.slice(-20).map((h: any): MensajeChat => ({
         role: h.rol === "assistant" ? "assistant" : "user",
-        content: String(h.texto || ""),
+        content: String(h.texto || "").slice(0, 1500),
       })),
-      { role: "user", content: mensaje },
+      { role: "user", content: mensaje.slice(0, 2000) },
     ];
 
-    const contenido = await llamarClaude(systemPrompt(contexto), messages);
+    const contenido = await llamarClaude(systemPrompt(contexto, modo), messages, 1600);
     if (contenido === null) return json({ error: "el asistente no pudo responder ahora" }, 502);
     const parsed = extraerJson(contenido);
 
@@ -310,7 +409,14 @@ Deno.serve(async (req) => {
           .filter((it: any) => it && CATEGORIAS[it.categoria] && Number(it.monto) > 0)
           // Math.round por las dudas: los pesos de esta app son siempre enteros,
           // si la IA se equivoca y manda decimales no queremos que se cuelen.
-          .map((it: any) => ({ categoria: it.categoria, monto: Math.round(Number(it.monto)), nota: it.nota ? String(it.nota).slice(0, 80) : null }))
+          .map((it: any) => {
+            const gasto: any = { categoria: it.categoria, monto: Math.round(Number(it.monto)), nota: it.nota ? String(it.nota).slice(0, 80) : null };
+            // fila y fecha son opcionales: la fecha tiene que ser real, de hoy o anterior
+            const fila = txt(it.fila); if (fila) gasto.fila = fila;
+            const fecha = txt(it.fecha, 10);
+            if (/^\d{4}-\d{2}-\d{2}$/.test(fecha) && fecha <= new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10)) gasto.fecha = fecha;
+            return gasto;
+          })
       : [];
 
     const presupuesto = (parsed && parsed.presupuesto && CATEGORIAS[parsed.presupuesto.categoria] && Number(parsed.presupuesto.monto) > 0)
@@ -349,7 +455,9 @@ Deno.serve(async (req) => {
           .map((p: any) => ({ deuda: String(p.deuda).trim().slice(0, 80), accion: p.accion }))
       : [];
 
-    return json({ respuesta, registrar, presupuesto, pagosDeudas });
+    const acciones = sanearAcciones(parsed && parsed.acciones);
+
+    return json({ respuesta, registrar, presupuesto, pagosDeudas, acciones });
   } catch (e) {
     console.error(e);
     return json({ error: String(e) }, 500);

@@ -78,6 +78,10 @@ Consola sin errores. Se recorrieron: las 6 páginas, tema (persistencia + `theme
 - **Pagos por chat/voz:** "ya pagué la tarjeta naranja, marcala como pagada" marca (o con "desmarcá…" revierte) el pago con las mismas funciones de la sección Deudas. Requiere **redesplegar `chat-ia`** (contrato nuevo `pagosDeudas`); con la versión vieja simplemente no marca nada.
 - **Voces:** los secretos `ELEVENLABS_VOICE_1/2` están cargados con los nombres correctos, pero la función `tts` **no estaba desplegada** (por eso se oía la voz del navegador). `tts` ahora limpia espacios/comillas de los secretos.
 
+- **Asistente más inteligente y con control de la app (cuando se lo pedís):** nuevo prompt (modo voz/texto, 20 mensajes de memoria, razonamiento interno `analisis`), contexto mucho más completo y acciones para agregar, editar y sacar gastos, filas, ingresos, deudas, presupuestos y nombres de categorías, y para cambiar o crear mes. Reglas: solo cambia lo que se le pide, pregunta si hay duda y pide confirmación antes de borrar varias cosas; cada respuesta con cambios trae **Deshacer**. Para más inteligencia (más lento y más caro) se puede cargar el secreto `CLAUDE_MODEL` con un modelo mayor.
+- **Voz y números:** los números se convierten a palabras en español antes de pedirlos a ElevenLabs ("ciento setenta y siete mil setecientos pesos") y la partición en frases ya no corta un número por el punto de los miles (eso hacía que se trabara).
+- **Gastos, desplegable de "Fila":** al agregar un gasto (y al editar un movimiento) se elige la fila entre las que ya existen en la categoría o "＋ Nueva fila…". Una fila fija (ej. Alquiler) no pasa a variable por sumarle un gasto.
+
 ## Próximos pasos (anotados, NO hechos)
 1. Rutina mensual de plan de comida y lista de compras (tabla `planes_mensuales`, Edge Function `plan-mensual`, cron, pantalla "Comida del mes"). Los atajos del chat "Armar el plan del mes" / "Lista de compras" del prototipo no se agregaron porque todavía no existen.
 2. Pasar `leer-ticket` a Claude (hoy usa NVIDIA; `NVIDIA_API_KEY` sigue siendo necesaria).

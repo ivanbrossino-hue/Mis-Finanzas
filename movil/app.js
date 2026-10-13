@@ -232,16 +232,47 @@
     return out;
   }
 
-  // Registra una compra: la suma a la línea acumuladora de la categoría y la anota en el historial
-  function registrarCompra(categoria, monto, nota, items, fecha) {
+  // Busca (o crea, vacía) la fila de gastos de una categoría. sel = { id } para una fila existente o
+  // { nombre } para una por nombre (si no existe se crea, como fila variable que arranca en 0 cada mes).
+  function resolverFila(m, categoria, sel) {
+    if (!m.gastos) m.gastos = [];
+    var filas = m.gastos.filter(function (g) { return g.categoria === categoria; });
+    var fila = null;
+    if (sel && sel.id) fila = filas.find(function (g) { return g.id === sel.id; }) || null;
+    if (!fila && sel && sel.nombre) {
+      var buscado = normalizarTexto(sel.nombre);
+      fila = filas.find(function (g) { return normalizarTexto(g.nombre) === buscado; }) || null;
+    }
+    // Sin id ni nombre: la fila acumuladora de la categoría (la que ya existe, si hay)
+    if (!fila && !(sel && (sel.id || sel.nombre))) {
+      var accName = nombreAcumulador(categoria);
+      fila = filas.find(function (g) { return g.bot || g.nombre === accName; }) || null;
+    }
+    if (!fila) {
+      fila = { id: uid(), categoria: categoria, nombre: String((sel && sel.nombre) || '').trim() || nombreAcumulador(categoria), monto: 0, bot: true };
+      m.gastos.push(fila);
+    }
+    return fila;
+  }
+
+  // Registra una compra: la suma a una fila de la categoría (la que se elija, o la línea acumuladora
+  // por defecto) y la anota en el historial. fila (opcional) = { id } o { nombre }.
+  function registrarCompra(categoria, monto, nota, items, fecha, fila) {
     var m = mesData();
     if (!m.gastos) m.gastos = [];
     if (!m.movimientos) m.movimientos = [];
-    var accName = nombreAcumulador(categoria);
-    var acc = m.gastos.filter(function (g) { return g.categoria === categoria; })
-      .find(function (g) { return g.bot || g.nombre === accName; });
-    if (acc) { acc.monto = (Number(acc.monto) || 0) + monto; acc.bot = true; }
-    else { acc = { id: uid(), categoria: categoria, nombre: accName, monto: monto, bot: true }; m.gastos.push(acc); }
+    var acc;
+    if (fila && (fila.id || fila.nombre)) {
+      // Fila elegida a mano: se le suma el monto sin cambiarle el tipo (una fila fija como el alquiler sigue siendo fija)
+      acc = resolverFila(m, categoria, fila);
+      acc.monto = (Number(acc.monto) || 0) + monto;
+    } else {
+      var accName = nombreAcumulador(categoria);
+      acc = m.gastos.filter(function (g) { return g.categoria === categoria; })
+        .find(function (g) { return g.bot || g.nombre === accName; });
+      if (acc) { acc.monto = (Number(acc.monto) || 0) + monto; acc.bot = true; }
+      else { acc = { id: uid(), categoria: categoria, nombre: accName, monto: monto, bot: true }; m.gastos.push(acc); }
+    }
     revisarGastoInusual(categoria, monto);
     m.movimientos.push({ id: uid(), fecha: fecha || isoHoyApp(), categoria: categoria, filaId: acc.id, fila: acc.nombre, monto: monto, nota: nota || null, items: items || null });
     revisarPresupuesto(categoria);
@@ -543,19 +574,52 @@
   function contextoFinancieroParaChat() {
     var mAnt = mesAnteriorKey(mesActivo);
     var hayMesAnterior = !!estado.meses[mAnt];
+    var m = mesData();
+    var porCat = gastosPorCategoria(mesActivo);
+    var partes = mesActivo.split('-');
+    var diasMes = new Date(+partes[0], +partes[1], 0).getDate();
+    var esActual = mesActivo === mesActualKey();
+    var dia = esActual ? Math.max(1, new Date().getDate()) : diasMes;
+    var gas = totalGastos(mesActivo);
+    // Las filas de gastos de cada categoría (con su monto) y lo que queda de cada presupuesto: ya calculado,
+    // así el asistente no tiene que hacer cuentas para responder ni para nombrar bien las filas al modificarlas
+    var filasPorCategoria = {};
+    (m.gastos || []).forEach(function (g) {
+      (filasPorCategoria[g.categoria] = filasPorCategoria[g.categoria] || []).push({ nombre: g.nombre, monto: Number(g.monto) || 0 });
+    });
+    var presupuestoRestante = {};
+    Object.keys(estado.presupuestos || {}).forEach(function (c) { presupuestoRestante[c] = (Number(estado.presupuestos[c]) || 0) - (porCat[c] || 0); });
+    var recientes = todosLosMovimientos().slice(0, 25).map(function (r) {
+      return { id: r.mv.id, mes: r.mesKey, fecha: r.mv.fecha, categoria: r.mv.categoria, fila: r.mv.fila || null, monto: Number(r.mv.monto) || 0, nota: r.mv.nota || null };
+    });
     return {
+      hoy: isoHoyApp(),
       mesActivo: mesKeyLabel(mesActivo),
-      ingresos: (mesData().ingresos || []).map(function (i) { return { nombre: i.nombre, monto: Number(i.monto) || 0 }; }),
-      gastosPorCategoria: gastosPorCategoria(mesActivo),
+      mesActivoClave: mesActivo,
+      mesesDisponibles: mesesOrdenados(),
+      diaDelMes: dia, diasDelMes: diasMes, diasQueFaltan: esActual ? diasMes - dia : 0,
+      permiso: miRol || 'dueno',
+      categorias: CATEGORIAS.map(function (c) { return { id: c.id, nombre: getCatNombre(c.id) }; }),
+      ingresos: (m.ingresos || []).map(function (i) { return { nombre: i.nombre, monto: Number(i.monto) || 0 }; }),
+      filasPorCategoria: filasPorCategoria,
+      gastosPorCategoria: porCat,
       totalIngresos: totalIngresos(mesActivo),
-      totalGastos: totalGastos(mesActivo),
+      totalGastos: gas,
+      cuotasPagadasEsteMes: cuotasPagadas(mesActivo),
       balanceDelMes: balanceMes(mesActivo),
+      gastoPromedioPorDia: Math.round(gas / dia),
       presupuestosPorCategoria: estado.presupuestos || {},
+      presupuestoRestantePorCategoria: presupuestoRestante,
       deudas: (estado.deudas || []).map(function (d) {
-        return { nombre: d.nombre, saldo: Number(d.saldo) || 0, cuotaMensual: Number(d.cuotaMensual) || 0, activa: d.activa !== false,
-          pagadaEsteMes: deudaPagadaEnMes(d.id, mesActivo) };
+        return { nombre: d.nombre, saldo: Number(d.saldo) || 0, cuotaMensual: Number(d.cuotaMensual) || 0, cuotaActual: d.cuotaActual || null, cuotaTotal: d.cuotaTotal || null,
+          activa: d.activa !== false, pagadaEsteMes: deudaPagadaEnMes(d.id, mesActivo) };
       }),
-      mesAnterior: hayMesAnterior ? { nombre: mesKeyLabel(mAnt), totalGastos: totalGastos(mAnt) } : null,
+      totalDeuda: totalDeuda(),
+      totalCuotasMensuales: totalCuotasDeuda(),
+      movimientosRecientes: recientes,
+      mesAnterior: hayMesAnterior
+        ? { nombre: mesKeyLabel(mAnt), totalIngresos: totalIngresos(mAnt), totalGastos: totalGastos(mAnt), gastosPorCategoria: gastosPorCategoria(mAnt) }
+        : null,
     };
   }
 
@@ -563,27 +627,35 @@
   function normalizarTexto(s) {
     return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
   }
-  // Busca la deuda cuyo nombre más se parece a lo que dijo el usuario. Devuelve { deuda } o { ambigua: [nombres] } o null
-  function buscarDeudaPorNombre(texto) {
+  // Busca, en una lista, el elemento cuyo nombre más se parece a lo que dijo el usuario.
+  // Devuelve { item } o { ambigua: [nombres] } o null (nada parecido)
+  function buscarPorNombre(lista, texto) {
     var buscado = normalizarTexto(texto);
     if (!buscado) return null;
     var tokensBuscados = buscado.split(' ').filter(function (t) { return t.length > 1; });
-    var puntajes = (estado.deudas || []).map(function (d) {
-      var nombre = normalizarTexto(d.nombre);
+    var puntajes = (lista || []).map(function (it) {
+      var nombre = normalizarTexto(it.nombre);
       var p = 0;
-      if (nombre === buscado) p = 1000;
+      if (!nombre) p = 0;
+      else if (nombre === buscado) p = 1000;
       else if (nombre.indexOf(buscado) !== -1 || buscado.indexOf(nombre) !== -1) p = 500;
       else {
         var tn = nombre.split(' ');
         tokensBuscados.forEach(function (t) { if (tn.indexOf(t) !== -1) p += 10; });
       }
-      return { d: d, p: p };
+      return { it: it, p: p };
     }).filter(function (x) { return x.p > 0; }).sort(function (a, b) { return b.p - a.p; });
     if (!puntajes.length) return null;
     if (puntajes.length > 1 && puntajes[1].p === puntajes[0].p) {
-      return { ambigua: puntajes.filter(function (x) { return x.p === puntajes[0].p; }).map(function (x) { return x.d.nombre; }) };
+      return { ambigua: puntajes.filter(function (x) { return x.p === puntajes[0].p; }).map(function (x) { return x.it.nombre; }) };
     }
-    return { deuda: puntajes[0].d };
+    return { item: puntajes[0].it };
+  }
+  // Igual que antes, pero para deudas: { deuda } o { ambigua } o null
+  function buscarDeudaPorNombre(texto) {
+    var r = buscarPorNombre(estado.deudas, texto);
+    if (!r) return null;
+    return r.ambigua ? r : { deuda: r.item };
   }
   // Aplica con las funciones de siempre (registrarPago / revertirPago) lo que pidió el asistente y
   // devuelve las líneas para mostrar en el chat. Nunca toca nada que no coincida con una deuda real.
@@ -605,6 +677,155 @@
         if (finalizada) { lineas.push('ℹ️ ' + d.nombre + ' ya está saldada, no quedan cuotas.'); return; }
         registrarPago(d.id);
         lineas.push('💳 Marqué como pagada: ' + d.nombre + ' (' + mesKeyLabel(mesActivo) + ').');
+      }
+    });
+    return lineas;
+  }
+
+  // ---- Modificar la app desde el chat ----
+  // El asistente solo PROPONE "acciones" (cuando el usuario se lo pide). Acá se aplican con las funciones
+  // de siempre de la app, cruzando cada nombre/id con los datos reales: lo que no coincide no se toca.
+  function filaDeCategoria(categoria, nombre) {
+    var filas = (mesData().gastos || []).filter(function (g) { return g.categoria === categoria; });
+    return buscarPorNombre(filas, nombre);
+  }
+  function describirMov(mv) { return fmt(mv.monto) + ' en ' + getCatNombre(mv.categoria) + (mv.nota ? ' (' + mv.nota + ')' : ''); }
+  function movimientoPorId(id) { return todosLosMovimientos().filter(function (x) { return x.mv.id === id; })[0] || null; }
+  // Resultado de una búsqueda por nombre -> { item } o un texto de aviso si no hay (o hay dos iguales)
+  function elegirUno(r, nombre, donde) {
+    if (!r) return { aviso: '⚠️ No encontré “' + nombre + '”' + (donde ? ' en ' + donde : '') + '. No toqué nada.' };
+    if (r.ambigua) return { aviso: '⚠️ “' + nombre + '” puede ser ' + r.ambigua.join(' o ') + '. Decime cuál.' };
+    return { item: r.item };
+  }
+
+  function ejecutarAccionChat(a) {
+    var m = mesData(), r, f, e;
+    switch (a.tipo) {
+      case 'mes_ir':
+        if (!estado.meses[a.mes]) return '⚠️ No tengo cargado el mes ' + a.mes + '.';
+        mesActivo = a.mes;
+        return '📅 Ahora estás viendo ' + mesKeyLabel(a.mes) + '.';
+      case 'mes_nuevo': {
+        var cantidadAntes = mesesOrdenados().length;
+        nuevoMes();
+        return mesesOrdenados().length > cantidadAntes ? '📅 Creé ' + mesKeyLabel(mesActivo) + ' copiando el mes anterior.' : 'ℹ️ Confirmá en la pantalla para crear el mes nuevo.';
+      }
+      case 'movimiento_editar': {
+        var rm = movimientoPorId(a.id);
+        if (!rm) return '⚠️ No encontré ese gasto para corregirlo.';
+        var mv = rm.mv, antesTxt = describirMov(mv);
+        var cat = a.categoria || mv.categoria;
+        var filaSel = a.fila ? { nombre: a.fila } : (cat === mv.categoria ? { id: mv.filaId } : null);
+        aplicarEdicionMovimiento(rm.mesKey, mv, cat, filaSel, a.monto != null ? a.monto : mv.monto, a.nota !== undefined ? a.nota : mv.nota);
+        return '✏️ Corregí el gasto: antes ' + antesTxt + ', ahora ' + describirMov(mv) + '.';
+      }
+      case 'movimiento_eliminar': {
+        var rm2 = movimientoPorId(a.id);
+        if (!rm2) return '⚠️ No encontré ese gasto para borrarlo.';
+        var txt2 = describirMov(rm2.mv);
+        eliminarMovimiento(rm2.mv.id, rm2.mesKey);
+        return '🗑️ Borré el gasto de ' + txt2 + '.';
+      }
+      case 'fila_agregar': {
+        var buscada = normalizarTexto(a.fila);
+        f = (m.gastos || []).filter(function (g) { return g.categoria === a.categoria && normalizarTexto(g.nombre) === buscada; })[0];
+        if (f) {
+          if (a.monto == null) return 'ℹ️ Ya existe la fila “' + f.nombre + '” en ' + getCatNombre(a.categoria) + '.';
+          f.monto = a.monto;
+          return '✏️ Ya existía “' + f.nombre + '”: le puse ' + fmt(a.monto) + '.';
+        }
+        if (!m.gastos) m.gastos = [];
+        m.gastos.push({ id: uid(), categoria: a.categoria, nombre: a.fila, monto: a.monto || 0 });
+        colapsadas[a.categoria] = false;
+        return '➕ Agregué la fila “' + a.fila + '” en ' + getCatNombre(a.categoria) + (a.monto ? ' con ' + fmt(a.monto) : '') + '.';
+      }
+      case 'fila_editar': {
+        e = elegirUno(filaDeCategoria(a.categoria, a.fila), a.fila, getCatNombre(a.categoria));
+        if (e.aviso) return e.aviso;
+        f = e.item;
+        var nombreAntes = f.nombre, cambios = [];
+        if (a.monto != null) { f.monto = a.monto; cambios.push('ahora tiene ' + fmt(a.monto)); }
+        if (a.nuevoNombre) { f.nombre = a.nuevoNombre; cambios.push('ahora se llama “' + a.nuevoNombre + '”'); }
+        return '✏️ Fila “' + nombreAntes + '” (' + getCatNombre(a.categoria) + '): ' + cambios.join(' y ') + '.';
+      }
+      case 'fila_eliminar': {
+        e = elegirUno(filaDeCategoria(a.categoria, a.fila), a.fila, getCatNombre(a.categoria));
+        if (e.aviso) return e.aviso;
+        f = e.item;
+        m.gastos = m.gastos.filter(function (g) { return g.id !== f.id; });
+        return '🗑️ Saqué la fila “' + f.nombre + '” de ' + getCatNombre(a.categoria) + (Number(f.monto) ? ' (tenía ' + fmt(f.monto) + ')' : '') + '.';
+      }
+      case 'ingreso_agregar':
+        if (!m.ingresos) m.ingresos = [];
+        m.ingresos.push({ id: uid(), nombre: a.nombre, monto: a.monto });
+        return '➕ Agregué el ingreso “' + a.nombre + '” de ' + fmt(a.monto) + '.';
+      case 'ingreso_editar': {
+        e = elegirUno(buscarPorNombre(m.ingresos, a.nombre), a.nombre, 'los ingresos');
+        if (e.aviso) return e.aviso;
+        var ing = e.item, ingAntes = ing.nombre, camb = [];
+        if (a.monto != null) { ing.monto = a.monto; camb.push('ahora es de ' + fmt(a.monto)); }
+        if (a.nuevoNombre) { ing.nombre = a.nuevoNombre; camb.push('ahora se llama “' + a.nuevoNombre + '”'); }
+        return '✏️ Ingreso “' + ingAntes + '”: ' + camb.join(' y ') + '.';
+      }
+      case 'ingreso_eliminar': {
+        e = elegirUno(buscarPorNombre(m.ingresos, a.nombre), a.nombre, 'los ingresos');
+        if (e.aviso) return e.aviso;
+        var ingBorrar = e.item;
+        m.ingresos = m.ingresos.filter(function (i) { return i.id !== ingBorrar.id; });
+        return '🗑️ Saqué el ingreso “' + ingBorrar.nombre + '” (' + fmt(ingBorrar.monto) + ').';
+      }
+      case 'deuda_agregar': {
+        var nombreNorm = normalizarTexto(a.nombre);
+        if ((estado.deudas || []).some(function (d) { return normalizarTexto(d.nombre) === nombreNorm; })) return 'ℹ️ Ya tenés una deuda llamada “' + a.nombre + '”.';
+        estado.deudas.push({ id: uid(), nombre: a.nombre, saldo: a.saldo || 0, cuotaActual: a.cuotaActual || null, cuotaTotal: a.cuotaTotal || null, cuotaMensual: a.cuotaMensual || 0, activa: true });
+        return '➕ Agregué la deuda “' + a.nombre + '” (' + fmt(a.saldo || 0) + ', ' + fmt(a.cuotaMensual || 0) + ' por mes).';
+      }
+      case 'deuda_editar': {
+        r = buscarDeudaPorNombre(a.deuda);
+        e = elegirUno(r && (r.ambigua ? r : { item: r.deuda }), a.deuda, 'las deudas');
+        if (e.aviso) return e.aviso;
+        var d = e.item, dAntes = d.nombre;
+        if (a.saldo != null) d.saldo = a.saldo;
+        if (a.cuotaMensual != null) d.cuotaMensual = a.cuotaMensual;
+        if (a.cuotaActual != null) d.cuotaActual = a.cuotaActual > 0 ? a.cuotaActual : null;
+        if (a.cuotaTotal != null) d.cuotaTotal = a.cuotaTotal > 0 ? a.cuotaTotal : null;
+        if (a.nuevoNombre) d.nombre = a.nuevoNombre;
+        if (!(d.cuotaActual && d.cuotaTotal && d.cuotaActual >= d.cuotaTotal)) d.activa = true;
+        return '✏️ Actualicé la deuda “' + dAntes + '”' + (a.nuevoNombre ? ' (ahora “' + a.nuevoNombre + '”)' : '') + '.';
+      }
+      case 'deuda_eliminar': {
+        r = buscarDeudaPorNombre(a.deuda);
+        e = elegirUno(r && (r.ambigua ? r : { item: r.deuda }), a.deuda, 'las deudas');
+        if (e.aviso) return e.aviso;
+        var dBorrar = e.item;
+        estado.deudas = estado.deudas.filter(function (x) { return x.id !== dBorrar.id; });
+        return '🗑️ Eliminé la deuda “' + dBorrar.nombre + '”.';
+      }
+      case 'presupuesto_quitar':
+        if (!(estado.presupuestos || {})[a.categoria]) return 'ℹ️ ' + getCatNombre(a.categoria) + ' no tenía presupuesto.';
+        delete estado.presupuestos[a.categoria];
+        return '🎯 Saqué el presupuesto de ' + getCatNombre(a.categoria) + '.';
+      case 'categoria_renombrar': {
+        if (!estado.catNombres) estado.catNombres = {};
+        var nombreAnterior = getCatNombre(a.categoria);
+        if (!a.nombre || a.nombre === CAT_MAP[a.categoria].nombre) delete estado.catNombres[a.categoria];
+        else estado.catNombres[a.categoria] = a.nombre;
+        return '✏️ La categoría “' + nombreAnterior + '” ahora se llama “' + getCatNombre(a.categoria) + '”.';
+      }
+      default:
+        return null;
+    }
+  }
+  function aplicarAccionesChat(acciones) {
+    var lineas = [];
+    (acciones || []).slice(0, 12).forEach(function (a) {
+      if (!a || !a.tipo) return;
+      try {
+        var l = ejecutarAccionChat(a);
+        if (l) lineas.push(l);
+      } catch (err) {
+        console.error('acción del chat', a, err);
+        lineas.push('⚠️ No pude completar una acción (' + a.tipo + ').');
       }
     });
     return lineas;
@@ -674,11 +895,11 @@
       ? '<div class="chat-msg chat-msg-assistant" id="chatUltimaResp"></div>'
       : '<div class="chat-msg chat-msg-assistant">' + linkifyEscaped(visible).replace(/\n/g, '<br>') + '</div>';
     var tarjetas = tieneCards ? m.cards.map(function (c, j) { return chatTarjetaHTML(c, idx, j); }).join('') : '';
-    var hayDeshacer = tieneCards && m.cards.some(function (c) { return !c.deshecho && c.mvId; });
+    var hayDeshacer = !!(m && m.snap);
     var acciones = '<div class="chat-actions">' +
       '<button type="button" data-act="escuchar" data-i="' + idx + '" aria-label="Escuchar respuesta">' + ico('volume', 20) + '</button>' +
       '<button type="button" data-act="copiar" data-i="' + idx + '" aria-label="Copiar respuesta">' + ico('copy', 20) + '</button>' +
-      (hayDeshacer ? '<button type="button" data-act="deshacer" data-i="' + idx + '" aria-label="Deshacer gasto">' + ico('undo', 20) + '</button>' : '') +
+      (hayDeshacer ? '<button type="button" data-act="deshacer" data-i="' + idx + '" aria-label="Deshacer los cambios">' + ico('undo', 20) + '</button>' : '') +
       '</div>';
     return '<div class="chat-line"><span class="mini"></span><div class="chat-col">' + cuerpo + tarjetas + acciones + '</div></div>';
   }
@@ -747,15 +968,32 @@
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(function () { toast('Copiado'); }, function () { toast('No pude copiar'); });
       else toast('Tu navegador no deja copiar acá');
     } else if (act === 'deshacer') {
-      (m.cards || []).forEach(function (c) {
-        if (c.deshecho || !c.mvId) return;
-        c.deshecho = true;
-        var ix = chatYaRegistrados.indexOf(c.clave);
-        if (ix !== -1) chatYaRegistrados.splice(ix, 1); // si lo vuelve a pedir, se puede anotar de nuevo
-        eliminarMovimiento(c.mvId, c.mesKey);
-      });
-      renderChatMensajes();
+      deshacerCambiosChat(m);
     }
+  }
+
+  // Vuelve todo a como estaba ANTES de lo que hizo el asistente en este mensaje (foto en memoria).
+  // Se conservan las conversaciones guardadas (estado.chats): lo único que se revierte son los datos.
+  function deshacerCambiosChat(m) {
+    if (!m || !m.snap) { toast('Ya no se puede deshacer ese cambio.'); return; }
+    var chats = estado.chats;
+    try { estado = JSON.parse(m.snap); } catch (e) { toast('No pude deshacer.'); return; }
+    estado.chats = chats;
+    if (!estado.deudas) estado.deudas = [];
+    if (!estado.catNombres) estado.catNombres = {};
+    if (!estado.presupuestos) estado.presupuestos = {};
+    if (!estado.meses[mesActivo]) mesActivo = asegurarMesActual();
+    m.snap = null;
+    m.deshecho = true;
+    (m.cards || []).forEach(function (c) {
+      c.deshecho = true;
+      var ix = chatYaRegistrados.indexOf(c.clave);
+      if (ix !== -1) chatYaRegistrados.splice(ix, 1); // si lo vuelve a pedir, se puede anotar de nuevo
+    });
+    guardar();
+    render(false);
+    renderChatMensajes();
+    toast('Cambios deshechos');
   }
 
   // vista (opcional): 'voz' | 'chat'. asistente.js decide cuál mostrar si no se indica
@@ -782,7 +1020,7 @@
   // alTerminar (opcional): se llama al final de todo el ciclo (con el texto
   // que dijo la IA, o null si falló) — lo usa el Modo Voz para saber cuándo
   // arrancar a hablar / volver a escuchar.
-  function enviarMensajeChat(texto, alTerminar) {
+  function enviarMensajeChat(texto, alTerminar, opciones) {
     texto = texto.trim();
     if (!texto || chatEnviando) { if (alTerminar) alTerminar(null); return; }
     chatHistorial.push({ rol: 'user', texto: texto });
@@ -796,7 +1034,7 @@
       return { rol: h.rol, texto: h.textoIA || h.texto };
     });
     sbClient.functions.invoke('chat-ia', {
-      body: { mensaje: texto, historial: historialParaIA, contexto: contextoFinancieroParaChat() }
+      body: { mensaje: texto, historial: historialParaIA, contexto: contextoFinancieroParaChat(), modo: (opciones && opciones.modo === 'voz') ? 'voz' : 'texto' }
     }).then(function (res) {
       chatEnviando = false;
       if (res.error || !res.data || res.data.error) {
@@ -809,7 +1047,21 @@
       // Freno de seguridad: si la IA repite (por error) un gasto que ya se
       // registró en esta conversación, NO lo volvemos a cargar — evita
       // duplicar gastos reales por una confusión del modelo.
-      var registrados = (res.data.registrar || []).filter(function (it) {
+      var datos = res.data;
+      var hayCambios = !!((datos.registrar && datos.registrar.length) || datos.presupuesto || (datos.pagosDeudas && datos.pagosDeudas.length) || (datos.acciones && datos.acciones.length));
+      var lineaPermiso = null;
+      if (hayCambios && miRol === 'lector') {
+        // Cuenta de solo lectura: el asistente puede contestar, pero no modificar nada
+        datos = { respuesta: datos.respuesta, registrar: [], presupuesto: null, pagosDeudas: [], acciones: [] };
+        hayCambios = false;
+        lineaPermiso = '🔒 Tu cuenta es de solo lectura, así que no puedo modificar datos.';
+      }
+      // Foto del estado ANTES de aplicar nada: alimenta el botón "Deshacer" (solo vive en memoria)
+      var snap = hayCambios ? JSON.stringify(estado) : null;
+      // Cambios generales que pidió el usuario (editar, sacar, agregar filas/ingresos/deudas, cambiar de mes…).
+      // Van primero: si cambian de mes, los gastos nuevos de este mismo mensaje caen en ese mes.
+      var accionesLineas = aplicarAccionesChat(datos.acciones);
+      var registrados = (datos.registrar || []).filter(function (it) {
         var clave = it.categoria + '|' + it.monto + '|' + (it.nota || '');
         if (chatYaRegistrados.indexOf(clave) !== -1) return false;
         chatYaRegistrados.push(clave);
@@ -821,7 +1073,7 @@
       // marcamos desde cuánto gastado arranca a contar (ANTES de sumar los
       // gastos de este mismo mensaje) — así "es un presupuesto nuevo" y no
       // arrastra lo que ya se había gastado en la categoría antes de pedirlo.
-      var pres = res.data.presupuesto;
+      var pres = datos.presupuesto;
       var presupuestoTexto = null;
       if (pres && CAT_MAP[pres.categoria] && Number(pres.monto) > 0) {
         marcarBasePresupuestoChat(pres.categoria);
@@ -830,16 +1082,14 @@
       }
       var tarjetas = [];
       registrados.forEach(function (it) {
-        registrarCompra(it.categoria, it.monto, it.nota || null, null);
-        // el movimiento recién cargado queda al final de la lista del mes (para poder deshacerlo desde la tarjeta)
-        var movsMes = mesData().movimientos || [];
-        var mvNuevo = movsMes[movsMes.length - 1];
-        tarjetas.push({ categoria: it.categoria, monto: it.monto, nota: it.nota || null, mvId: mvNuevo ? mvNuevo.id : null, mesKey: mesActivo,
-          clave: it.categoria + '|' + it.monto + '|' + (it.nota || '') });
+        // La fecha solo se respeta si cae en el mes que se está viendo (los gastos se anotan en ese mes)
+        var fecha = (it.fecha && it.fecha.slice(0, 7) === mesActivo) ? it.fecha : undefined;
+        registrarCompra(it.categoria, it.monto, it.nota || null, null, fecha, it.fila ? { nombre: it.fila } : null);
+        tarjetas.push({ categoria: it.categoria, monto: it.monto, nota: it.nota || null, clave: it.categoria + '|' + it.monto + '|' + (it.nota || '') });
       });
-      if (registrados.length || pres) { guardar(); actualizarCalculos(); }
       // Pagos de deudas que pidió el usuario (registrarPago/revertirPago guardan y redibujan solos)
-      var pagosLineas = aplicarPagosDeudasChat(res.data.pagosDeudas);
+      var pagosLineas = aplicarPagosDeudasChat(datos.pagosDeudas);
+      if (hayCambios) { guardar(); render(false); }
       // Progreso contra presupuesto: una línea por cada categoría distinta que
       // se acaba de registrar (o que se acaba de fijar), solo si tiene tope.
       var categoriasParaProgreso = registrados.map(function (it) { return it.categoria; });
@@ -849,16 +1099,20 @@
         var linea = progresoPresupuestoTexto(c);
         if (linea) progresoLineas.push(linea);
       });
-      var textoIA = res.data.respuesta || '';
+      var textoIA = datos.respuesta || '';
       var textoMostrado = textoIA;
       if (registrados.length) {
-        textoMostrado += '\n\n✅ ' + registrados.map(function (it) { return fmt(it.monto) + ' en ' + getCatNombre(it.categoria); }).join(', ');
+        textoMostrado += '\n\n✅ ' + registrados.map(function (it) { return fmt(it.monto) + ' en ' + getCatNombre(it.categoria) + (it.fila ? ' · fila ' + it.fila : ''); }).join(', ');
       }
+      if (accionesLineas.length) textoMostrado += '\n\n' + accionesLineas.join('\n');
       if (pagosLineas.length) textoMostrado += '\n\n' + pagosLineas.join('\n');
       if (presupuestoTexto) textoMostrado += '\n\n' + presupuestoTexto;
       if (progresoLineas.length) textoMostrado += '\n\n' + progresoLineas.join('\n');
-      // `cards` vive solo en memoria (chatPersistirLog no lo guarda): no cambia el modelo de datos
-      chatHistorial.push({ rol: 'assistant', texto: textoMostrado, textoIA: textoIA, cards: tarjetas.length ? tarjetas : undefined });
+      if (lineaPermiso) textoMostrado += '\n\n' + lineaPermiso;
+      // Solo se puede deshacer lo último que hizo el asistente (la foto vieja ya no sirve)
+      chatHistorial.forEach(function (h) { if (h.snap) h.snap = null; });
+      // `cards` y `snap` viven solo en memoria (chatPersistirLog no los guarda): no cambia el modelo de datos
+      chatHistorial.push({ rol: 'assistant', texto: textoMostrado, textoIA: textoIA, cards: tarjetas.length ? tarjetas : undefined, snap: snap || undefined });
       chatPersistirLog();
       renderChatMensajes(true);
       chatHablar(textoIA, function () { if (alTerminar) alTerminar(textoIA); });
@@ -2427,57 +2681,51 @@
       var sel = (c.id === mv.categoria) ? ' selected' : '';
       return '<option value="' + c.id + '"' + sel + '>' + c.icon + '  ' + escapeHtml(getCatNombre(c.id)) + '</option>';
     }).join('');
-    var DATALIST_ID = 'emFilasExistentes';
     abrirModal('<h3>Editar movimiento</h3><p class="sub">Cambiá la categoría, la fila, el monto o la nota.</p>' +
       '<div class="field"><label>Concepto / nota</label><input id="emNota" value="' + escapeAttr(mv.nota || '') + '"></div>' +
       '<div class="field-row">' +
         '<div class="field"><label>Monto</label><input id="emMonto" inputmode="text" value="' + formatInput(mv.monto) + '"></div>' +
         '<div class="field"><label>Categoría</label><select id="emCat">' + opciones + '</select></div>' +
       '</div>' +
-      '<div class="field"><label>Fila</label><input id="emFila" list="' + DATALIST_ID + '" value="' + escapeAttr(mv.fila || '') + '" placeholder="Nombre de la fila (podés escribir una nueva)">' +
-      '<datalist id="' + DATALIST_ID + '"></datalist></div>' +
+      selectorFilaHTML('em') +
       '<div class="modal-actions"><button class="btn btn-ghost" id="mCancel">Cancelar</button>' +
       '<button class="btn btn-primary" id="mOk">Guardar cambios</button></div>');
     document.getElementById('mCancel').onclick = cerrarModal;
 
-    function actualizarFilasSugeridas() {
-      var cat = document.getElementById('emCat').value;
-      var nombres = (m.gastos || []).filter(function (g) { return g.categoria === cat; }).map(function (g) { return g.nombre; });
-      document.getElementById(DATALIST_ID).innerHTML = nombres.map(function (n) { return '<option value="' + escapeAttr(n) + '">'; }).join('');
-    }
-    actualizarFilasSugeridas();
-    document.getElementById('emCat').addEventListener('change', actualizarFilasSugeridas);
+    // Fila: desplegable con las filas de la categoría (deja elegida la actual) + "Nueva fila…"
+    poblarSelectorFila('em', m, mv.categoria, mv.filaId);
+    document.getElementById('emCat').addEventListener('change', function () { poblarSelectorFila('em', m, document.getElementById('emCat').value); });
+    document.getElementById('emFila').addEventListener('change', function () { actualizarFilaNueva('em'); });
 
     document.getElementById('mOk').onclick = function () {
       var nuevaCat = document.getElementById('emCat').value;
-      var nuevaFilaNombre = document.getElementById('emFila').value.trim() || nombreAcumulador(nuevaCat);
       var nuevoMonto = evalMonto(document.getElementById('emMonto').value);
       var nuevaNota = document.getElementById('emNota').value.trim();
       if (!nuevoMonto) { document.getElementById('emMonto').focus(); return; }
-
-      var filaVieja = (m.gastos || []).find(function (g) { return g.id === mv.filaId; })
-        || (m.gastos || []).filter(function (g) { return g.categoria === mv.categoria; })
-          .find(function (g) { return g.bot || g.nombre === nombreAcumulador(mv.categoria); });
-      if (filaVieja) filaVieja.monto = Math.max(0, (Number(filaVieja.monto) || 0) - (Number(mv.monto) || 0));
-
-      if (!m.gastos) m.gastos = [];
-      var filaNueva = m.gastos.filter(function (g) { return g.categoria === nuevaCat; })
-        .find(function (g) { return g.nombre === nuevaFilaNombre; });
-      if (filaNueva) { filaNueva.monto = (Number(filaNueva.monto) || 0) + nuevoMonto; }
-      else { filaNueva = { id: uid(), categoria: nuevaCat, nombre: nuevaFilaNombre, monto: nuevoMonto, bot: true }; m.gastos.push(filaNueva); }
-
-      mv.categoria = nuevaCat;
-      mv.filaId = filaNueva.id;
-      mv.fila = filaNueva.nombre;
-      mv.monto = nuevoMonto;
-      mv.nota = nuevaNota || null;
-
+      aplicarEdicionMovimiento(mesKey, mv, nuevaCat, leerSelectorFila('em', nuevaCat), nuevoMonto, nuevaNota);
       guardar();
       if (mesKey === mesActivo) actualizarCalculos();
       cerrarModal();
       renderHistorial();
       toast('Movimiento actualizado');
     };
+  }
+
+  // Cambia categoría/fila/monto/nota de un movimiento: saca el monto viejo de su fila y lo suma a la nueva
+  // (la usan el modal de edición y el asistente). No guarda ni redibuja: eso lo hace quien la llama.
+  function aplicarEdicionMovimiento(mesKey, mv, nuevaCat, filaSel, nuevoMonto, nuevaNota) {
+    var m = estado.meses[mesKey];
+    var filaVieja = (m.gastos || []).find(function (g) { return g.id === mv.filaId; })
+      || (m.gastos || []).filter(function (g) { return g.categoria === mv.categoria; })
+        .find(function (g) { return g.bot || g.nombre === nombreAcumulador(mv.categoria); });
+    if (filaVieja) filaVieja.monto = Math.max(0, (Number(filaVieja.monto) || 0) - (Number(mv.monto) || 0));
+    var filaNueva = resolverFila(m, nuevaCat, filaSel);
+    filaNueva.monto = (Number(filaNueva.monto) || 0) + nuevoMonto;
+    mv.categoria = nuevaCat;
+    mv.filaId = filaNueva.id;
+    mv.fila = filaNueva.nombre;
+    mv.monto = nuevoMonto;
+    mv.nota = nuevaNota || null;
   }
 
   function eliminarMovimiento(id, mesKey) {
@@ -3117,7 +3365,7 @@
       modalGasto();
       if (d.nota) document.getElementById('gNombre').value = d.nota;
       if (d.monto) document.getElementById('gMonto').value = formatInput(d.monto);
-      if (d.categoria) document.getElementById('gCat').value = d.categoria;
+      if (d.categoria) document.getElementById('gCat').value = d.categoria; document.getElementById('gCat').dispatchEvent(new Event('change'));
       if (d.fecha) document.getElementById('gFecha').value = d.fecha;
       toast('Ticket leído — revisá los datos antes de confirmar.');
     }).catch(function () {
@@ -3170,6 +3418,49 @@
     reader.readAsDataURL(file);
   }
 
+  // ---- Selector de "Fila": desplegable con las filas existentes de la categoría + "Nueva fila…" ----
+  var FILA_NUEVA = '__nueva__';
+  function selectorFilaHTML(p) {
+    return '<div class="field"><label>Fila</label><select id="' + p + 'Fila"></select></div>' +
+      '<div class="field" id="' + p + 'FilaNuevaWrap" style="display:none"><label>Nombre de la fila nueva</label>' +
+      '<input id="' + p + 'FilaNueva" placeholder="Ej: Verdulería"></div>';
+  }
+  function actualizarFilaNueva(p) {
+    var sel = document.getElementById(p + 'Fila'), wrap = document.getElementById(p + 'FilaNuevaWrap');
+    if (!sel || !wrap) return;
+    var nueva = sel.value === FILA_NUEVA;
+    wrap.style.display = nueva ? '' : 'none';
+    if (nueva) { var inp = document.getElementById(p + 'FilaNueva'); if (inp) inp.focus(); }
+  }
+  // preferidaId (opcional): fila a dejar elegida; si no, la acumuladora de la categoría; si no hay, "Nueva fila…"
+  function poblarSelectorFila(p, mes, categoria, preferidaId) {
+    var sel = document.getElementById(p + 'Fila');
+    if (!sel) return;
+    var filas = (mes.gastos || []).filter(function (g) { return g.categoria === categoria; });
+    var accName = nombreAcumulador(categoria);
+    var pref = null;
+    if (preferidaId && filas.some(function (f) { return f.id === preferidaId; })) pref = preferidaId;
+    else { var acc = filas.find(function (f) { return f.bot || f.nombre === accName; }); if (acc) pref = acc.id; }
+    sel.innerHTML = filas.map(function (f) {
+      return '<option value="' + escapeAttr(f.id) + '">' + escapeHtml(f.nombre || '(sin nombre)') + '</option>';
+    }).join('') + '<option value="' + FILA_NUEVA + '">＋ Nueva fila…</option>';
+    sel.value = pref || FILA_NUEVA;
+    var inp = document.getElementById(p + 'FilaNueva');
+    if (inp) inp.placeholder = 'Ej: Verdulería (vacío = “' + accName + '”)';
+    var wrap = document.getElementById(p + 'FilaNuevaWrap');
+    if (wrap) wrap.style.display = sel.value === FILA_NUEVA ? '' : 'none';
+  }
+  // Devuelve { id } (fila existente) o { nombre } (fila nueva; vacío = la acumuladora de la categoría)
+  function leerSelectorFila(p, categoria) {
+    var sel = document.getElementById(p + 'Fila');
+    if (!sel) return null;
+    if (sel.value === FILA_NUEVA) {
+      var inp = document.getElementById(p + 'FilaNueva');
+      return { nombre: ((inp && inp.value) || '').trim() || nombreAcumulador(categoria) };
+    }
+    return { id: sel.value };
+  }
+
   // Modal para agregar un gasto y mandarlo a la categoría elegida
   function modalGasto(catInicial) {
     var opciones = CATEGORIAS.map(function (c) {
@@ -3192,6 +3483,7 @@
         '<div class="field"><label>Monto</label><input id="gMonto" inputmode="text" placeholder="0 (podés escribir 200+120)"></div>' +
         '<div class="field"><label>Categoría</label><select id="gCat">' + opciones + '</select></div>' +
       '</div>' +
+      selectorFilaHTML('g') +
       '<div class="field"><label>Fecha</label><input type="date" id="gFecha" value="' + isoHoyApp() + '" max="' + isoHoyApp() + '"></div>' +
       '<div class="modal-actions"><button class="btn btn-ghost" id="mCancel">Cancelar</button>' +
       '<button class="btn btn-primary" id="mOk">Agregar gasto</button></div>');
@@ -3200,6 +3492,12 @@
     var montoEl = document.getElementById('gMonto');
     nombreEl.focus();
     montoEl.addEventListener('keydown', function (e) { if (e.key === 'Enter') document.getElementById('mOk').click(); });
+    // Fila: desplegable con las filas que ya existen en la categoría elegida + opción de crear una nueva
+    var mesDelModal = mesData();
+    function refrescarFilasGasto() { poblarSelectorFila('g', mesDelModal, document.getElementById('gCat').value); }
+    document.getElementById('gCat').addEventListener('change', refrescarFilasGasto);
+    document.getElementById('gFila').addEventListener('change', function () { actualizarFilaNueva('g'); });
+    refrescarFilasGasto();
     if (puedeEscanear) {
       var escanearBtn = document.getElementById('gEscanearBtn');
       var ticketInput = document.getElementById('gTicketInput');
@@ -3225,7 +3523,7 @@
             var d = res.data;
             if (d.nota) nombreEl.value = d.nota;
             if (d.monto) montoEl.value = formatInput(d.monto);
-            if (d.categoria) document.getElementById('gCat').value = d.categoria;
+            if (d.categoria) document.getElementById('gCat').value = d.categoria; document.getElementById('gCat').dispatchEvent(new Event('change'));
             if (d.fecha) document.getElementById('gFecha').value = d.fecha;
             // El QR de AFIP trae fecha e importe EXACTOS (dato fiscal real, no una
             // lectura de la IA) — si lo pudimos decodificar, pisan lo que haya
@@ -3248,7 +3546,7 @@
       var cat = document.getElementById('gCat').value;
       var fecha = document.getElementById('gFecha').value || isoHoyApp();
       if (!monto) { montoEl.focus(); return; }
-      var acc = registrarCompra(cat, monto, nombre || null, nombre ? [{ nombre: nombre, monto: monto }] : null, fecha);
+      var acc = registrarCompra(cat, monto, nombre || null, nombre ? [{ nombre: nombre, monto: monto }] : null, fecha, leerSelectorFila('g', cat));
       colapsadas[cat] = false;
       guardar(); cerrarModal(); render(false);
       toast('Sumado ' + fmt(monto) + ' en ' + getCatNombre(cat));

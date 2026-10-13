@@ -134,7 +134,7 @@
       if (textoIA === null) { fijarEstado('No pude responder ahora, intentá de nuevo en un rato.'); mostrarTextoVoz(''); }
       else mostrarTextoVoz(textoIA); // queda a la vista aunque la lectura en voz alta esté apagada
       refrescarOrbe();
-    });
+    }, { modo: 'voz' });
   }
 
   // ---------- Reproductor: frases en cola, ElevenLabs con respaldo del navegador ----------
@@ -173,13 +173,80 @@
     document.addEventListener(ev, function once() { desbloquearAudio(); document.removeEventListener(ev, once, true); }, true);
   });
 
-  // Texto pensado para leerse: sin links ni "Fuentes", y los montos dichos como pesos
+  // ---------- Números en español (la voz los pronuncia bien solo si van en palabras) ----------
+  var NUM_U = ['cero', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve', 'diez', 'once', 'doce', 'trece', 'catorce', 'quince',
+    'dieciséis', 'diecisiete', 'dieciocho', 'diecinueve', 'veinte', 'veintiuno', 'veintidós', 'veintitrés', 'veinticuatro', 'veinticinco',
+    'veintiséis', 'veintisiete', 'veintiocho', 'veintinueve'];
+  var NUM_D = ['', '', '', 'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa'];
+  var NUM_C = ['', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos', 'quinientos', 'seiscientos', 'setecientos', 'ochocientos', 'novecientos'];
+  function menorMil(n) { // 1..999
+    if (n === 100) return 'cien';
+    var c = Math.floor(n / 100), r = n % 100, s = [];
+    if (c) s.push(NUM_C[c]);
+    if (r) {
+      if (r < 30) s.push(NUM_U[r]);
+      else { var d = Math.floor(r / 10), u = r % 10; s.push(NUM_D[d] + (u ? ' y ' + NUM_U[u] : '')); }
+    }
+    return s.join(' ');
+  }
+  function apocopar(t) { return t.replace(/veintiuno$/, 'veintiún').replace(/uno$/, 'un'); } // "veintiún mil", "treinta y un millones"
+  function enteroALetras(n) {
+    n = Math.floor(Math.abs(n));
+    if (n === 0) return 'cero';
+    if (n >= 1e12) return String(n).split('').join(' ');   // fuera de rango: dígito por dígito
+    var millones = Math.floor(n / 1e6), resto = n % 1e6, miles = Math.floor(resto / 1000), unidades = resto % 1000, partes = [];
+    if (millones) partes.push(millones === 1 ? 'un millón' : apocopar(enteroALetras(millones)) + ' millones');
+    if (miles) partes.push(miles === 1 ? 'mil' : apocopar(menorMil(miles)) + ' mil');
+    if (unidades) partes.push(menorMil(unidades));
+    return partes.join(' ');
+  }
+  // "177.700" -> 177700 · "1.234,50" -> 1234.5 (formato argentino: punto de miles, coma decimal)
+  function leerNumeroAR(s) { return parseFloat(String(s).replace(/\./g, '').replace(',', '.')); }
+  function numeroALetras(s) {
+    s = String(s);
+    var coma = s.indexOf(',');
+    var ent = leerNumeroAR(coma >= 0 ? s.slice(0, coma) : s);
+    if (!isFinite(ent)) return s;
+    var txt = enteroALetras(ent);
+    if (coma >= 0) {
+      var dig = s.slice(coma + 1).replace(/\D/g, '');
+      if (dig) {
+        var v = parseInt(dig, 10);
+        txt += ' coma ' + (dig.charAt(0) === '0' ? 'cero' + (v ? ' ' + enteroALetras(v) : '') : enteroALetras(v));
+      }
+    }
+    return txt;
+  }  function montoALetras(s) {
+    var v = leerNumeroAR(s);
+    if (!isFinite(v)) return s;
+    var entero = Math.floor(v), cent = Math.round((v - entero) * 100);
+    var txt = (entero === 1 ? 'un peso' : enteroALetras(entero) + (entero >= 1e6 && entero % 1e6 === 0 ? ' de pesos' : ' pesos'));
+    if (cent > 0) txt += ' con ' + enteroALetras(cent) + ' centavos';
+    return txt;
+  }
+
+  // Texto pensado para leerse: sin links, markdown ni "Fuentes", y con TODOS los números en palabras
+  // (se hace antes de partir en frases, así nunca se corta un número por el punto de los miles)
   function textoParaVoz(t) {
     t = String(t || '').split(/\n\s*Fuentes:/i)[0];
     t = t.replace(/https?:\/\/\S+/g, '');
-    t = t.replace(/\$\s?([\d.,]+)/g, '$1 pesos');
-    t = t.replace(/[✅🎯📍]/g, '');
-    return t.replace(/\s+/g, ' ').trim();
+    t = t.replace(/[*_`#>~|]+/g, ' ').replace(/^\s*[-•·]\s+/gm, '').replace(/[✅🎯📍💳↩️ℹ️⚠️]/g, '');
+    t = t.replace(/\$\s*(-?\d+(?:\.\d{3})*(?:,\d+)?)/g, function (m, n) { return ' ' + montoALetras(n) + ' '; });
+    t = t.replace(/(\d+(?:\.\d{3})*(?:,\d+)?)\s*%/g, function (m, n) { return ' ' + numeroALetras(n) + ' por ciento '; });
+    t = t.replace(/\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g, function (m) { return m.replace(/\//g, ' '); }); // fechas 9/10 -> "9 10"
+    // "uno" cambia según la palabra que sigue: "veintiún días", "veintiuna cuotas", "uno" si va solo
+    t = t.replace(/\b\d{1,3}(?:\.\d{3})+(?:,\d+)?\b|\b\d+,\d+\b|\b\d+\b/g, function (n, off, todo) {
+      var w = numeroALetras(n);
+      if (/uno$/.test(w) && n.indexOf(',') === -1) {
+        var sig = todo.slice(off + n.length).match(/^\s+([a-záéíóúñ]+)/i);
+        if (sig) w = /^(cuotas?|semanas?|veces|vez|deudas?|tarjetas?|categor[ií]as?|filas?|compras?|personas?|horas?|unidades|unidad)$/i.test(sig[1]) ? w.replace(/uno$/, 'una') : apocopar(w);
+      }
+      return w;
+    });
+    t = t.replace(/\/(mes|día|dia|semana|año|ano)\b/gi, ' por $1');
+    t = t.replace(/\$/g, ' pesos ').replace(/&/g, ' y ');
+    t = t.replace(/\s+/g, ' ').replace(/\s+([,.;:!?)])/g, '$1').replace(/\(\s+/g, '(');
+    return t.trim();
   }
 
   // Frases cortas: suenan más naturales, se piden de a una y evitan el corte de las lecturas largas
