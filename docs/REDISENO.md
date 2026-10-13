@@ -70,6 +70,14 @@ Consola sin errores. Se recorrieron: las 6 páginas, tema (persistencia + `theme
 - Se quitó la agrupación "Tarjetas / Préstamos" del prototipo en Deudas: el modelo de datos no distingue el tipo.
 - **Escritorio (PC, desde 900 px de ancho):** mismo diseño con barra lateral fija a la izquierda (Inicio, Gastos, Análisis, Deudas, Historial), contenido a todo el ancho en grillas (Inicio: evolución + dona lado a lado; Gastos y Deudas en dos columnas; Historial por días en dos columnas; Análisis de a pares; Ajustes en dos columnas), ventanas emergentes centradas y botones flotantes abajo a la derecha. Todo vive en un único bloque `@media (min-width: 900px)` al final de `movil/styles.css`, así el celular no cambia. Entre 520 y 899 px (tablet) queda la columna centrada de 480 px.
 
+## Cambios posteriores (octubre 2026)
+- **Bug de toques (grave):** el contenedor de los botones flotantes (`.fabs`) ocupaba una zona de la pantalla aun con el menú "+" cerrado y se comía los toques de lo de abajo (por eso fallaban "Registrar pago" y el monto de un gasto, que están a la derecha). Ahora `.fabs` tiene `pointer-events:none` y solo reciben toques los botones. Se revisaron todos los botones/campos de todas las páginas, modales y vistas del asistente comprobando qué elemento queda realmente encima del centro de cada uno (celular, tablet y PC; 0 tapados), más toques reales sobre "Registrar pago" y el monto de un gasto.
+- **Colores de categorías:** 11 colores distintos (nuevos `--c8` a `--c12`, `.ct8`–`.ct12`) y la leyenda de la dona lista todas las categorías (sin "Otras").
+- **Asistente en PC:** ventana flotante centrada sobre la app (tocar afuera la cierra); el cajón de historial ya no se asoma sobre la barra lateral.
+- **Asistente en celular:** al tocar la burbuja se abre primero el **chat**; el micrófono, al lado de la escritura, pasa a la pantalla de voz.
+- **Pagos por chat/voz:** "ya pagué la tarjeta naranja, marcala como pagada" marca (o con "desmarcá…" revierte) el pago con las mismas funciones de la sección Deudas. Requiere **redesplegar `chat-ia`** (contrato nuevo `pagosDeudas`); con la versión vieja simplemente no marca nada.
+- **Voces:** los secretos `ELEVENLABS_VOICE_1/2` están cargados con los nombres correctos, pero la función `tts` **no estaba desplegada** (por eso se oía la voz del navegador). `tts` ahora limpia espacios/comillas de los secretos.
+
 ## Próximos pasos (anotados, NO hechos)
 1. Rutina mensual de plan de comida y lista de compras (tabla `planes_mensuales`, Edge Function `plan-mensual`, cron, pantalla "Comida del mes"). Los atajos del chat "Armar el plan del mes" / "Lista de compras" del prototipo no se agregaron porque todavía no existen.
 2. Pasar `leer-ticket` a Claude (hoy usa NVIDIA; `NVIDIA_API_KEY` sigue siendo necesaria).

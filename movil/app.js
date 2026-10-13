@@ -14,14 +14,14 @@
     { id: 'vivienda',        nombre: 'Vivienda',              icon: '🏠', cn: 1, color: 'var(--c1)', svg: '<path d="M4 11l8-6 8 6v8a1 1 0 01-1 1h-4v-6h-6v6H5a1 1 0 01-1-1z"/>' },
     { id: 'trabajo',         nombre: 'Trabajo',               icon: '💼', cn: 4, color: 'var(--c4)', svg: '<rect x="3" y="7" width="18" height="13" rx="2.5"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2M3 13h18"/>' },
     { id: 'alimentacion',    nombre: 'Alimentación',          icon: '🛒', cn: 2, color: 'var(--c2)', svg: '<path d="M4 5h2l2 10h9l2-7H7"/><circle cx="9" cy="19" r="1.3"/><circle cx="17" cy="19" r="1.3"/>' },
-    { id: 'transporte',      nombre: 'Transporte',            icon: '🚗', cn: 3, color: 'var(--c3)', svg: '<path d="M5 17h14M6 17l1.4-5.2A2 2 0 019.3 10h5.4a2 2 0 011.9 1.8L18 17"/><circle cx="8" cy="17.5" r="1.4"/><circle cx="16" cy="17.5" r="1.4"/>' },
+    { id: 'transporte',      nombre: 'Transporte',            icon: '🚗', cn: 10, color: 'var(--c10)', svg: '<path d="M5 17h14M6 17l1.4-5.2A2 2 0 019.3 10h5.4a2 2 0 011.9 1.8L18 17"/><circle cx="8" cy="17.5" r="1.4"/><circle cx="16" cy="17.5" r="1.4"/>' },
     { id: 'salud',           nombre: 'Salud',                 icon: '🏥', cn: 5, color: 'var(--c5)', svg: '<path d="M12 20s-7-4.4-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.6-7 10-7 10z"/>' },
-    { id: 'educacion',       nombre: 'Educación',             icon: '📚', cn: 4, color: 'var(--c4)', svg: '<path d="M4 5.5A2.5 2.5 0 016.5 3H20v15H6.5A2.5 2.5 0 004 20.5z"/><path d="M4 20.5V5.5M8 7h8"/>' },
-    { id: 'mascota',         nombre: 'Mascota',               icon: '🐾', cn: 6, color: 'var(--c6)', svg: '<circle cx="6.5" cy="11" r="1.7"/><circle cx="10.5" cy="6.5" r="1.7"/><circle cx="15.5" cy="6.5" r="1.7"/><circle cx="19" cy="11" r="1.7"/><path d="M8 18c0-2.6 1.8-4.5 4-4.5s4 1.9 4 4.5c0 1.4-1.2 2.2-4 2.2s-4-.8-4-2.2z"/>' },
+    { id: 'educacion',       nombre: 'Educación',             icon: '📚', cn: 8, color: 'var(--c8)', svg: '<path d="M4 5.5A2.5 2.5 0 016.5 3H20v15H6.5A2.5 2.5 0 004 20.5z"/><path d="M4 20.5V5.5M8 7h8"/>' },
+    { id: 'mascota',         nombre: 'Mascota',               icon: '🐾', cn: 9, color: 'var(--c9)', svg: '<circle cx="6.5" cy="11" r="1.7"/><circle cx="10.5" cy="6.5" r="1.7"/><circle cx="15.5" cy="6.5" r="1.7"/><circle cx="19" cy="11" r="1.7"/><path d="M8 18c0-2.6 1.8-4.5 4-4.5s4 1.9 4 4.5c0 1.4-1.2 2.2-4 2.2s-4-.8-4-2.2z"/>' },
     { id: 'entretenimiento', nombre: 'Entretenimiento',       icon: '🎬', cn: 7, color: 'var(--c7)', svg: '<path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.5 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z"/>' },
-    { id: 'ropa',            nombre: 'Ropa / Personal',       icon: '👕', cn: 5, color: 'var(--c5)', svg: '<path d="M8 4L3 7l2.5 4L8 10v10h8V10l2.5 1L21 7l-5-3a4 4 0 01-8 0z"/>' },
-    { id: 'seguros',         nombre: 'Seguros / Imprevistos', icon: '🛡️', cn: 6, color: 'var(--c6)', svg: '<path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/>' },
-    { id: 'ahorro',          nombre: 'Ahorro e Inversión',    icon: '💰', cn: 1, color: 'var(--c1)', svg: '<path d="M12 3v18M16 7.5C16 6 14.2 5 12 5S8 6 8 7.800c0 4 8 2.200 8 6.200C16 16 14.200 17 12 17s-4-1-4-2.500"/>' },
+    { id: 'ropa',            nombre: 'Ropa / Personal',       icon: '👕', cn: 12, color: 'var(--c12)', svg: '<path d="M8 4L3 7l2.5 4L8 10v10h8V10l2.5 1L21 7l-5-3a4 4 0 01-8 0z"/>' },
+    { id: 'seguros',         nombre: 'Seguros / Imprevistos', icon: '🛡️', cn: 11, color: 'var(--c11)', svg: '<path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/>' },
+    { id: 'ahorro',          nombre: 'Ahorro e Inversión',    icon: '💰', cn: 6, color: 'var(--c6)', svg: '<path d="M12 3v18M16 7.5C16 6 14.2 5 12 5S8 6 8 7.800c0 4 8 2.200 8 6.200C16 16 14.200 17 12 17s-4-1-4-2.500"/>' },
   ];
   const CAT_MAP = {};
   CATEGORIAS.forEach(function (c) { CAT_MAP[c.id] = c; });
@@ -552,10 +552,62 @@
       balanceDelMes: balanceMes(mesActivo),
       presupuestosPorCategoria: estado.presupuestos || {},
       deudas: (estado.deudas || []).map(function (d) {
-        return { nombre: d.nombre, saldo: Number(d.saldo) || 0, cuotaMensual: Number(d.cuotaMensual) || 0, activa: d.activa !== false };
+        return { nombre: d.nombre, saldo: Number(d.saldo) || 0, cuotaMensual: Number(d.cuotaMensual) || 0, activa: d.activa !== false,
+          pagadaEsteMes: deudaPagadaEnMes(d.id, mesActivo) };
       }),
       mesAnterior: hayMesAnterior ? { nombre: mesKeyLabel(mAnt), totalGastos: totalGastos(mAnt) } : null,
     };
+  }
+
+  // ---- Pagos de deudas pedidos por chat ("ya pagué la tarjeta naranja, marcala como pagada") ----
+  function normalizarTexto(s) {
+    return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  // Busca la deuda cuyo nombre más se parece a lo que dijo el usuario. Devuelve { deuda } o { ambigua: [nombres] } o null
+  function buscarDeudaPorNombre(texto) {
+    var buscado = normalizarTexto(texto);
+    if (!buscado) return null;
+    var tokensBuscados = buscado.split(' ').filter(function (t) { return t.length > 1; });
+    var puntajes = (estado.deudas || []).map(function (d) {
+      var nombre = normalizarTexto(d.nombre);
+      var p = 0;
+      if (nombre === buscado) p = 1000;
+      else if (nombre.indexOf(buscado) !== -1 || buscado.indexOf(nombre) !== -1) p = 500;
+      else {
+        var tn = nombre.split(' ');
+        tokensBuscados.forEach(function (t) { if (tn.indexOf(t) !== -1) p += 10; });
+      }
+      return { d: d, p: p };
+    }).filter(function (x) { return x.p > 0; }).sort(function (a, b) { return b.p - a.p; });
+    if (!puntajes.length) return null;
+    if (puntajes.length > 1 && puntajes[1].p === puntajes[0].p) {
+      return { ambigua: puntajes.filter(function (x) { return x.p === puntajes[0].p; }).map(function (x) { return x.d.nombre; }) };
+    }
+    return { deuda: puntajes[0].d };
+  }
+  // Aplica con las funciones de siempre (registrarPago / revertirPago) lo que pidió el asistente y
+  // devuelve las líneas para mostrar en el chat. Nunca toca nada que no coincida con una deuda real.
+  function aplicarPagosDeudasChat(pagos) {
+    var lineas = [];
+    (pagos || []).forEach(function (p) {
+      var r = buscarDeudaPorNombre(p.deuda);
+      if (!r) { lineas.push('⚠️ No encontré ninguna deuda parecida a “' + p.deuda + '”. No marqué nada.'); return; }
+      if (r.ambigua) { lineas.push('⚠️ “' + p.deuda + '” puede ser ' + r.ambigua.join(' o ') + '. Decime cuál y la marco.'); return; }
+      var d = r.deuda;
+      var pagada = deudaPagadaEnMes(d.id, mesActivo);
+      var finalizada = d.cuotaActual && d.cuotaTotal && d.cuotaActual >= d.cuotaTotal;
+      if (p.accion === 'revertir') {
+        if (!pagada) { lineas.push('ℹ️ ' + d.nombre + ' no estaba marcada como pagada en ' + mesKeyLabel(mesActivo) + '.'); return; }
+        revertirPago(d.id);
+        lineas.push('↩️ Desmarqué el pago de ' + d.nombre + ' (' + mesKeyLabel(mesActivo) + ').');
+      } else {
+        if (pagada) { lineas.push('ℹ️ ' + d.nombre + ' ya estaba marcada como pagada en ' + mesKeyLabel(mesActivo) + '.'); return; }
+        if (finalizada) { lineas.push('ℹ️ ' + d.nombre + ' ya está saldada, no quedan cuotas.'); return; }
+        registrarPago(d.id);
+        lineas.push('💳 Marqué como pagada: ' + d.nombre + ' (' + mesKeyLabel(mesActivo) + ').');
+      }
+    });
+    return lineas;
   }
 
   function chatScrollAbajo() {
@@ -786,6 +838,8 @@
           clave: it.categoria + '|' + it.monto + '|' + (it.nota || '') });
       });
       if (registrados.length || pres) { guardar(); actualizarCalculos(); }
+      // Pagos de deudas que pidió el usuario (registrarPago/revertirPago guardan y redibujan solos)
+      var pagosLineas = aplicarPagosDeudasChat(res.data.pagosDeudas);
       // Progreso contra presupuesto: una línea por cada categoría distinta que
       // se acaba de registrar (o que se acaba de fijar), solo si tiene tope.
       var categoriasParaProgreso = registrados.map(function (it) { return it.categoria; });
@@ -800,6 +854,7 @@
       if (registrados.length) {
         textoMostrado += '\n\n✅ ' + registrados.map(function (it) { return fmt(it.monto) + ' en ' + getCatNombre(it.categoria); }).join(', ');
       }
+      if (pagosLineas.length) textoMostrado += '\n\n' + pagosLineas.join('\n');
       if (presupuestoTexto) textoMostrado += '\n\n' + presupuestoTexto;
       if (progresoLineas.length) textoMostrado += '\n\n' + progresoLineas.join('\n');
       // `cards` vive solo en memoria (chatPersistirLog no lo guarda): no cambia el modelo de datos
@@ -1703,17 +1758,14 @@
       '<div class="donut-center"><b>' + (saldoOculto ? '$ ••••' : fmtCorto(total)) + '</b><span class="rs">gastado</span></div></div>';
 
     var legend = '<div class="legend">';
-    data.slice(0, 6).forEach(function (d, i) {
+    // Una fila por cada color de la dona (cada categoría tiene el suyo, sin repetir)
+    data.forEach(function (d, i) {
       var pct = Math.round((d.v / total) * 100);
       legend += '<div class="legend-row" style="animation-delay:' + (0.15 + i * 0.05).toFixed(2) + 's">' +
         '<span class="legend-dot" style="background:' + d.c.color + '"></span>' +
         '<span class="legend-name">' + escapeHtml(getCatNombre(d.c.id)) + '</span>' +
-        '<span class="legend-pct">' + pct + '%</span></div>';
+        '<span class="legend-pct">' + (pct === 0 && d.v > 0 ? '<1' : pct) + '%</span></div>';
     });
-    if (data.length > 6) {
-      var resto = data.slice(6).reduce(function (s, d) { return s + d.v; }, 0);
-      legend += '<div class="legend-row"><span class="legend-dot" style="background:var(--muted)"></span><span class="legend-name">Otras (' + (data.length - 6) + ')</span><span class="legend-pct">' + Math.round((resto / total) * 100) + '%</span></div>';
-    }
     legend += '</div>';
 
     body.innerHTML = '<div class="donut-wrap' + (animate ? ' donut-in' : '') + '">' + svg + legend + '</div>';

@@ -426,7 +426,9 @@
   window.MFAsis = {
     pintarUso: pintarUso,
     alAbrir: function (vista) {
-      var v = vista === 'chat' ? 'chat' : (vista === 'voz' ? 'voz' : (SR ? 'voz' : 'chat'));
+      // Al tocar la burbuja se abre primero el chat de texto (con el micrófono al lado de la escritura
+      // para pasar a la pantalla de voz); la voz solo se abre si se pide a propósito
+      var v = vista === 'voz' ? 'voz' : 'chat';
       if (v === 'voz' && !SR) v = 'chat';
       esperandoIA = false; hablando = false; hablandoMuestra = false; micActivo = false;
       mostrarTextoVoz('');
@@ -452,6 +454,8 @@
 
   // ---------- Conexión de botones ----------
   function iniciar() {
+    // En pantallas anchas el asistente es una ventana flotante: tocar afuera la cierra
+    $('chatBack').addEventListener('click', function (e) { if (e.target === this) MF.cerrar(); });
     $('orbBtn').onclick = tocarOrbe;
     $('vMicBtn').onclick = function () { desbloquearAudio(); if (micActivo) detenerMic(false); else iniciarMic(); };
     $('vTecladoBtn').onclick = function () { cancelarAudio(); mostrarVista('chat'); };

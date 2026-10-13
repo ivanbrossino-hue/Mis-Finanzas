@@ -8,12 +8,14 @@
 // ============================================================
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY") ?? "";
+// Los secretos se limpian por si se pegaron con espacios, saltos de línea o comillas
+const limpiar = (v: string | undefined) => (v ?? "").replace(/["'\s]/g, "");
+const ELEVENLABS_API_KEY = limpiar(Deno.env.get("ELEVENLABS_API_KEY"));
 const VOCES: Record<string, string> = {
-  "1": Deno.env.get("ELEVENLABS_VOICE_1") ?? "",
-  "2": Deno.env.get("ELEVENLABS_VOICE_2") ?? "",
+  "1": limpiar(Deno.env.get("ELEVENLABS_VOICE_1")),
+  "2": limpiar(Deno.env.get("ELEVENLABS_VOICE_2")),
 };
-const MODELO = Deno.env.get("ELEVENLABS_MODEL") || "eleven_flash_v2_5";
+const MODELO = limpiar(Deno.env.get("ELEVENLABS_MODEL")) || "eleven_flash_v2_5";
 // Cada pedido es una frase corta; el tope protege los créditos si alguien manda un texto enorme
 const MAX_CARACTERES = 500;
 

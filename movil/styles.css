@@ -16,6 +16,7 @@ html.oscuro, html:not(.claro) {
   --ok: #4DE0A0; --warn: #FBBF24; --bad: #FB7185; --okt: #7CF0B5; --warnt: #FCD34D; --badt: #FDA4AF;
   --track: rgba(255,255,255,0.10); --nav: rgba(5,28,19,0.85);
   --c1: #4DE0A0; --c2: #C8F24B; --c3: #2DD4BF; --c4: #60A5FA; --c5: #A78BFA; --c6: #FBBF24; --c7: #FB7185;
+  --c8: #F472B6; --c9: #FB923C; --c10: #22D3EE; --c11: #94A3B8; --c12: #E879F9;
   --b1: #33DC93; --b2: #12975F; --b3: #0A5A3D; --bedge: rgba(190,255,225,0.55); --binner: rgba(190,255,150,0.35);
   --bglow: rgba(60,235,150,0.5); --glowc: rgba(120,255,180,0.7); --ringc: rgba(120,255,190,0.45);
   --vozbg: #050F0A; --vbtn: rgba(255,255,255,0.10); --cglow: rgba(60,235,160,0.38);
@@ -31,6 +32,7 @@ html.claro {
   --ok: #12B76A; --warn: #F59E0B; --bad: #F43F5E; --okt: #0B7A4B; --warnt: #B45309; --badt: #BE123C;
   --track: rgba(10,90,60,0.10); --nav: rgba(255,255,255,0.90);
   --c1: #12B76A; --c2: #84CC16; --c3: #0D9488; --c4: #3B82F6; --c5: #7C3AED; --c6: #F59E0B; --c7: #F43F5E;
+  --c8: #DB2777; --c9: #EA580C; --c10: #0891B2; --c11: #64748B; --c12: #C026D3;
   --b1: #6BE8AE; --b2: #2DBE80; --b3: #14895A; --bedge: rgba(255,255,255,0.9); --binner: rgba(220,255,200,0.55);
   --bglow: rgba(30,180,110,0.38); --glowc: rgba(30,170,110,0.35); --ringc: rgba(20,150,95,0.35);
   --vozbg: #FFFFFF; --vbtn: #F0F3F0; --cglow: rgba(40,190,130,0.34);
@@ -148,6 +150,11 @@ svg { flex-shrink: 0; }
 .ct5 { color: var(--c5); background: color-mix(in srgb, var(--c5) 16%, transparent); }
 .ct6 { color: var(--c6); background: color-mix(in srgb, var(--c6) 16%, transparent); }
 .ct7 { color: var(--c7); background: color-mix(in srgb, var(--c7) 16%, transparent); }
+.ct8 { color: var(--c8); background: color-mix(in srgb, var(--c8) 16%, transparent); }
+.ct9 { color: var(--c9); background: color-mix(in srgb, var(--c9) 16%, transparent); }
+.ct10 { color: var(--c10); background: color-mix(in srgb, var(--c10) 16%, transparent); }
+.ct11 { color: var(--c11); background: color-mix(in srgb, var(--c11) 16%, transparent); }
+.ct12 { color: var(--c12); background: color-mix(in srgb, var(--c12) 16%, transparent); }
 .badge { height: 24px; padding: 0 10px; border-radius: 12px; font-size: 11px; font-weight: 800; display: inline-flex; align-items: center; white-space: nowrap; }
 .b-ok { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--okt); }
 .b-warn { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warnt); }
@@ -353,7 +360,11 @@ svg { flex-shrink: 0; }
 .fabs {
   position: fixed; z-index: 140; right: max(16px, calc(50% - 240px + 16px)); bottom: calc(var(--nav-h) + 16px + env(safe-area-inset-bottom));
   display: flex; flex-direction: column; align-items: flex-end; gap: 12px;
+  /* El contenedor NO recibe toques: con el menú cerrado ocupa una zona grande de la pantalla y
+     se comía los toques de lo que queda debajo (por ejemplo "Registrar pago" o el monto de un gasto). */
+  pointer-events: none;
 }
+.fabo, .fabp { pointer-events: auto; }
 .fabo { width: 58px; height: 58px; border-radius: 50%; border: 1.5px solid var(--bedge); position: relative; padding: 0;
   background: radial-gradient(circle at 34% 28%, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 34%), radial-gradient(circle, var(--b1) 0%, var(--b2) 100%);
   box-shadow: 0 0 26px var(--bglow); }
@@ -602,10 +613,26 @@ svg { flex-shrink: 0; }
   .modal-back { align-items: center; }
   .modal { border-radius: 28px; border-bottom: 1px solid var(--glassb); max-width: 560px; max-height: 86vh; }
 
-  /* ---- Asistente: la columna de voz queda centrada; el chat de texto es más ancho ---- */
-  .asis-chat { max-width: 780px; }
-  .chat-historial-lista { max-width: 340px; }
+  /* ---- Asistente: ventana flotante centrada sobre la app (el celular sigue a pantalla completa) ---- */
+  .asis, .asis.modo-chat { background: var(--scrim); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+  .asis-view {
+    inset: auto; top: 50%; left: 50%; margin: 0; padding-top: 0; transform: translate(-50%, -50%);
+    width: min(860px, 94vw); max-width: none; height: min(820px, 92vh);
+    border-radius: 32px; border: 1px solid var(--glassb); overflow: hidden;
+    background: var(--vozbg); box-shadow: 0 30px 80px rgba(0, 0, 0, .45);
+  }
+  #vConv, #vElegir { width: min(520px, 94vw); }
+  .asis-chat { background: var(--bgimg); background-color: var(--bgsolid); }
+  .asis-chat .chat-head { padding: 22px 24px 8px; }
+  .asis-chat .chat-mensajes { padding: 16px 32px 8px; }
+  .asis-chat .chat-chips { padding: 0 24px 10px; }
+  .asis-chat .chat-input-bar { margin: 0 24px 24px; }
+  .chat-historial-lista { max-width: 340px; padding-top: 22px; }
 }
+
+/* El historial de conversaciones se desliza DENTRO del panel del chat (sin esto, en pantallas anchas
+   el panel queda a un costado y el cajón escondido se asomaba sobre la barra lateral) */
+.asis-chat { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }

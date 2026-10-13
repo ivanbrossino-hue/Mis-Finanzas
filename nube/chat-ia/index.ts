@@ -85,12 +85,21 @@ function systemPrompt(contexto: unknown): string {
     'fijarme..." (por si la búsqueda no está disponible, ese será el mensaje que vea el usuario). Si la pregunta NO es sobre',
     "promos/descuentos/precios/comercios, \"buscarWeb\" tiene que ser null. Nunca pongas algo en \"buscarWeb\" y en \"registrar\"",
     "o \"presupuesto\" a la vez en el mismo mensaje.",
+    "",
+    "QUINTO trabajo: marcar pagos de deudas/tarjetas. El CONTEXTO trae \"deudas\" (nombre, saldo, cuotaMensual, activa y pagadaEsteMes).",
+    "Si el usuario dice que ya pagó una deuda o tarjeta (ej. \"ya pagué la tarjeta naranja, marcala como pagado\", \"pagué el préstamo\") devolvé",
+    '"pagosDeudas": [ { "deuda": "nombre EXACTO como figura en el CONTEXTO", "accion": "pagar" } ] (una entrada por cada deuda que mencione).',
+    'Si pide deshacer o desmarcar un pago (ej. "desmarcá la visa, me equivoqué") usá "accion": "revertir".',
+    "Elegí siempre la deuda cuyo nombre más se parezca a lo que dijo el usuario. Si ninguna se parece, o dos se parecen igual de bien, NO inventes:",
+    "dejá \"pagosDeudas\" afuera y en \"respuesta\" preguntale a cuál se refiere (nombrando las opciones del CONTEXTO). Si la deuda ya figura con pagadaEsteMes",
+    "en true y pide marcarla, igual devolvé la entrada (la app avisa que ya estaba pagada). Pagar una tarjeta NO es un gasto nuevo: no lo pongas en \"registrar\"",
+    "(salvo que además cuente una compra concreta aparte). En \"respuesta\" confirmá en una frase qué deuda marcaste, sin repetir montos que no estén en el CONTEXTO.",
     "CONTEXTO (datos financieros reales del usuario, en pesos argentinos):",
     JSON.stringify(contexto),
     "",
     "Respondé ÚNICAMENTE con un objeto JSON válido (sin texto antes ni después, sin markdown, sin explicaciones fuera del JSON).",
     'La clave "respuesta" es OBLIGATORIA en TODAS tus respuestas, sin excepción — nunca la omitas, nunca mandes el JSON sin ella.',
-    'Las otras tres claves ("registrar", "presupuesto", "buscarWeb") son OPCIONALES: agregalas solo cuando corresponda a lo que',
+    'Las otras claves ("registrar", "presupuesto", "buscarWeb", "pagosDeudas") son OPCIONALES: agregalas solo cuando corresponda a lo que',
     "el usuario pidió en ESTE mensaje; si no aplican, directamente no las incluyas (no hace falta poner [] o null a la fuerza).",
     'Ejemplo mínimo (una simple pregunta o charla): { "respuesta": "Este mes gastaste $ 412.542 en alquiler." }',
     'Ejemplo con un gasto: { "respuesta": "Anotado: $ 12.300 en Alimentación.", "registrar": [ { "categoria": "alimentacion", "monto": 12300, "nota": "super" } ] }',
@@ -332,7 +341,15 @@ Deno.serve(async (req) => {
       // se queda con el mensaje de respaldo que ya armó la IA en la primera pasada.
     }
 
-    return json({ respuesta, registrar, presupuesto });
+    // Pagos de deudas: solo pasan entradas bien formadas (la app las cruza con sus deudas reales)
+    const pagosDeudas = (parsed && Array.isArray(parsed.pagosDeudas))
+      ? parsed.pagosDeudas
+          .filter((p: any) => p && typeof p.deuda === "string" && p.deuda.trim() && (p.accion === "pagar" || p.accion === "revertir"))
+          .slice(0, 10)
+          .map((p: any) => ({ deuda: String(p.deuda).trim().slice(0, 80), accion: p.accion }))
+      : [];
+
+    return json({ respuesta, registrar, presupuesto, pagosDeudas });
   } catch (e) {
     console.error(e);
     return json({ error: String(e) }, 500);
