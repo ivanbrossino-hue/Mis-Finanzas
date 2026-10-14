@@ -554,11 +554,23 @@
 <input type="file" id="importFile" accept="application/json" style="display:none">
 
 <script src="datos-iniciales.js"></script>
-<script src="app.js?v=43"></script>
+<script src="sync-merge.js?v=1"></script>
+<script src="app.js?v=44"></script>
 <script src="asistente.js?v=7"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js'); });
+    // Si ya había una versión instalada y toma el control una nueva, se recarga una vez (así nadie sigue con código viejo
+    // que guarda sin las protecciones de sincronización). No recarga en medio de una edición: espera al próximo cambio de foco.
+    var habiaControlador = !!navigator.serviceWorker.controller;
+    var recargando = false;
+    function recargarSiPuede() {
+      if (recargando) return;
+      var ae = document.activeElement;
+      if (ae && /INPUT|SELECT|TEXTAREA/.test(ae.tagName)) { setTimeout(recargarSiPuede, 3000); return; }
+      recargando = true; location.reload();
+    }
+    navigator.serviceWorker.addEventListener('controllerchange', function () { if (habiaControlador) setTimeout(recargarSiPuede, 800); });
   }
 </script>
 </body>

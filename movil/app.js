@@ -143,6 +143,7 @@
   var miProyectoId = null;
   var miRol = null;                 // 'dueno' | 'editor' | 'lector'
   var cuentaRev = -1;
+  var cuentaBase = null; // copia del último estado sincronizado con el proyecto (base de la fusión de tres vías, ver sync-merge.js)
   var cuentaPollTimer = null;
   var guardandoCuenta = false;
   var guardarCuentaTimer = null;
@@ -1792,11 +1793,17 @@
       var r6 = await sbClient.from('proyectos').select('data,rev').eq('id', miProyectoId).single();
       if (r6.error) throw r6.error;
 
-      estado = r6.data.data;
-      if (!estado.deudas) estado.deudas = [];
-      if (!estado.catNombres) estado.catNombres = {};
-      if (!estado.presupuestos) estado.presupuestos = {};
+      // Si este dispositivo tenía cambios sin subir (quedó offline, se cerró a mitad de un guardado), se fusionan
+      // con lo del proyecto en vez de tirarlos: la base guardada dice cuál era el último estado sincronizado.
+      var baseGuardada = leerBaseGuardada();
+      var localPrevio = estado;
+      var tieneLocalSinSubir = !!(baseGuardada && window.MFSync && localPrevio && localPrevio.meses &&
+        JSON.stringify(localPrevio) !== JSON.stringify(baseGuardada));
+      estado = tieneLocalSinSubir ? window.MFSync.merge(baseGuardada, localPrevio, r6.data.data) : r6.data.data;
+      normalizarEstadoRemoto();
       cuentaRev = r6.data.rev;
+      setBaseCuenta(JSON.parse(JSON.stringify(r6.data.data)));
+      if (tieneLocalSinSubir) guardar();
       mesActivo = asegurarMesActual();
       render(true);
       actualizarChipUsuario(user);
@@ -1832,16 +1839,72 @@
     }).catch(function () {}); // best-effort: si falla, no interrumpe el guardado real
   }
 
+  // ---- Sincronización con el proyecto compartido (ver movil/sync-merge.js) ----
+  // Se guarda con condición de rev; si otra persona (u otro dispositivo, el atajo, el bot) se adelantó, se fusiona
+  // con lo suyo en vez de pisarlo, y se reintenta.
+  function claveBase() { return 'misFinanzas_base_' + miProyectoId; }
+  function setBaseCuenta(b) {
+    cuentaBase = b;
+    try { localStorage.setItem(claveBase(), JSON.stringify(b)); } catch (e) { /* sin lugar: la base queda solo en memoria */ }
+  }
+  function leerBaseGuardada() {
+    try { var r = localStorage.getItem(claveBase()); return r ? JSON.parse(r) : null; } catch (e) { return null; }
+  }
+  function normalizarEstadoRemoto() {
+    if (!estado.deudas) estado.deudas = [];
+    if (!estado.catNombres) estado.catNombres = {};
+    if (!estado.presupuestos) estado.presupuestos = {};
+    if (!estado.chats) estado.chats = [];
+    if (!estado.meses) estado.meses = {};
+  }
+  function hayCambiosSinSubir() {
+    return !!cuentaBase && JSON.stringify(estado) !== JSON.stringify(cuentaBase);
+  }
+
   function guardarEnProyecto() {
     if (!modoCuenta || !miProyectoId || guardandoCuenta || miRol === 'lector') return;
+    if (!window.MFSync) { console.error('Falta sync-merge.js: no se guarda en la nube para no pisar datos de otros.'); return; }
     guardandoCuenta = true;
-    cuentaRev = (cuentaRev < 0 ? 0 : cuentaRev) + 1;
-    sbClient.from('proyectos').update({
-      data: estado, rev: cuentaRev, updated_by: 'app', updated_at: new Date().toISOString()
-    }).eq('id', miProyectoId).then(function (res) {
-      if (res.error) console.warn('guardarEnProyecto: no se pudo guardar', res.error);
-      else avisarActividad();
+    window.MFSync.sincronizar({
+      getLocal: function () { return estado; },
+      setLocal: function (e) { estado = e; normalizarEstadoRemoto(); try { localStorage.setItem(STORAGE_KEY, JSON.stringify(estado)); } catch (err) {} },
+      getBase: function () { return cuentaBase; },
+      setBase: setBaseCuenta,
+      getRev: function () { return cuentaRev; },
+      setRev: function (n) { cuentaRev = n; },
+      escribir: function (data, revEsperado) {
+        // UPDATE ... WHERE rev = el que leí: si alguien escribió antes, no actualiza nada (conflicto) y no se pisa su cambio
+        return sbClient.from('proyectos').update({
+          data: data, rev: revEsperado + 1, updated_by: 'app', updated_at: new Date().toISOString()
+        }).eq('id', miProyectoId).eq('rev', revEsperado).select('rev').then(function (res) {
+          if (res.error) return { error: res.error.message || 'error' };
+          if (res.data && res.data.length) return { ok: true, rev: res.data[0].rev };
+          return { conflicto: true };
+        });
+      },
+      leerRemoto: function () {
+        return sbClient.from('proyectos').select('data,rev').eq('id', miProyectoId).single().then(function (res) {
+          if (res.error || !res.data) throw new Error(res.error ? res.error.message : 'sin datos');
+          return res.data;
+        });
+      }
+    }).then(function (r) {
       guardandoCuenta = false;
+      if (r.mergeado) {
+        // Se bajó y fusionó lo de otra persona: se redibuja
+        if (!estado.meses[mesActivo]) mesActivo = mesesOrdenados().slice(-1)[0];
+        render(true);
+      }
+      if (r.ok) {
+        avisarActividad();
+        if (hayCambiosSinSubir()) guardar(); // se tocó algo mientras se guardaba
+      } else if (r.conflicto) {
+        toast('Hay cambios de otro dispositivo en curso. Reintento en unos segundos…');
+        clearTimeout(guardarCuentaTimer);
+        guardarCuentaTimer = setTimeout(guardarEnProyecto, 4000);
+      } else {
+        console.warn('guardarEnProyecto: no se pudo guardar', r.error);
+      }
     });
   }
 
@@ -1850,16 +1913,24 @@
     cuentaPollTimer = setInterval(function () {
       if (!modoCuenta || !miProyectoId || guardandoCuenta) return;
       sbClient.from('proyectos').select('rev').eq('id', miProyectoId).single().then(function (res) {
-        if (res.error || !res.data || res.data.rev <= cuentaRev) return;
+        // `!==` y no `>`: si el rev retrocede (base restaurada) también hay que ponerse al día
+        if (res.error || !res.data || res.data.rev === cuentaRev) return;
         var ae = document.activeElement;
         if (ae && /INPUT|SELECT|TEXTAREA/.test(ae.tagName)) return;
         sbClient.from('proyectos').select('data,rev').eq('id', miProyectoId).single().then(function (res2) {
-          if (res2.error || !res2.data) return;
-          estado = res2.data.data; cuentaRev = res2.data.rev;
+          if (res2.error || !res2.data || guardandoCuenta) return;
+          var remoto = res2.data.data;
+          var sucio = hayCambiosSinSubir();
+          // Con cambios locales todavía sin subir se fusiona (no se tiran); si no, se toma lo remoto tal cual
+          estado = (sucio && window.MFSync) ? window.MFSync.merge(cuentaBase, estado, remoto) : remoto;
+          normalizarEstadoRemoto();
+          cuentaRev = res2.data.rev;
+          setBaseCuenta(JSON.parse(JSON.stringify(remoto)));
           try { localStorage.setItem(STORAGE_KEY, JSON.stringify(estado)); } catch (e) {}
           if (!estado.meses[mesActivo]) mesActivo = mesesOrdenados().slice(-1)[0];
           render(true);
           toast('Actualizado ☁️');
+          if (hayCambiosSinSubir()) guardar();
         });
       });
     }, 5000);
