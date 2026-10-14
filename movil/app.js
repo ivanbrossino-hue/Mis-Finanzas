@@ -42,7 +42,8 @@
     volumeOff: '<path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/>',
     camera: '<path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
     hourglass: '<path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9"/>',
-    card: '<rect x="3" y="6" width="18" height="12" rx="2.5"/><path d="M3 10h18"/>'
+    card: '<rect x="3" y="6" width="18" height="12" rx="2.5"/><path d="M3 10h18"/>',
+    phone: '<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/>'
   };
   function ico(nombre, tam, grosor) {
     tam = tam || 20;
@@ -428,6 +429,13 @@
     renderAjustes();
     if (window.MFAsis) window.MFAsis.alCambiarVoz(vozAsistente);
   }
+  // Número de versión de lo que realmente está corriendo: sale del ?v= con el que se cargó este mismo archivo
+  // (así no puede quedar desfasado del cascarón). Sirve para confirmar qué celular ya actualizó.
+  function versionApp() {
+    var s = document.querySelector('script[src*="app.js"]');
+    var m = s && /[?&]v=(\d+)/.exec(s.getAttribute('src') || '');
+    return m ? m[1] : '?';
+  }
   function renderAjustes() {
     var r1 = document.getElementById('ajVoz1R'), r2 = document.getElementById('ajVoz2R');
     var o1 = document.getElementById('ajVoz1'), o2 = document.getElementById('ajVoz2');
@@ -437,6 +445,8 @@
       x[0].classList.toggle('sel', on); x[1].classList.toggle('on', on);
       x[1].innerHTML = on ? ico('check', 14, 3.4) : '';
     });
+    var ver = document.getElementById('appVersion');
+    if (ver) ver.textContent = 'Versión ' + versionApp() + (window.MFSync ? ' · sincronización segura activa' : ' · sin sincronización segura (recargá la app)');
     var tg = document.getElementById('telegramSub');
     if (tg) tg.textContent = modoCuenta ? 'Cargá gastos escribiéndole al bot' : 'Conectá la nube para cargar gastos desde Telegram';
     chatVozActualizarUI();
@@ -3331,7 +3341,7 @@
       return '<div class="hist-row" data-mv="' + mv.id + '" data-mes="' + r.mesKey + '" title="Tocá para editar" role="button" tabindex="0">' +
         tileCat(mv.categoria) +
         '<div class="h-desc"><div class="rt">' + escapeHtml(desc) + '</div><div class="rs">' + fechaTxt + escapeHtml(getCatNombre(mv.categoria)) +
-        (mv.origen ? ' <span class="via-tag" title="Registrado desde el celular">📲 ' + escapeHtml(mv.dispositivo || (mv.origen === 'detector-android' ? 'Android' : 'iPhone')) + '</span>' : '') + '</div>' + detItems + '</div>' +
+        (mv.origen ? ' <span class="via-tag" title="Registrado desde el celular">' + ico('phone', 12, 2.4) + escapeHtml(mv.dispositivo || (mv.origen === 'detector-android' ? 'Android' : 'iPhone')) + '</span>' : '') + '</div>' + detItems + '</div>' +
         '<div class="amt">- ' + fmt(mv.monto) + '</div>' +
         '<button class="del" data-delmov="' + mv.id + '" data-delmes="' + r.mesKey + '" title="Eliminar del historial" aria-label="Eliminar movimiento">' + ico('trash', 17) + '</button></div>';
     }

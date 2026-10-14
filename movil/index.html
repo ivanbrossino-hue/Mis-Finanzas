@@ -38,7 +38,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-<link rel="stylesheet" href="styles.css?v=37">
+<link rel="stylesheet" href="styles.css?v=38">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
   /* Íconos de tema: sol en oscuro, luna en claro (lo que vas a activar al tocar) */
@@ -347,17 +347,6 @@
           <div class="rs" id="ajVozUso" style="padding:0 4px;line-height:1.4"></div>
         </div>
 
-        <div class="set-sect" id="atajosSect" style="display:none">
-          <div class="set-lab">Atajos del celular</div>
-          <div class="card group">
-            <button class="arow" id="atajoNuevoBtn" type="button">
-              <span class="tile ct2"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg></span>
-              <span class="grow"><div class="t">Conectar un celular</div><div class="s">Anotá gastos desde el iPhone o detectá pagos en Android, sin abrir la app</div></span>
-            </button>
-            <div id="atajosLista"></div>
-          </div>
-        </div>
-
         <div class="set-sect">
           <div class="set-lab">Cuenta y compartir</div>
           <div class="card group">
@@ -396,6 +385,19 @@
             </button>
           </div>
         </div>
+
+        <div class="set-sect" id="atajosSect" style="display:none">
+          <div class="set-lab">Atajos del celular</div>
+          <div class="card group">
+            <button class="arow" id="atajoNuevoBtn" type="button">
+              <span class="tile ct2"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg></span>
+              <span class="grow"><div class="t">Conectar un celular</div><div class="s">Anotá gastos desde el iPhone o detectá pagos en Android, sin abrir la app</div></span>
+            </button>
+            <div id="atajosLista"></div>
+          </div>
+        </div>
+
+        <div class="ver-note" id="appVersion"></div>
 
       </div>
 
@@ -570,7 +572,7 @@
 
 <script src="datos-iniciales.js"></script>
 <script src="sync-merge.js?v=1"></script>
-<script src="app.js?v=45"></script>
+<script src="app.js?v=46"></script>
 <script src="asistente.js?v=7"></script>
 <script>
   if ('serviceWorker' in navigator) {
