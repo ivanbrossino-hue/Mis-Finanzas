@@ -53,8 +53,48 @@ const PERMISOS: Record<string, string[]> = {
   detector: ["config", "propuesta", "confirmar", "ignorar", "deshacer"],
 };
 
+// Mensaje legible (en español) por defecto para cada código de error. Todas las respuestas de error llevan {error, mensaje}.
+const MENSAJES: Record<string, string> = {
+  token_invalido: "El código de acceso no es válido. Generá uno nuevo en la app (Ajustes > Atajos del celular).",
+  token_revocado: "Ese código de acceso fue revocado. Generá uno nuevo en la app (Ajustes > Atajos del celular).",
+  sin_permiso: "Ese código ya no tiene permiso para editar este proyecto.",
+  alcance_insuficiente: "Ese código de acceso no puede hacer esta operación.",
+  no_deshacible: "Solo se pueden deshacer los registros que se hicieron con un atajo.",
+  ruta_inexistente: "Esa dirección no existe en este servicio.",
+  propuesta_inexistente: "No encontré esa propuesta (puede que ya no exista).",
+  proyecto_inexistente: "No encontré el proyecto de este código de acceso.",
+  no_encontrado: "No encontré ese registro (o ya estaba deshecho).",
+  mes_no_disponible: "Ese mes todavía no está creado en la app.",
+  ya_resuelta: "Esa propuesta ya fue resuelta.",
+  pasaron_mas_de_10_minutos: "Pasaron más de 10 minutos: ya no se puede deshacer desde acá. Borralo desde la app.",
+  pedido_demasiado_grande: "El pedido es demasiado grande.",
+  texto_demasiado_largo: "El texto es demasiado largo.",
+  imagen_demasiado_grande: "La imagen es demasiado grande (máximo 4,5 MB).",
+  solo_imagenes: "Solo se aceptan imágenes JPEG, PNG, WEBP o GIF (convertí las HEIC a JPEG).",
+  demasiados_pedidos: "Demasiados pedidos seguidos con este código. Probá de nuevo en un rato.",
+  no_pude_leer: "No pude leer los datos del proyecto. Probá de nuevo en un momento.",
+  no_pude_guardar: "No pude guardar. Probá de nuevo en un momento.",
+  no_pude_verificar: "No pude verificar el código de acceso. Probá de nuevo en un momento.",
+  no_pude_interpretar: "No pude interpretar el contenido. Probá de nuevo en un momento.",
+  ocupado: "Hay mucha actividad en la cuenta en este momento. No se guardó nada: probá de nuevo en unos segundos.",
+  monto_invalido: "El monto no es válido. Mandá un número o una cuenta, por ejemplo 1500 o 1000+500.",
+  categoria_invalida: "No reconozco esa categoría.",
+  categoria_requerida: "Falta elegir una categoría.",
+  fecha_invalida: "La fecha no es válida. Usá el formato AAAA-MM-DD.",
+  fecha_futura: "La fecha no puede ser futura.",
+  idem_invalido: "El identificador de repetición no es válido (de 6 a 64 letras, números, guiones o guiones bajos).",
+  json_invalido: "El pedido no tiene un formato válido.",
+  origen_invalido: "El origen no es válido.",
+  falta_contenido: "Falta el contenido: mandá texto o una imagen.",
+  imagen_invalida: "La imagen no es válida.",
+  id_invalido: "El identificador no es válido.",
+  falta_configuracion: "El servicio no está configurado del todo. Avisale a quien lo administra.",
+  error_interno: "Ocurrió un error inesperado. Probá de nuevo en un momento.",
+};
 class ErrorApi extends Error {
-  constructor(public status: number, public codigo: string, mensaje?: string) { super(mensaje || codigo); }
+  constructor(public status: number, public codigo: string, mensaje?: string, public extra?: Record<string, unknown>) {
+    super(mensaje || MENSAJES[codigo] || "Ocurrió un error. Probá de nuevo.");
+  }
 }
 
 // ------------------------------------------------------------ utilidades puras
@@ -96,6 +136,31 @@ function nuevoId(): string {
   return "id" + Math.floor(Math.random() * 1e9) + "" + contadorId;
 }
 const redondear = (n: number) => Math.round(n * 100) / 100;
+
+// Nombre que ve la persona para una categoría (respeta los nombres personalizados de la app)
+const nombreVisible = (data: any, id: string): string => (data && data.catNombres && data.catNombres[id]) || CATEGORIAS[id];
+// Nombres visibles de todas las categorías, en orden; si dos categorías quedaron con el mismo nombre se les agrega el id para distinguirlas
+function nombresVisibles(data: any): { id: string; nombre: string }[] {
+  const todos = Object.keys(CATEGORIAS).map((id) => ({ id, nombre: nombreVisible(data, id) }));
+  const cuenta: Record<string, number> = {};
+  for (const c of todos) cuenta[normalizar(c.nombre)] = (cuenta[normalizar(c.nombre)] || 0) + 1;
+  return todos.map((c) => (cuenta[normalizar(c.nombre)] > 1 ? { id: c.id, nombre: `${c.nombre} (${c.id})` } : c));
+}
+// Acepta el id ("alimentacion") o el nombre visible ("Alimentación", "alimentacion", "ALIMENTACIÓN"), sin importar mayúsculas ni tildes.
+// Sin una coincidencia única -> 400 categoria_invalida con las categorías válidas.
+function resolverCategoria(data: any, entrada: unknown): string {
+  const buscado = normalizar(entrada);
+  const validas = nombresVisibles(data).map((c) => c.nombre);
+  const invalida = () => new ErrorApi(400, "categoria_invalida",
+    (buscado ? `No reconozco la categoría «${limpiarTexto(entrada, 40)}». ` : "Falta la categoría. ") + `Las válidas son: ${validas.join(", ")}.`, { validas });
+  if (!buscado) throw invalida();
+  const porId = Object.keys(CATEGORIAS).find((id) => normalizar(id) === buscado);
+  if (porId) return porId;                                                 // el id exacto siempre gana (como hasta ahora)
+  const candidatas = Object.keys(CATEGORIAS).filter((id) => normalizar(nombreVisible(data, id)) === buscado || normalizar(CATEGORIAS[id]) === buscado
+    || normalizar(nombresVisibles(data).find((c) => c.id === id)!.nombre) === buscado);
+  if (candidatas.length === 1) return candidatas[0];
+  throw invalida();                                                        // ninguna, o más de una
+}
 
 // Cuenta tipo "200+120" o "(1500 + 300) * 2": parser propio (sin eval ni Function).
 // Número con puntos de miles ("1.500", "1.500,50") o coma/punto decimal ("12,5", "12.5"). Acepta "$".
@@ -428,20 +493,19 @@ async function leerJson(req: Request, maxBytes: number): Promise<any> {
 }
 
 function validarGasto(body: any, s: Sesion, ahora = Date.now()): DatosGasto {
-  const categoria = String(body.categoria || "");
-  if (!CATEGORIAS[categoria]) throw new ErrorApi(400, "categoria_invalida", `Categorías válidas: ${Object.keys(CATEGORIAS).join(", ")}`);
+  const categoria = String(body.categoria ?? "");   // id o nombre visible: se resuelve con los datos del proyecto (resolverCategoria)
   const hoy = hoyAR(ahora);
   let fecha = hoy;
   if (body.fecha != null && body.fecha !== "") {
-    if (!fechaValida(body.fecha)) throw new ErrorApi(400, "fecha_invalida", "Usá el formato AAAA-MM-DD");
-    if (body.fecha > hoy) throw new ErrorApi(400, "fecha_futura", "La fecha no puede ser futura");
+    if (!fechaValida(body.fecha)) throw new ErrorApi(400, "fecha_invalida");
+    if (body.fecha > hoy) throw new ErrorApi(400, "fecha_futura");
     fecha = body.fecha;
   }
   const concepto = body.concepto == null || body.concepto === "" ? null : limpiarTexto(body.concepto, 60) || null;
   const nota = body.nota == null || body.nota === "" ? null : limpiarTexto(body.nota, 140) || null;
   let idem: string | null = null;
   if (body.idem != null && body.idem !== "") {
-    if (!/^[A-Za-z0-9_-]{6,64}$/.test(String(body.idem))) throw new ErrorApi(400, "idem_invalido", "idem: 6 a 64 letras, números, - o _");
+    if (!/^[A-Za-z0-9_-]{6,64}$/.test(String(body.idem))) throw new ErrorApi(400, "idem_invalido");
     idem = String(body.idem);
   }
   return {
@@ -492,8 +556,18 @@ async function manejar(req: Request, ruta: string[]): Promise<Response> {
     for (const id of Object.keys(CATEGORIAS)) conceptos[id] = [];
     for (const g of mes.gastos || []) if (conceptos[g.categoria] && !conceptos[g.categoria].includes(g.nombre)) conceptos[g.categoria].push(String(g.nombre));
     const comercios = await mapaComercios(s.proyectoId);
+    // Pensado para el atajo del iPhone: nombres tal como se ven en la app, y filas por nombre de categoría (sin duplicados, máx. 40)
+    const visibles = nombresVisibles(data);
+    const conceptosPorNombre: Record<string, string[]> = {};
+    for (const c of visibles) {
+      const vistos = new Set<string>();
+      conceptosPorNombre[c.nombre] = (conceptos[c.id] || []).filter((f) => { const k = normalizar(f); if (vistos.has(k)) return false; vistos.add(k); return true; }).slice(0, 40);
+    }
     return json({
       mes: mk, hoy: hoyAR(),
+      lista_categorias: visibles.map((c) => c.nombre),
+      conceptos_por_nombre: conceptosPorNombre,
+      id_por_nombre: Object.fromEntries(visibles.map((c) => [c.nombre, c.id])),
       categorias: Object.keys(CATEGORIAS).map((id) => ({ id, nombre: (data.catNombres && data.catNombres[id]) || CATEGORIAS[id], filaPorDefecto: nombreAcumulador(id) })),
       conceptos,
       comercios: Object.fromEntries(Object.entries(comercios).map(([k, v]) => [k, { categoria: v.categoria, concepto: v.concepto }])),
@@ -507,6 +581,7 @@ async function manejar(req: Request, ruta: string[]): Promise<Response> {
     g.origen = ORIGEN_MOV.manual;
     try {
       const res = await mutarProyecto(s.proyectoId, s.etiqueta, (data) => {
+        g.categoria = resolverCategoria(data, g.categoria);       // id o nombre visible
         const r = aplicarGasto(data, g);
         return { data: r.data, resultado: r.resultado, sinCambios: r.repetido };
       });
@@ -516,7 +591,7 @@ async function manejar(req: Request, ruta: string[]): Promise<Response> {
       if (e instanceof ErrorApi && e.codigo === "mes_no_disponible") {
         const { fila } = await guardarPendiente(s, {
           origen: s.alcance === "detector" ? "android-notif" : "manual", tipo: "gasto", monto: g.monto, comercio: g.nota ? g.nota.slice(0, 80) : null,
-          comercio_norm: null, fecha: g.fecha, categoria_sugerida: g.categoria, fila_sugerida: g.concepto, confianza: 1,
+          comercio_norm: null, fecha: g.fecha, categoria_sugerida: CATEGORIAS[g.categoria] ? g.categoria : null, fila_sugerida: g.concepto, confianza: 1,
         }, true);
         return json({ ok: false, pendiente: true, id: fila.id, codigo: "mes_no_disponible", mensaje: "Ese mes no está creado: quedó como propuesta pendiente para confirmar en la app" }, 202);
       }
@@ -601,15 +676,17 @@ async function manejar(req: Request, ruta: string[]): Promise<Response> {
         return { data: r.data, resultado: r.resultado, sinCambios: !!(r.resultado as any).repetido };
       });
     } else {
-      const categoria = String(body.categoria || p.categoria_sugerida || "");
-      if (!CATEGORIAS[categoria]) throw new ErrorApi(400, "categoria_requerida", "La propuesta no tiene categoría: mandá {categoria}");
+      const hayCategoria = (body.categoria != null && body.categoria !== "") || !!p.categoria_sugerida;
+      if (!hayCategoria) throw new ErrorApi(400, "categoria_requerida", "La propuesta no tiene categoría sugerida: elegí una (por ejemplo {\"categoria\":\"Alimentación\"}).");
+      const entradaCategoria = (body.categoria != null && body.categoria !== "") ? body.categoria : p.categoria_sugerida;
       const concepto = body.concepto !== undefined ? (limpiarTexto(body.concepto, 60) || null) : (p.fila_sugerida || null);
       const monto = body.monto != null ? evaluarMonto(body.monto) : Number(p.monto);
       resultado = await mutarProyecto(s.proyectoId, s.etiqueta, (data) => {
+        const categoria = resolverCategoria(data, entradaCategoria);       // id o nombre visible
         const r = aplicarGasto(data, { categoria, concepto, monto, nota: p.comercio ? limpiarTexto(p.comercio, 140) : null, fecha: p.fecha, movId, origen: origenMov, dispositivo });
         return { data: r.data, resultado: r.resultado, sinCambios: r.repetido };
       });
-      categoriaFinal = categoria; filaFinal = (resultado as any).concepto ?? concepto;
+      categoriaFinal = (resultado as any).categoria; filaFinal = (resultado as any).concepto ?? concepto;
     }
     // Recién cuando el guardado tuvo éxito se marca la propuesta como registrada (si esto falla, repetir no duplica: movId es fijo)
     await marcarPropuesta(p.id, {
@@ -657,8 +734,8 @@ Deno.serve(async (req) => {
     const ruta = i >= 0 ? partes.slice(i + 1) : partes;
     return await manejar(req, ruta);
   } catch (e) {
-    if (e instanceof ErrorApi) return json({ error: e.codigo, mensaje: e.message !== e.codigo ? e.message : undefined }, e.status);
+    if (e instanceof ErrorApi) return json({ error: e.codigo, mensaje: e.message, ...(e.extra || {}) }, e.status);
     console.error("gasto-rapido: error inesperado", (e as Error)?.name);     // sin datos personales en los logs
-    return json({ error: "error_interno" }, 500);
+    return json({ error: "error_interno", mensaje: MENSAJES.error_interno }, 500);
   }
 });

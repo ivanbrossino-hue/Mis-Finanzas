@@ -424,6 +424,140 @@ async function prueba(nombre, fn) {
     assert.equal(db.pendientes.length, 1);
   });
 
+  // ---------- cambios aditivos para el atajo del iPhone ----------
+  await prueba('GET /config: lista_categorias, id_por_nombre y conceptos_por_nombre (y lo que ya devolvía sigue igual)', async () => {
+    const { token } = crearToken('gasto');
+    const r = await llamar('GET', '/config', token);
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.json.lista_categorias, ['Vivienda', 'Trabajo', 'Alimentación', 'Transporte', 'Salud', 'Educación', 'Mascota', 'Entretenimiento', 'Ropa / Personal', 'Seguros / Imprevistos', 'Ahorro e Inversión']);
+    assert.equal(r.json.id_por_nombre['Alimentación'], 'alimentacion'); assert.equal(r.json.id_por_nombre['Ropa / Personal'], 'ropa');
+    assert.equal(Object.keys(r.json.id_por_nombre).length, 11);
+    assert.deepEqual(r.json.conceptos_por_nombre['Vivienda'], ['Alquiler']);
+    assert.deepEqual(r.json.conceptos_por_nombre['Salud'], []);
+    // lo anterior no cambió
+    assert.equal(r.json.categorias.length, 11); assert.deepEqual(r.json.conceptos.vivienda, ['Alquiler']); assert.ok(r.json.mes && r.json.hoy && r.json.comercios);
+  });
+  await prueba('GET /config: nombres personalizados, sin duplicados y máximo 40 filas por categoría', async () => {
+    const { token } = crearToken('gasto');
+    const data = db.proyectos[PROY].data;
+    data.catNombres = { alimentacion: 'Comida' };
+    const mes = data.meses[mesPrevio];
+    for (let i = 0; i < 55; i++) mes.gastos.push({ id: 'x' + i, categoria: 'transporte', nombre: 'Fila ' + i, monto: 0 });
+    mes.gastos.push({ id: 'dup1', categoria: 'transporte', nombre: 'fila 3', monto: 0 }, { id: 'dup2', categoria: 'transporte', nombre: 'FILA 3 ', monto: 0 });
+    const r = await llamar('GET', '/config', token);
+    assert.ok(r.json.lista_categorias.includes('Comida') && !r.json.lista_categorias.includes('Alimentación'));
+    assert.equal(r.json.id_por_nombre['Comida'], 'alimentacion');
+    const filas = r.json.conceptos_por_nombre['Transporte'];
+    assert.equal(filas.length, 40);
+    assert.equal(new Set(filas.map((f) => f.toLowerCase().trim())).size, 40, 'sin duplicados');
+    assert.ok(r.json.conceptos.transporte.length > 40, 'el campo anterior no se recorta');
+  });
+  await prueba('GET /config: dos categorías con el mismo nombre visible se distinguen agregando el id', async () => {
+    const { token } = crearToken('gasto');
+    db.proyectos[PROY].data.catNombres = { alimentacion: 'Comida', salud: 'comida' };
+    const r = await llamar('GET', '/config', token);
+    assert.ok(r.json.lista_categorias.includes('Comida (alimentacion)') && r.json.lista_categorias.includes('comida (salud)'));
+    assert.equal(r.json.id_por_nombre['Comida (alimentacion)'], 'alimentacion'); assert.equal(r.json.id_por_nombre['comida (salud)'], 'salud');
+  });
+
+  await prueba('POST /gasto: la categoría acepta el id o el nombre visible, sin importar mayúsculas ni tildes', async () => {
+    const { token } = crearToken('gasto');
+    const casos = [['alimentacion', 'alimentacion'], ['Alimentación', 'alimentacion'], ['alimentacion ', 'alimentacion'], ['ALIMENTACIÓN', 'alimentacion'], ['  alimentación  ', 'alimentacion'],
+      ['Ropa / Personal', 'ropa'], ['ropa personal', 'ropa'], ['ropa', 'ropa'], ['Seguros / Imprevistos', 'seguros'], ['EDUCACION', 'educacion'], ['Ahorro e Inversión', 'ahorro']];
+    for (const [entrada, id] of casos) {
+      const r = await llamar('POST', '/gasto', token, { categoria: entrada, monto: 1 });
+      assert.equal(r.status, 201, JSON.stringify(entrada) + ' -> ' + JSON.stringify(r.json));
+      assert.equal(r.json.categoria, id, JSON.stringify(entrada));
+    }
+  });
+  await prueba('POST /gasto: con un nombre personalizado acepta ese nombre (y el original si es único); el id exacto siempre gana', async () => {
+    const { token } = crearToken('gasto');
+    db.proyectos[PROY].data.catNombres = { alimentacion: 'Comida' };
+    assert.equal((await llamar('POST', '/gasto', token, { categoria: 'comida', monto: 1 })).json.categoria, 'alimentacion');
+    assert.equal((await llamar('POST', '/gasto', token, { categoria: 'Alimentación', monto: 1 })).json.categoria, 'alimentacion');
+    assert.equal((await llamar('POST', '/gasto', token, { categoria: 'alimentacion', monto: 1 })).json.categoria, 'alimentacion');
+    // dos categorías con el mismo nombre: ambiguo -> 400 con las válidas; pero el id exacto sigue andando
+    db.proyectos[PROY].data.catNombres = { alimentacion: 'Comida', salud: 'Comida' };
+    const amb = await llamar('POST', '/gasto', token, { categoria: 'comida', monto: 1 });
+    assert.equal(amb.status, 400); assert.equal(amb.json.error, 'categoria_invalida');
+    assert.ok(amb.json.validas.includes('Comida (alimentacion)'));
+    assert.equal((await llamar('POST', '/gasto', token, { categoria: 'salud', monto: 1 })).json.categoria, 'salud');
+    assert.equal((await llamar('POST', '/gasto', token, { categoria: 'Comida (salud)', monto: 1 })).json.categoria, 'salud');
+  });
+  await prueba('POST /gasto: categoría sin coincidencia -> 400 categoria_invalida con las válidas y sin escribir nada', async () => {
+    const { token } = crearToken('gasto');
+    for (const mala of ['xyz', 'comida', 'alimento', '', null, undefined, 123, 'a'.repeat(500)]) {
+      const r = await llamar('POST', '/gasto', token, { categoria: mala, monto: 5 });
+      assert.equal(r.status, 400, JSON.stringify(mala)); assert.equal(r.json.error, 'categoria_invalida');
+      assert.match(r.json.mensaje, /Las válidas son: Vivienda, Trabajo, Alimentación/);
+      assert.equal(r.json.validas.length, 11);
+    }
+    assert.equal(db.proyectos[PROY].rev, 3, 'no escribió');
+    assert.match((await llamar('POST', '/gasto', token, { monto: 5 })).json.mensaje, /Falta la categoría/);
+  });
+  await prueba('POST /propuesta/:id/confirmar: la categoría acepta el nombre visible', async () => {
+    const det = crearToken('detector').token;
+    db.anthropic = () => ({ es_pago: true, tipo: 'gasto', monto: 900, comercio: 'Farmacia del Sol' });
+    const p = (await llamar('POST', '/propuesta', det, { origen: 'android-notif', texto: 'x' })).json;
+    const mala = await llamar('POST', `/propuesta/${p.id}/confirmar`, det, { categoria: 'medicina' });
+    assert.equal(mala.status, 400); assert.equal(mala.json.error, 'categoria_invalida'); assert.equal(db.pendientes[0].estado, 'pendiente');
+    const r = await llamar('POST', `/propuesta/${p.id}/confirmar`, det, { categoria: 'SALUD', concepto: 'Farmacia' });
+    assert.equal(r.status, 201); assert.equal(r.json.categoria, 'salud');
+    assert.equal(db.pendientes[0].categoria_final, 'salud');
+  });
+
+  await prueba('Todos los errores devuelven {error, mensaje} con un mensaje legible en español', async () => {
+    const g = crearToken('gasto').token, d = crearToken('detector').token;
+    const pdf = Buffer.from('%PDF-1.4 ' + 'x'.repeat(100)).toString('base64');
+    const casos = [
+      ['sin token', () => llamar('GET', '/config'), 401, 'token_invalido'],
+      ['token raro', () => llamar('GET', '/config', 'basura'), 401, 'token_invalido'],
+      ['ruta', () => llamar('GET', '/nada', g), 404, 'ruta_inexistente'],
+      ['alcance', () => llamar('POST', '/gasto', d, { categoria: 'salud', monto: 1 }), 403, 'alcance_insuficiente'],
+      ['monto', () => llamar('POST', '/gasto', g, { categoria: 'salud', monto: 'abc' }), 400, 'monto_invalido'],
+      ['fecha futura', () => llamar('POST', '/gasto', g, { categoria: 'salud', monto: 1, fecha: '2999-01-01' }), 400, 'fecha_futura'],
+      ['fecha rara', () => llamar('POST', '/gasto', g, { categoria: 'salud', monto: 1, fecha: '2026-02-30' }), 400, 'fecha_invalida'],
+      ['idem', () => llamar('POST', '/gasto', g, { categoria: 'salud', monto: 1, idem: 'x' }), 400, 'idem_invalido'],
+      ['categoría', () => llamar('POST', '/gasto', g, { categoria: 'nada', monto: 1 }), 400, 'categoria_invalida'],
+      ['origen', () => llamar('POST', '/propuesta', g, { origen: 'otro', texto: 'x' }), 400, 'origen_invalido'],
+      ['sin contenido', () => llamar('POST', '/propuesta', g, { origen: 'manual' }), 400, 'falta_contenido'],
+      ['texto largo', () => llamar('POST', '/propuesta', g, { origen: 'manual', texto: 'a'.repeat(1600) }), 413, 'texto_demasiado_largo'],
+      ['no es imagen', () => llamar('POST', '/propuesta', g, { origen: 'ios-comprobante', imagenBase64: pdf }), 415, 'solo_imagenes'],
+      ['propuesta inexistente', () => llamar('POST', `/propuesta/${crypto.randomUUID()}/ignorar`, d, {}), 404, 'propuesta_inexistente'],
+      ['id de propuesta', () => llamar('POST', '/propuesta/xx/ignorar', d, {}), 400, 'id_invalido'],
+      ['deshacer id raro', () => llamar('POST', '/deshacer', g, { id: 'm0' }), 400, 'id_invalido'],
+      ['deshacer inexistente', () => llamar('POST', '/deshacer', g, { id: 'rq_noexiste1' }), 404, 'no_encontrado'],
+      ['json roto', async () => { const r = await sim.manejador()(new Request(`${SB}/functions/v1/gasto-rapido/gasto`, { method: 'POST', headers: { Authorization: 'Bearer ' + g }, body: '{no es json' })); return { status: r.status, json: await r.json() }; }, 400, 'json_invalido'],
+    ];
+    for (const [nombre, hacer, estado, codigo] of casos) {
+      const r = await hacer();
+      assert.equal(r.status, estado, nombre + ' -> ' + JSON.stringify(r.json)); assert.equal(r.json.error, codigo, nombre);
+      const m = r.json.mensaje;
+      assert.ok(typeof m === 'string' && m.length >= 15 && m !== codigo && /\s/.test(m) && !/_/.test(m), `${nombre}: mensaje poco legible: ${JSON.stringify(m)}`);
+    }
+    // revocado, sin permiso, tope por hora, ocupado, error de Claude y error interno
+    const rev = crearToken('gasto', { revocado: true }).token;
+    let r = await llamar('GET', '/config', rev); assert.equal(r.json.error, 'token_revocado'); assert.match(r.json.mensaje, /revocado/);
+    const lector = crearToken('gasto'); db.miembros[0].rol = 'lector';
+    r = await llamar('GET', '/config', lector.token); assert.equal(r.json.error, 'sin_permiso'); assert.match(r.json.mensaje, /permiso/); db.miembros[0].rol = 'dueno';
+    const tope = crearToken('gasto', { pedidos_ventana: 60 });
+    r = await llamar('GET', '/config', tope.token); assert.equal(r.status, 429); assert.match(r.json.mensaje, /pedidos por hora/);
+    db.hooks.antesDePatch = async () => { db.proyectos[PROY].rev += 1; };
+    r = await llamar('POST', '/gasto', g, { categoria: 'salud', monto: 1 }); assert.equal(r.status, 503); assert.match(r.json.mensaje, /mucha actividad/);
+    db.hooks.antesDePatch = null;
+    const original = globalThis.fetch;
+    globalThis.fetch = async (u, i) => (String(u).includes('anthropic') ? new Response('{}', { status: 500 }) : original(u, i));
+    r = await llamar('POST', '/propuesta', d, { origen: 'android-notif', texto: 'x' }); assert.equal(r.json.error, 'no_pude_interpretar'); assert.match(r.json.mensaje, /interpretar/);
+    globalThis.fetch = async () => { throw new TypeError('boom'); };
+    const silencio = console.error; console.error = () => {};
+    r = await llamar('GET', '/config', g);
+    console.error = silencio; globalThis.fetch = original;
+    assert.equal(r.status, 500); assert.equal(r.json.error, 'error_interno'); assert.match(r.json.mensaje, /error inesperado/);
+    // y el 202 de "mes no disponible" también trae un mensaje
+    r = await llamar('POST', '/gasto', g, { categoria: 'salud', monto: 1, fecha: '2020-05-10' });
+    assert.equal(r.status, 202); assert.match(r.json.mensaje, /pendiente/);
+  });
+
   console.log(`\n${ok} bien, ${fallos} con falla`);
   process.exit(fallos ? 1 : 0);
 })();
