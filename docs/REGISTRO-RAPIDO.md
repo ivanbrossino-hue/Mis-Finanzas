@@ -185,10 +185,17 @@ En este orden. No generes tokens antes del paso **e**. Cada paso con deploy o me
 - [ ] Anotar el tag de vuelta atrás `pre-sync-change` (commit `f16a875`) y el último commit de `registro-rapido`.
 
 **b. Bot de Telegram nuevo** (es el que usan todos los días: probarlo con calma)
-- [ ] Guardar el código actual del bot por si hay que volver (`git show pre-sync-change:nube/telegram-bot/index.ts`).
-- [ ] Deployar **solo** `telegram-bot` desde la carpeta temporal `supabase/functions/telegram-bot` (conserva `verify_jwt` apagado y el secreto del webhook; no cambia ningún secreto).
+- [ ] Tener a mano el comando para **volver atrás** (código del bot que está en `main`, antes de este cambio). Desde la raíz del repo, en Git Bash:
+  ```bash
+  export PATH="$PATH:/c/Users/Administrador/supabase-cli"
+  mkdir -p supabase/functions/telegram-bot
+  git show main:nube/telegram-bot/index.ts > supabase/functions/telegram-bot/index.ts
+  supabase functions deploy telegram-bot --no-verify-jwt --use-api --project-ref iivjrpfkwkxgxzgyzrvq --workdir .
+  ```
+  (`--no-verify-jwt` es necesario: el bot lo llama Telegram, que no manda un JWT de Supabase. Mientras `main` no se mezcle con esta rama, `main:` es el bot anterior; después del merge usar el hash anterior al merge: `git show <hash>:nube/telegram-bot/index.ts`, o `pre-sync-change:`, que también tiene el bot anterior.)
+- [ ] Deployar **solo** `telegram-bot` desde la carpeta temporal `supabase/functions/telegram-bot`, con `--no-verify-jwt --use-api` (conserva `verify_jwt` apagado; no cambia secretos, ni el webhook ni ninguna otra función). Verificar con `supabase functions list` que las otras 9 siguen con la misma versión.
 - [ ] Probar por Telegram: mandar `2000 arroz`, tocar **Sumar al total**, categoría, fila → tiene que decir "✅ Sumado" y verse en la app. Probar también **fila nueva** y `/nota`. Borrar el gasto de prueba desde el Historial.
-- [ ] Si algo falla: volver a deployar el código guardado en el primer punto.
+- [ ] Si algo falla: volver a deployar el código anterior con los comandos del primer punto. El webhook de Telegram no se toca (apunta a la misma función).
 
 **c. Mezclar a `main` y publicar**
 - [ ] `git checkout main && git merge --no-ff registro-rapido && git push origin main` (lo hago yo cuando me des el OK).
