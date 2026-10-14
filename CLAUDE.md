@@ -8,13 +8,13 @@ Dos versiones de la misma app + backend en Supabase:
 
 | Carpeta | Qué es |
 |---|---|
-| raíz (`index.html`, `app.js` ~100 KB, `styles.css`, `datos-iniciales.js`) | Versión **escritorio**. Se abre con doble clic (`file://`) o hosteada. |
+| raíz (`index.html`, `app.js` ~100 KB, `styles.css`, `datos-iniciales.js`) | Versión **escritorio**. Se abre con doble clic (`file://`) o hosteada. **Con sesión de Google redirige a `/movil/`** (nunca guarda en `proyectos`: guardaba a ciegas); el modo local no cambia. |
 | `movil/` | Versión **móvil / PWA**, con el **rediseño "verde profundo + vidrio" (oscuro/claro)** ya implementado en local (ver `docs/REDISENO.md`): `index.html` (shell, 6 páginas, nav de 5 pestañas, overlay del asistente), `styles.css` (tokens + componentes), `app.js` (lógica, un IIFE), `asistente.js` (pantalla de voz, elegir voz, reproductor ElevenLabs/navegador), `manifest.json`, `sw.js`, `icons/`. Chart.js, jsQR y supabase-js por CDN; sin Tailwind. Tiene chat IA, escáner de tickets, push y login. |
 | `nube/` | Código fuente SQL + Edge Functions (Deno). **Nunca lo ejecuta el navegador**: se pega a mano en el dashboard de Supabase. No hay Deno instalado acá para tipar `*.ts`. |
 
 - Cada `app.js` es un único IIFE `'use strict'`, funciones planas, sin módulos. `render()` re-renderiza todo; `actualizarCalculos()` es la liviana (no pierde foco de inputs).
 - `datos-iniciales.js` **debe quedar siempre vacío** (`{meses:{}, deudas:[]}`): la app está en una URL pública (GitHub Pages) y antes tenía datos reales.
-- `movil/sw.js`: cachea solo el cascarón estático; **subir `CACHE_VERSION` (hoy `v62`) y los `?v=` de `app.js` (`42`) / `styles.css` (`35`) / `asistente.js` (`7`) en `ASSETS` e `index.html` cada vez que se cambie algo**. También maneja Web Push (`push`, `notificationclick`).
+- `movil/sw.js`: cachea solo el cascarón estático; **subir `CACHE_VERSION` (hoy `v66`) y los `?v=` de `app.js` (`46`) / `styles.css` (`38`) / `asistente.js` (`7`) en `ASSETS` e `index.html` cada vez que se cambie algo**. También maneja Web Push (`push`, `notificationclick`).
 - Categorías fijas (`CATEGORIAS` en `app.js`): vivienda, trabajo, alimentacion, transporte, salud, educacion, mascota, entretenimiento, ropa, seguros, ahorro. Están **duplicadas** en `nube/telegram-bot/index.ts` y `nube/chat-ia/index.ts` — si se agrega una, tocar los tres.
 
 ### Modelo de datos (`estado`)
@@ -42,6 +42,7 @@ Un único objeto, en `localStorage['misFinanzas_v1']`:
 | `unirse-por-link` | Canjea token de `invitaciones_link` (service_role). | JWT usuario |
 | `enviar-notificacion` | Web Push a miembros del proyecto (excluye al emisor). | JWT + chequea membresía |
 | `resumen-semanal` | Push semanal a todos los proyectos. | Header `x-cron-secret` == `CRON_SECRET` |
+| `gasto-rapido` | Registro rápido (atajo iPhone, detector Android, propuestas). Token propio `mfa_…` (hash en `tokens_atajo`), **verify_jwt apagado**. Ver `docs/REGISTRO-RAPIDO.md`. Secretos: `ANTHROPIC_API_KEY`, `PARSER_MODEL` (opcional). | Bearer token propio |
 | `tts` | Texto a voz con ElevenLabs (streaming; recibe `texto` y `voz` 1 o 2; máx. 500 caracteres). **Escrita, no desplegada.** Secretos: `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_1`, `ELEVENLABS_VOICE_2`, `ELEVENLABS_MODEL`. | JWT usuario |
 
 Si cambia la forma de `estado.meses[k]` hay que actualizar a mano la lógica espejo del bot (no hay tipos compartidos).

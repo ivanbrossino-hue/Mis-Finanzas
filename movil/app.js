@@ -42,7 +42,8 @@
     volumeOff: '<path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/>',
     camera: '<path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
     hourglass: '<path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9"/>',
-    card: '<rect x="3" y="6" width="18" height="12" rx="2.5"/><path d="M3 10h18"/>'
+    card: '<rect x="3" y="6" width="18" height="12" rx="2.5"/><path d="M3 10h18"/>',
+    phone: '<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/>'
   };
   function ico(nombre, tam, grosor) {
     tam = tam || 20;
@@ -143,6 +144,7 @@
   var miProyectoId = null;
   var miRol = null;                 // 'dueno' | 'editor' | 'lector'
   var cuentaRev = -1;
+  var cuentaBase = null; // copia del último estado sincronizado con el proyecto (base de la fusión de tres vías, ver sync-merge.js)
   var cuentaPollTimer = null;
   var guardandoCuenta = false;
   var guardarCuentaTimer = null;
@@ -257,7 +259,7 @@
 
   // Registra una compra: la suma a una fila de la categoría (la que se elija, o la línea acumuladora
   // por defecto) y la anota en el historial. fila (opcional) = { id } o { nombre }.
-  function registrarCompra(categoria, monto, nota, items, fecha, fila) {
+  function registrarCompra(categoria, monto, nota, items, fecha, fila, extra) {
     var m = mesData();
     if (!m.gastos) m.gastos = [];
     if (!m.movimientos) m.movimientos = [];
@@ -274,7 +276,7 @@
       else { acc = { id: uid(), categoria: categoria, nombre: accName, monto: monto, bot: true }; m.gastos.push(acc); }
     }
     revisarGastoInusual(categoria, monto);
-    m.movimientos.push({ id: uid(), fecha: fecha || isoHoyApp(), categoria: categoria, filaId: acc.id, fila: acc.nombre, monto: monto, nota: nota || null, items: items || null });
+    m.movimientos.push(Object.assign({ id: uid(), fecha: fecha || isoHoyApp(), categoria: categoria, filaId: acc.id, fila: acc.nombre, monto: monto, nota: nota || null, items: items || null }, extra || {}));
     revisarPresupuesto(categoria);
     ultimaAccionDescripcion = 'agregó un gasto de ' + fmt(monto) + ' en ' + getCatNombre(categoria);
     return acc;
@@ -427,6 +429,13 @@
     renderAjustes();
     if (window.MFAsis) window.MFAsis.alCambiarVoz(vozAsistente);
   }
+  // Número de versión de lo que realmente está corriendo: sale del ?v= con el que se cargó este mismo archivo
+  // (así no puede quedar desfasado del cascarón). Sirve para confirmar qué celular ya actualizó.
+  function versionApp() {
+    var s = document.querySelector('script[src*="app.js"]');
+    var m = s && /[?&]v=(\d+)/.exec(s.getAttribute('src') || '');
+    return m ? m[1] : '?';
+  }
   function renderAjustes() {
     var r1 = document.getElementById('ajVoz1R'), r2 = document.getElementById('ajVoz2R');
     var o1 = document.getElementById('ajVoz1'), o2 = document.getElementById('ajVoz2');
@@ -436,6 +445,8 @@
       x[0].classList.toggle('sel', on); x[1].classList.toggle('on', on);
       x[1].innerHTML = on ? ico('check', 14, 3.4) : '';
     });
+    var ver = document.getElementById('appVersion');
+    if (ver) ver.textContent = 'Versión ' + versionApp() + (window.MFSync ? ' · sincronización segura activa' : ' · sin sincronización segura (recargá la app)');
     var tg = document.getElementById('telegramSub');
     if (tg) tg.textContent = modoCuenta ? 'Cargá gastos escribiéndole al bot' : 'Conectá la nube para cargar gastos desde Telegram';
     chatVozActualizarUI();
@@ -1475,6 +1486,279 @@
     };
   }
 
+  // ---------- Registro rápido: atajos del celular y propuestas pendientes ----------
+  // Ver docs/REGISTRO-RAPIDO.md. El token se genera ACÁ, en el navegador: al servidor solo llega su hash SHA-256
+  // (tabla tokens_atajo). Se muestra una única vez. Las propuestas (movimientos_pendientes) las crea la función
+  // gasto-rapido; desde la app solo se ven, se registran o se ignoran (RLS: dueño/editor).
+  var ATAJO_URL_BASE = CUENTA_URL + '/functions/v1/gasto-rapido';
+  var pendientesCache = [];
+  var pendPollTimer = null;
+  var atajoEnCurso = false;
+
+  function puedeAtajos() { return !!(modoCuenta && miProyectoId && miUsuario && (miRol === 'dueno' || miRol === 'editor')); }
+
+  function generarTokenAtajo() {
+    var b = new Uint8Array(32);
+    crypto.getRandomValues(b);
+    var s = btoa(String.fromCharCode.apply(null, b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return 'mfa_' + s; // 4 + 43 caracteres
+  }
+  function sha256Hex(texto) {
+    return crypto.subtle.digest('SHA-256', new TextEncoder().encode(texto)).then(function (buf) {
+      return Array.prototype.map.call(new Uint8Array(buf), function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
+    });
+  }
+  function haceTiempo(iso) {
+    if (!iso) return 'nunca';
+    var s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+    if (s < 90) return 'recién';
+    if (s < 3600) return 'hace ' + Math.round(s / 60) + ' min';
+    if (s < 86400) return 'hace ' + Math.round(s / 3600) + ' h';
+    return 'hace ' + Math.round(s / 86400) + (Math.round(s / 86400) === 1 ? ' día' : ' días');
+  }
+
+  // --- Ajustes > Atajos del celular ---
+  function renderAtajos() {
+    var sect = document.getElementById('atajosSect');
+    if (!sect) return;
+    sect.style.display = puedeAtajos() ? '' : 'none';
+    if (!puedeAtajos()) return;
+    var cont = document.getElementById('atajosLista');
+    sbClient.from('tokens_atajo').select('id,dispositivo,alcance,creado_en,ultimo_uso,revocado')
+      .order('creado_en', { ascending: false }).then(function (res) {
+        if (res.error) { cont.innerHTML = '<p class="rs" style="padding:0 16px 14px">No se pudo cargar la lista de dispositivos.</p>'; return; }
+        var filas = res.data || [];
+        cont.innerHTML = filas.map(function (t) {
+          var tipo = t.alcance === 'detector' ? 'Android · detector de pagos' : 'iPhone · atajo';
+          var estadoTxt = t.revocado ? '<span class="dev-rev">Revocado</span>' : 'Último uso: ' + haceTiempo(t.ultimo_uso);
+          return '<hr class="sep"><div class="dev-row' + (t.revocado ? ' off' : '') + '"><div class="grow"><div class="t">' + escapeHtml(t.dispositivo) + '</div>' +
+            '<div class="s">' + tipo + ' · ' + estadoTxt + '</div></div>' +
+            (t.revocado ? '' : '<button type="button" class="chip" data-revocar="' + escapeAttr(t.id) + '" data-nombre="' + escapeAttr(t.dispositivo) + '">Revocar</button>') + '</div>';
+        }).join('');
+      });
+  }
+
+  function modalNuevoAtajo() {
+    if (!puedeAtajos()) { toast('Solo el dueño o un editor puede conectar celulares.'); return; }
+    var nombreBase = (miUsuario.user_metadata && (miUsuario.user_metadata.full_name || miUsuario.user_metadata.name) || '').split(' ')[0];
+    abrirModal('<h3>Conectar un celular</h3>' +
+      '<p class="sub">Vas a poder anotar gastos sin abrir la app. El código que se genera da acceso para <b>anotar</b> gastos en tu cuenta (no para leer ni borrar tus datos); lo podés revocar cuando quieras.</p>' +
+      '<div class="field"><label>Tipo de celular</label>' +
+      '<div class="dev-tipos"><button type="button" class="opt sel" id="atajoIos" data-alc="gasto"><b>iPhone</b><span class="rs">Atajo del Centro de control</span></button>' +
+      '<button type="button" class="opt" id="atajoAnd" data-alc="detector"><b>Android</b><span class="rs">Detecta pagos de Mercado Pago</span></button></div></div>' +
+      '<div class="field"><label for="atajoNombre">Nombre del dispositivo</label><input type="text" id="atajoNombre" maxlength="40" value="' + escapeAttr(nombreBase ? 'iPhone de ' + nombreBase : 'Mi iPhone') + '" autocomplete="off"></div>' +
+      '<div class="modal-actions"><button class="btn btn-ghost" id="mCancel">Cancelar</button><button class="btn btn-primary" id="atajoGenerar">Generar código</button></div>');
+    var alcance = 'gasto';
+    function elegir(a) {
+      alcance = a;
+      document.getElementById('atajoIos').classList.toggle('sel', a === 'gasto');
+      document.getElementById('atajoAnd').classList.toggle('sel', a === 'detector');
+      var inp = document.getElementById('atajoNombre');
+      if (/^(Mi |iPhone de |Android de )/.test(inp.value)) inp.value = (a === 'gasto' ? (nombreBase ? 'iPhone de ' + nombreBase : 'Mi iPhone') : (nombreBase ? 'Android de ' + nombreBase : 'Mi Android'));
+    }
+    document.getElementById('atajoIos').onclick = function () { elegir('gasto'); };
+    document.getElementById('atajoAnd').onclick = function () { elegir('detector'); };
+    document.getElementById('mCancel').onclick = cerrarModal;
+    document.getElementById('atajoGenerar').onclick = function () {
+      var nombre = document.getElementById('atajoNombre').value.trim().slice(0, 60);
+      if (!nombre) { toast('Poné un nombre para reconocerlo.'); return; }
+      if (atajoEnCurso) return;
+      atajoEnCurso = true;
+      var token = generarTokenAtajo();
+      sha256Hex(token).then(function (hash) {
+        return sbClient.from('tokens_atajo').insert({ user_id: miUsuario.id, proyecto_id: miProyectoId, token_hash: hash, dispositivo: nombre, alcance: alcance });
+      }).then(function (res) {
+        atajoEnCurso = false;
+        if (res.error) { toast('No se pudo crear el código (' + (res.error.message || 'error') + ')'); return; }
+        mostrarTokenAtajo(token, nombre);
+        renderAtajos();
+      }, function () { atajoEnCurso = false; toast('No se pudo crear el código.'); });
+    };
+  }
+  function mostrarTokenAtajo(token, nombre) {
+    abrirModal('<h3>Código de «' + escapeHtml(nombre) + '»</h3>' +
+      '<p class="sub"><b>Copialo ahora:</b> por seguridad no se vuelve a mostrar. Si lo perdés, revocá este celular y generá otro.</p>' +
+      '<div class="tok-box" id="tokTexto">' + escapeHtml(token) + '</div>' +
+      '<div class="modal-actions" style="justify-content:flex-start"><button class="btn btn-primary" id="tokCopiar">Copiar código</button></div>' +
+      '<div class="field" style="margin-top:14px"><label>Dirección del servicio</label><div class="tok-box" id="tokUrl">' + escapeHtml(ATAJO_URL_BASE) + '</div></div>' +
+      '<div class="modal-actions"><button class="btn" id="urlCopiar">Copiar dirección</button><button class="btn btn-ghost" id="tokListo">Ya lo copié</button></div>');
+    function copiar(texto, msg) {
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(texto).then(function () { toast(msg); }, function () { toast('No pude copiar: seleccionalo a mano.'); });
+      else toast('Tu navegador no deja copiar: seleccionalo a mano.');
+    }
+    document.getElementById('tokCopiar').onclick = function () { copiar(token, 'Código copiado'); };
+    document.getElementById('urlCopiar').onclick = function () { copiar(ATAJO_URL_BASE, 'Dirección copiada'); };
+    document.getElementById('tokListo').onclick = function () {
+      // El token deja de estar en pantalla
+      document.getElementById('tokTexto').textContent = '';
+      cerrarModal();
+    };
+  }
+  function revocarAtajo(id, nombre) {
+    confirmar('¿Revocar «' + escapeHtml(nombre) + '»? Ese celular deja de poder anotar gastos al instante.', function () {
+      sbClient.from('tokens_atajo').update({ revocado: true }).eq('id', id).then(function (res) {
+        if (res.error) toast('No se pudo revocar (' + (res.error.message || 'error') + ')');
+        else toast('Celular revocado');
+        renderAtajos();
+      });
+    }, 'Sí, revocar');
+  }
+
+  // --- Pendientes ---
+  function actualizarBadgePendientes(n) {
+    var b = document.getElementById('pendBadge'), btn = document.getElementById('pendBtn');
+    if (btn) btn.style.display = puedeAtajos() ? '' : 'none';
+    if (!b) return;
+    b.textContent = n > 9 ? '9+' : String(n);
+    b.style.display = n > 0 ? '' : 'none';
+  }
+  function cargarPendientes() {
+    if (!puedeAtajos()) { pendientesCache = []; actualizarBadgePendientes(0); return Promise.resolve([]); }
+    return sbClient.from('movimientos_pendientes').select('*').eq('estado', 'pendiente')
+      .order('creado_en', { ascending: false }).limit(50).then(function (res) {
+        if (res.error) return pendientesCache;
+        pendientesCache = res.data || [];
+        actualizarBadgePendientes(pendientesCache.length);
+        return pendientesCache;
+      });
+  }
+  function iniciarPollPendientes() {
+    if (pendPollTimer) clearInterval(pendPollTimer);
+    cargarPendientes();
+    pendPollTimer = setInterval(function () { if (!document.hidden) cargarPendientes(); }, 20000);
+  }
+  function filasDeCategoriaMes(cat, mk) {
+    var m = estado.meses[mk];
+    return ((m && m.gastos) || []).filter(function (g) { return g.categoria === cat; }).map(function (g) { return g.nombre; });
+  }
+  function opcionesFilaPend(cat, mk, elegida) {
+    var filas = filasDeCategoriaMes(cat, mk);
+    if (elegida && filas.indexOf(elegida) === -1) filas.push(elegida);
+    return '<option value="">' + escapeHtml(nombreAcumulador(cat)) + ' (general)</option>' +
+      filas.filter(function (f) { return f !== nombreAcumulador(cat); }).map(function (f) {
+        return '<option value="' + escapeAttr(f) + '"' + (f === elegida ? ' selected' : '') + '>' + escapeHtml(f) + '</option>';
+      }).join('');
+  }
+  function modalPendientes() {
+    if (!puedeAtajos()) return;
+    cargarPendientes().then(function (lista) {
+      var cuerpo;
+      if (!lista.length) {
+        cuerpo = '<p class="empty-hint">No hay nada pendiente 🎉<br>Acá aparecen los pagos que detectó tu celular para que los confirmes.</p>';
+      } else {
+        cuerpo = lista.map(function (p) {
+          var esIng = p.tipo === 'ingreso';
+          var mk = String(p.fecha).slice(0, 7);
+          var opcCat = CATEGORIAS.map(function (c) {
+            return '<option value="' + c.id + '"' + (c.id === p.categoria_sugerida ? ' selected' : '') + '>' + c.icon + '  ' + escapeHtml(getCatNombre(c.id)) + '</option>';
+          }).join('');
+          var origen = p.origen === 'android-notif' ? 'Android' : p.origen === 'ios-comprobante' ? 'iPhone · comprobante' : 'Atajo';
+          return '<div class="pend-item" data-pid="' + escapeAttr(p.id) + '" data-mes="' + escapeAttr(mk) + '">' +
+            '<div class="pend-top"><div class="grow"><div class="rt">' + escapeHtml(p.comercio || (esIng ? 'Ingreso' : 'Pago sin nombre')) + '</div>' +
+            '<div class="rs">' + fechaCortaApp(String(p.fecha)) + ' · ' + origen + (p.confianza != null && Number(p.confianza) >= 0.7 ? ' · comercio conocido' : '') + '</div></div>' +
+            '<div class="amt">' + (esIng ? '+ ' : '- ') + fmt(p.monto) + '</div></div>' +
+            (esIng ? '' : '<div class="pend-sel"><select class="pCat" aria-label="Categoría">' + (p.categoria_sugerida ? '' : '<option value="">Elegí una categoría…</option>') + opcCat + '</select>' +
+              '<select class="pFila" aria-label="Fila">' + opcionesFilaPend(p.categoria_sugerida || '', mk, p.fila_sugerida) + '</select></div>') +
+            '<div class="pend-acc"><button type="button" class="chip" data-pend="ignorar">Ignorar</button><button type="button" class="chip lc-ok" data-pend="registrar">Registrar</button></div></div>';
+        }).join('');
+      }
+      abrirModal('<h3>Pendientes de confirmar</h3><p class="sub">Revisá la categoría y registrá, o ignorá lo que no sea un gasto tuyo.</p><div class="pend-lista">' + cuerpo + '</div>' +
+        '<div class="modal-actions"><button class="btn btn-ghost" id="pendCerrar">Cerrar</button></div>');
+      document.getElementById('pendCerrar').onclick = cerrarModal;
+    });
+  }
+  function pendienteClick(e) {
+    var b = e.target.closest('[data-pend]');
+    if (!b) return;
+    var it = b.closest('.pend-item');
+    var p = pendientesCache.filter(function (x) { return x.id === it.getAttribute('data-pid'); })[0];
+    if (!p) return;
+    if (b.getAttribute('data-pend') === 'ignorar') resolverPendiente(p, it, null);
+    else {
+      var catSel = it.querySelector('.pCat');
+      var cat = catSel ? catSel.value : null;
+      if (p.tipo !== 'ingreso' && !CAT_MAP[cat]) { toast('Elegí una categoría.'); return; }
+      var filaSel = it.querySelector('.pFila');
+      resolverPendiente(p, it, { categoria: cat, fila: filaSel && filaSel.value ? filaSel.value : null });
+    }
+  }
+  function pendienteCambio(e) {
+    if (!e.target.classList.contains('pCat')) return;
+    var it = e.target.closest('.pend-item');
+    it.querySelector('.pFila').innerHTML = opcionesFilaPend(e.target.value, it.getAttribute('data-mes'), null);
+  }
+  function movimientoYaRegistrado(movId) {
+    return Object.keys(estado.meses).some(function (k) {
+      var m = estado.meses[k];
+      return (m.movimientos || []).some(function (x) { return x.id === movId; }) || (m.ingresos || []).some(function (x) { return x.id === movId; });
+    });
+  }
+  function marcarPendiente(p, cambios) {
+    cambios.resuelto_en = new Date().toISOString();
+    cambios.resuelto_por = miUsuario.id;
+    return sbClient.from('movimientos_pendientes').update(cambios).eq('id', p.id).eq('estado', 'pendiente').select('id');
+  }
+  // Registrar / ignorar. Registrar es idempotente: el id del movimiento sale del id de la propuesta (rp_<id>), y la
+  // propuesta recién se marca como registrada cuando el guardado en la nube tuvo éxito. Si algo falla, repetir no duplica.
+  function resolverPendiente(p, it, destino) {
+    if (it.getAttribute('data-ocupado')) return;
+    it.setAttribute('data-ocupado', '1');
+    function listo(msg) {
+      pendientesCache = pendientesCache.filter(function (x) { return x.id !== p.id; });
+      actualizarBadgePendientes(pendientesCache.length);
+      it.remove();
+      toast(msg);
+      if (!pendientesCache.length) { var l = document.querySelector('.pend-lista'); if (l) l.innerHTML = '<p class="empty-hint">No hay nada pendiente 🎉</p>'; }
+    }
+    function fallo(msg) { it.removeAttribute('data-ocupado'); toast(msg); }
+    if (!destino) {
+      marcarPendiente(p, { estado: 'ignorado' }).then(function (res) {
+        if (res.error) fallo('No se pudo ignorar (' + (res.error.message || 'error') + ')');
+        else listo('Ignorado');
+      });
+      return;
+    }
+    var movId = 'rp_' + p.id;
+    var mk = String(p.fecha).slice(0, 7);
+    if (!movimientoYaRegistrado(movId)) {
+      if (!estado.meses[mk]) {
+        if (mk === mesActualKey()) asegurarMesActual();
+        else { fallo('El mes ' + mesKeyLabel(mk) + ' no está creado en la app: creálo primero.'); return; }
+      }
+      var m = estado.meses[mk];
+      var extra = { id: movId, origen: p.origen === 'android-notif' ? 'detector-android' : 'atajo-ios', dispositivo: p.origen === 'android-notif' ? 'Android' : 'iPhone', creadoEn: new Date().toISOString() };
+      if (p.tipo === 'ingreso') {
+        if (!m.ingresos) m.ingresos = [];
+        m.ingresos.push({ id: movId, nombre: p.comercio || 'Ingreso', monto: Number(p.monto), origen: extra.origen, dispositivo: extra.dispositivo, creadoEn: extra.creadoEn });
+      } else {
+        var previo = mesActivo;
+        mesActivo = mk; // registrarCompra escribe en el mes que se está viendo
+        try { registrarCompra(destino.categoria, Number(p.monto), p.comercio || null, null, String(p.fecha), destino.fila ? { nombre: destino.fila } : null, extra); }
+        finally { mesActivo = previo; }
+      }
+      guardar();
+    }
+    guardarYEsperar().then(function (ok) {
+      if (!ok) { fallo('No se pudo guardar en la nube. Reintentá: no se duplica.'); return; }
+      render(false);
+      return marcarPendiente(p, { estado: 'registrado', categoria_final: destino.categoria || null, fila_final: destino.fila || null, movimiento_id: movId }).then(function (res) {
+        if (res.error) fallo('Se registró, pero no se pudo marcar como resuelta. Reintentá: no se duplica.');
+        else listo(p.tipo === 'ingreso' ? 'Ingreso registrado' : 'Gasto registrado');
+      });
+    });
+  }
+  // Guarda ya y devuelve una promesa con true si el proyecto quedó guardado (sin esperar el retraso de 800 ms)
+  function guardarYEsperar() {
+    clearTimeout(guardarCuentaTimer);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(estado)); } catch (e) {}
+    var intentos = 0;
+    function intentar() {
+      if (guardandoCuenta && intentos++ < 40) return new Promise(function (ok) { setTimeout(ok, 250); }).then(intentar);
+      return guardarEnProyecto().then(function (r) { return !!(r && r.ok); });
+    }
+    return intentar();
+  }
+
   // ---------- Persistencia ----------
   function guardar() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(estado)); }
@@ -1792,15 +2076,22 @@
       var r6 = await sbClient.from('proyectos').select('data,rev').eq('id', miProyectoId).single();
       if (r6.error) throw r6.error;
 
-      estado = r6.data.data;
-      if (!estado.deudas) estado.deudas = [];
-      if (!estado.catNombres) estado.catNombres = {};
-      if (!estado.presupuestos) estado.presupuestos = {};
+      // Si este dispositivo tenía cambios sin subir (quedó offline, se cerró a mitad de un guardado), se fusionan
+      // con lo del proyecto en vez de tirarlos: la base guardada dice cuál era el último estado sincronizado.
+      var baseGuardada = leerBaseGuardada();
+      var localPrevio = estado;
+      var tieneLocalSinSubir = !!(baseGuardada && window.MFSync && localPrevio && localPrevio.meses &&
+        JSON.stringify(localPrevio) !== JSON.stringify(baseGuardada));
+      estado = tieneLocalSinSubir ? window.MFSync.merge(baseGuardada, localPrevio, r6.data.data) : r6.data.data;
+      normalizarEstadoRemoto();
       cuentaRev = r6.data.rev;
+      setBaseCuenta(JSON.parse(JSON.stringify(r6.data.data)));
+      if (tieneLocalSinSubir) guardar();
       mesActivo = asegurarMesActual();
       render(true);
       actualizarChipUsuario(user);
       iniciarPollProyectoCuenta();
+      iniciarPollPendientes();
     } catch (e) {
       console.error('bootstrapProyecto', e);
       toast((e && e.message) || 'No se pudo cargar tu proyecto — recargá la página para reintentar.');
@@ -1832,16 +2123,73 @@
     }).catch(function () {}); // best-effort: si falla, no interrumpe el guardado real
   }
 
+  // ---- Sincronización con el proyecto compartido (ver movil/sync-merge.js) ----
+  // Se guarda con condición de rev; si otra persona (u otro dispositivo, el atajo, el bot) se adelantó, se fusiona
+  // con lo suyo en vez de pisarlo, y se reintenta.
+  function claveBase() { return 'misFinanzas_base_' + miProyectoId; }
+  function setBaseCuenta(b) {
+    cuentaBase = b;
+    try { localStorage.setItem(claveBase(), JSON.stringify(b)); } catch (e) { /* sin lugar: la base queda solo en memoria */ }
+  }
+  function leerBaseGuardada() {
+    try { var r = localStorage.getItem(claveBase()); return r ? JSON.parse(r) : null; } catch (e) { return null; }
+  }
+  function normalizarEstadoRemoto() {
+    if (!estado.deudas) estado.deudas = [];
+    if (!estado.catNombres) estado.catNombres = {};
+    if (!estado.presupuestos) estado.presupuestos = {};
+    if (!estado.chats) estado.chats = [];
+    if (!estado.meses) estado.meses = {};
+  }
+  function hayCambiosSinSubir() {
+    return !!cuentaBase && JSON.stringify(estado) !== JSON.stringify(cuentaBase);
+  }
+
   function guardarEnProyecto() {
-    if (!modoCuenta || !miProyectoId || guardandoCuenta || miRol === 'lector') return;
+    if (!modoCuenta || !miProyectoId || guardandoCuenta || miRol === 'lector') return Promise.resolve({ ok: false, omitido: true });
+    if (!window.MFSync) { console.error('Falta sync-merge.js: no se guarda en la nube para no pisar datos de otros.'); return Promise.resolve({ ok: false, error: 'sin sync-merge' }); }
     guardandoCuenta = true;
-    cuentaRev = (cuentaRev < 0 ? 0 : cuentaRev) + 1;
-    sbClient.from('proyectos').update({
-      data: estado, rev: cuentaRev, updated_by: 'app', updated_at: new Date().toISOString()
-    }).eq('id', miProyectoId).then(function (res) {
-      if (res.error) console.warn('guardarEnProyecto: no se pudo guardar', res.error);
-      else avisarActividad();
+    return window.MFSync.sincronizar({
+      getLocal: function () { return estado; },
+      setLocal: function (e) { estado = e; normalizarEstadoRemoto(); try { localStorage.setItem(STORAGE_KEY, JSON.stringify(estado)); } catch (err) {} },
+      getBase: function () { return cuentaBase; },
+      setBase: setBaseCuenta,
+      getRev: function () { return cuentaRev; },
+      setRev: function (n) { cuentaRev = n; },
+      escribir: function (data, revEsperado) {
+        // UPDATE ... WHERE rev = el que leí: si alguien escribió antes, no actualiza nada (conflicto) y no se pisa su cambio
+        return sbClient.from('proyectos').update({
+          data: data, rev: revEsperado + 1, updated_by: 'app', updated_at: new Date().toISOString()
+        }).eq('id', miProyectoId).eq('rev', revEsperado).select('rev').then(function (res) {
+          if (res.error) return { error: res.error.message || 'error' };
+          if (res.data && res.data.length) return { ok: true, rev: res.data[0].rev };
+          return { conflicto: true };
+        });
+      },
+      leerRemoto: function () {
+        return sbClient.from('proyectos').select('data,rev').eq('id', miProyectoId).single().then(function (res) {
+          if (res.error || !res.data) throw new Error(res.error ? res.error.message : 'sin datos');
+          return res.data;
+        });
+      }
+    }).then(function (r) {
       guardandoCuenta = false;
+      if (r.mergeado) {
+        // Se bajó y fusionó lo de otra persona: se redibuja
+        if (!estado.meses[mesActivo]) mesActivo = mesesOrdenados().slice(-1)[0];
+        render(true);
+      }
+      if (r.ok) {
+        avisarActividad();
+        if (hayCambiosSinSubir()) guardar(); // se tocó algo mientras se guardaba
+      } else if (r.conflicto) {
+        toast('Hay cambios de otro dispositivo en curso. Reintento en unos segundos…');
+        clearTimeout(guardarCuentaTimer);
+        guardarCuentaTimer = setTimeout(guardarEnProyecto, 4000);
+      } else {
+        console.warn('guardarEnProyecto: no se pudo guardar', r.error);
+      }
+      return r;
     });
   }
 
@@ -1850,16 +2198,24 @@
     cuentaPollTimer = setInterval(function () {
       if (!modoCuenta || !miProyectoId || guardandoCuenta) return;
       sbClient.from('proyectos').select('rev').eq('id', miProyectoId).single().then(function (res) {
-        if (res.error || !res.data || res.data.rev <= cuentaRev) return;
+        // `!==` y no `>`: si el rev retrocede (base restaurada) también hay que ponerse al día
+        if (res.error || !res.data || res.data.rev === cuentaRev) return;
         var ae = document.activeElement;
         if (ae && /INPUT|SELECT|TEXTAREA/.test(ae.tagName)) return;
         sbClient.from('proyectos').select('data,rev').eq('id', miProyectoId).single().then(function (res2) {
-          if (res2.error || !res2.data) return;
-          estado = res2.data.data; cuentaRev = res2.data.rev;
+          if (res2.error || !res2.data || guardandoCuenta) return;
+          var remoto = res2.data.data;
+          var sucio = hayCambiosSinSubir();
+          // Con cambios locales todavía sin subir se fusiona (no se tiran); si no, se toma lo remoto tal cual
+          estado = (sucio && window.MFSync) ? window.MFSync.merge(cuentaBase, estado, remoto) : remoto;
+          normalizarEstadoRemoto();
+          cuentaRev = res2.data.rev;
+          setBaseCuenta(JSON.parse(JSON.stringify(remoto)));
           try { localStorage.setItem(STORAGE_KEY, JSON.stringify(estado)); } catch (e) {}
           if (!estado.meses[mesActivo]) mesActivo = mesesOrdenados().slice(-1)[0];
           render(true);
           toast('Actualizado ☁️');
+          if (hayCambiosSinSubir()) guardar();
         });
       });
     }, 5000);
@@ -2239,7 +2595,7 @@
     });
     if (nombre === 'historial') renderHistorial();
     else if (nombre === 'analiticas') renderAnaliticas();
-    else if (nombre === 'ajustes') renderAjustes();
+    else if (nombre === 'ajustes') { renderAjustes(); renderAtajos(); }
   }
 
   // Solo recalcula números y gráficos (sin re-dibujar listas: no pierde el foco al tipear)
@@ -2984,7 +3340,8 @@
       var fechaTxt = conFecha ? (fechaCortaApp(mv.fecha) + ' · ') : '';
       return '<div class="hist-row" data-mv="' + mv.id + '" data-mes="' + r.mesKey + '" title="Tocá para editar" role="button" tabindex="0">' +
         tileCat(mv.categoria) +
-        '<div class="h-desc"><div class="rt">' + escapeHtml(desc) + '</div><div class="rs">' + fechaTxt + escapeHtml(getCatNombre(mv.categoria)) + '</div>' + detItems + '</div>' +
+        '<div class="h-desc"><div class="rt">' + escapeHtml(desc) + '</div><div class="rs">' + fechaTxt + escapeHtml(getCatNombre(mv.categoria)) +
+        (mv.origen ? ' <span class="via-tag" title="Registrado desde el celular">' + ico('phone', 12, 2.4) + escapeHtml(mv.dispositivo || (mv.origen === 'detector-android' ? 'Android' : 'iPhone')) + '</span>' : '') + '</div>' + detItems + '</div>' +
         '<div class="amt">- ' + fmt(mv.monto) + '</div>' +
         '<button class="del" data-delmov="' + mv.id + '" data-delmes="' + r.mesKey + '" title="Eliminar del historial" aria-label="Eliminar movimiento">' + ico('trash', 17) + '</button></div>';
     }
@@ -4266,6 +4623,14 @@
     });
     document.getElementById('qrScanClose').onclick = cerrarEscanerQR;
     document.getElementById('bcClose').onclick = cerrarEscanerBarras;
+    document.getElementById('atajoNuevoBtn').onclick = modalNuevoAtajo;
+    document.getElementById('atajosLista').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-revocar]');
+      if (b) revocarAtajo(b.getAttribute('data-revocar'), b.getAttribute('data-nombre'));
+    });
+    document.getElementById('pendBtn').onclick = modalPendientes;
+    document.getElementById('modal').addEventListener('click', pendienteClick);
+    document.getElementById('modal').addEventListener('change', pendienteCambio);
     document.getElementById('chatCamBtn').onclick = abrirEscanerBarras;
     var lcBox = document.getElementById('listaCompra');
     lcBox.addEventListener('click', listaCompraClick);

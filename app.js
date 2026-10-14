@@ -387,6 +387,24 @@
     return huellaEstado(estado) !== huellaEstado(construirDesdeSemilla());
   }
 
+  // Esta versión (la de la raíz) ya NO sincroniza con la cuenta de Google: guardaba el estado completo "a ciegas" y podía
+  // pisar lo que otra persona o el atajo del celular habían cargado. Con sesión de Google se lleva a /movil/, que tiene la
+  // sincronización segura (y también el diseño para PC). El modo local (file://, localStorage) sigue funcionando igual.
+  function irAVersionMovil() {
+    if (location.protocol !== 'http:' && location.protocol !== 'https:') return false;
+    try {
+      var destino = new URL('movil/', location.href);
+      destino.search = location.search; // conserva ?invite=… si venía de un link de invitación
+      destino.hash = location.hash;
+      var cartel = document.createElement('div');
+      cartel.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;background:#0b1f17;color:#fff;font:600 17px/1.5 system-ui,sans-serif';
+      cartel.textContent = 'Esta versión ya no se sincroniza con tu cuenta. Te llevo a la versión nueva…';
+      document.body.appendChild(cartel);
+      setTimeout(function () { location.replace(destino.href); }, 800);
+      return true;
+    } catch (e) { return false; }
+  }
+
   // Decide a qué proyecto pertenece este usuario (el propio, uno al que lo
   // invitaron, o le crea uno nuevo si es la primera vez que entra) y carga
   // sus datos reales, reemplazando lo que hubiera local/de semilla.
@@ -490,6 +508,8 @@
   }
 
   function guardarEnProyecto() {
+    // Esta versión no escribe en proyectos (ver irAVersionMovil): guardar el estado entero sin condición podía pisar datos de otros.
+    if (modoCuenta) { console.warn('Esta versión no guarda en la cuenta: usá /movil/.'); return; }
     if (!modoCuenta || !miProyectoId || guardandoCuenta || miRol === 'lector') return;
     guardandoCuenta = true;
     cuentaRev = (cuentaRev < 0 ? 0 : cuentaRev) + 1;
@@ -695,6 +715,7 @@
 
     sbClient.auth.onAuthStateChange(function (event, session) {
       if (event === 'SIGNED_IN' && session && !modoCuenta) {
+        if (irAVersionMovil()) return; // no entra en modo cuenta: esta versión no guarda en la nube
         modoCuenta = true;
         if (nubePollTimer) clearInterval(nubePollTimer); // la cuenta de Google manda, no la nube manual vieja
         try { localStorage.removeItem('misFinanzas_invitado'); } catch (e) {}
@@ -715,6 +736,7 @@
       // dos veces en simultáneo justo después del login y las dos peticiones
       // de creación de proyecto se pisan entre sí.
       if (session && !modoCuenta) {
+        if (irAVersionMovil()) return; // no entra en modo cuenta: esta versión no guarda en la nube
         modoCuenta = true;
         if (nubePollTimer) clearInterval(nubePollTimer); // la cuenta de Google manda, no la nube manual vieja
         mostrarLoginGate(false);
