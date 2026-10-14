@@ -343,11 +343,11 @@
   }
 
   // Pide (o recupera de la caché) el audio de UNA frase; rechaza con {codigo} si falla
-  function pedirAudio(frase, vozId, senal) {
+  function pedirAudio(frase, vozId, senal, anterior, siguiente) {
     var clave = vozId + '|' + frase;
     if (cacheAudio[clave]) return Promise.resolve(cacheAudio[clave]);
     if (leerUso().n + frase.length > LIMITE_CREDITOS) return Promise.reject({ codigo: 'cuota' });
-    return MF.ttsFetch({ texto: frase, voz: vozId }, senal).then(function (res) {
+    return MF.ttsFetch({ texto: frase, voz: vozId, anterior: anterior || undefined, siguiente: siguiente || undefined }, senal).then(function (res) {
       if (!res.ok) {
         return res.json().catch(function () { return {}; }).then(function (j) {
           throw { codigo: (res.status === 429 || (j && j.code === 'quota')) ? 'cuota' : (res.status === 404 ? 'nodisponible' : 'error'), estado: res.status };
@@ -376,63 +376,79 @@
     });
   }
 
-  function reproducirFrasesNavegador(frases, vozId, alEmpezarCada, alTerminar, mio) {
-    var i = 0;
-    function siguiente() {
-      if (mio !== ticket) return;
-      if (i >= frases.length) { if (alTerminar) alTerminar(); return; }
-      decirConNavegador(frases[i++], vozId, function () { if (mio === ticket) alEmpezarCada(); }).then(siguiente);
-    }
-    siguiente();
-  }
-
-  // ElevenLabs: se pide la frase siguiente mientras suena la anterior, para que hable fluido
-  function reproducirFrasesEleven(frases, vozId, alEmpezarCada, alTerminar, mio) {
-    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  // Cola de frases que puede SEGUIR CRECIENDO mientras suena (la respuesta de la IA llega de a frases):
+  // se empieza a hablar con la primera frase y se va pidiendo el audio de las siguientes por adelantado.
+  function crearCola(vozId, alEmpezarCada) {
+    cancelarAudio();
+    var mio = ++ticket;
+    var frases = [], idx = 0, cerrada = false, tocando = false, alTerminarCb = null;
+    var eleven = elevenDisponible();
+    var ctrl = (eleven && typeof AbortController !== 'undefined') ? new AbortController() : null;
     abortActual = ctrl;
     var pedidos = [];
     function pedir(i) {
-      if (i < frases.length && !pedidos[i]) {
-        pedidos[i] = pedirAudio(frases[i], vozId, ctrl ? ctrl.signal : undefined);
+      if (!eleven || i >= frases.length) return pedidos[i];
+      if (!pedidos[i]) {
+        // se le pasa la frase de antes y la de después: así la entonación sigue de una a otra
+        pedidos[i] = pedirAudio(frases[i], vozId, ctrl ? ctrl.signal : undefined, frases[i - 1] || '', frases[i + 1] || '');
         pedidos[i].catch(function () {}); // el error se maneja cuando le toca reproducirse
       }
       return pedidos[i];
     }
-    var i = 0;
-    function siguiente() {
-      if (mio !== ticket) return;
-      if (i >= frases.length) { if (alTerminar) alTerminar(); return; }
-      var idx = i++;
-      pedir(idx); pedir(idx + 1);
-      pedidos[idx].then(function (blob) {
-        if (mio !== ticket) return null;
-        return tocarBlob(blob, function () { if (mio === ticket) alEmpezarCada(); }).then(function () { return 'ok'; });
-      }).then(function (r) { if (r === 'ok') siguiente(); }, function (err) {
-        if (mio !== ticket) return;
-        if (err && err.name === 'AbortError') return;
-        // Falló ElevenLabs: lo que falta se lee con la voz del navegador y se avisa (una vez)
-        var cuota = err && err.codigo === 'cuota';
-        elevenCaido = true; // no se vuelve a intentar hasta recargar (si era cuota, seguiría fallando)
-        // Si la función `tts` todavía no está desplegada (404) se cae a la voz del navegador sin molestar con avisos
-        if (!(err && err.codigo === 'nodisponible')) {
-          avisarUnaVez(cuota ? 'cuota' : 'caida', cuota
-            ? 'Se acabó la cuota de voz premium: uso la voz del navegador.'
-            : 'La voz premium no está disponible ahora: uso la del navegador.');
-        }
-        reproducirFrasesNavegador(frases.slice(idx), vozId, alEmpezarCada, alTerminar, mio);
-      });
+    function terminar() {
+      tocando = false;
+      if (alTerminarCb) { var cb = alTerminarCb; alTerminarCb = null; cb(); }
     }
-    siguiente();
+    function seguir() {
+      if (mio !== ticket) return;
+      if (idx >= frases.length) { if (cerrada) terminar(); else tocando = false; return; }
+      tocando = true;
+      var i = idx++;
+      if (eleven) {
+        pedir(i); pedir(i + 1);
+        pedidos[i].then(function (blob) {
+          if (mio !== ticket) return null;
+          return tocarBlob(blob, function () { if (mio === ticket) alEmpezarCada(); }).then(function () { return 'ok'; });
+        }).then(function (r) { if (r === 'ok') seguir(); }, function (err) {
+          if (mio !== ticket) return;
+          if (err && err.name === 'AbortError') return;
+          // Falló ElevenLabs: lo que falta se lee con la voz del navegador y se avisa (una vez)
+          var cuota = err && err.codigo === 'cuota';
+          eleven = false;
+          elevenCaido = true; // no se vuelve a intentar hasta recargar (si era cuota, seguiría fallando)
+          // Si la función `tts` todavía no está desplegada (404) se cae a la voz del navegador sin molestar con avisos
+          if (!(err && err.codigo === 'nodisponible')) {
+            avisarUnaVez(cuota ? 'cuota' : 'caida', cuota
+              ? 'Se acabó la cuota de voz premium: uso la voz del navegador.'
+              : 'La voz premium no está disponible ahora: uso la del navegador.');
+          }
+          idx = i; // esta frase se vuelve a decir con la voz del navegador
+          seguir();
+        });
+      } else {
+        decirConNavegador(frases[i], vozId, function () { if (mio === ticket) alEmpezarCada(); }).then(seguir);
+      }
+    }
+    return {
+      agregar: function (texto) {
+        var nuevas = partirFrases(textoParaVoz(texto));
+        if (!nuevas.length) return;
+        for (var k = 0; k < nuevas.length; k++) frases.push(nuevas[k]);
+        if (!tocando) seguir(); else pedir(idx);
+      },
+      cerrar: function (cb) {
+        cerrada = true;
+        alTerminarCb = cb || null;
+        if (!tocando) seguir();
+      }
+    };
   }
 
-  // Reproduce el texto frase por frase; si algo corta (ticket distinto) se abandona
+  // Reproduce un texto entero (frase por frase); si algo corta (ticket distinto) se abandona
   function reproducir(texto, vozId, alEmpezarCada, alTerminar) {
-    cancelarAudio();
-    var mio = ++ticket;
-    var frases = partirFrases(textoParaVoz(texto));
-    if (!frases.length) { if (alTerminar) alTerminar(); return; }
-    if (elevenDisponible()) reproducirFrasesEleven(frases, vozId, alEmpezarCada, alTerminar, mio);
-    else reproducirFrasesNavegador(frases, vozId, alEmpezarCada, alTerminar, mio);
+    var cola = crearCola(vozId, alEmpezarCada);
+    cola.agregar(texto);
+    cola.cerrar(alTerminar);
   }
 
   // Corta todo: audio que suena, pedidos pendientes y frases en cola
@@ -446,15 +462,28 @@
     if (estabaHablando) refrescarOrbe();
   }
 
-  // Lo que app.js usa cada vez que el asistente responde (o que se toca "Escuchar")
+  // Lo que app.js usa cada vez que el asistente responde (o que se toca "Escuchar"):
+  //  hablar(texto, cb)  -> dice un texto completo
+  //  iniciar()          -> abre una sesión para ir sumando frases a medida que llegan (conversación fluida)
   MF.registrarVoz({
     hablar: function (texto, alTerminar) {
-      esperandoIA = false;
-      reproducir(texto, MF.getVoz(), function () { hablando = true; refrescarOrbe(); }, function () {
-        hablando = false; refrescarOrbe();
+      reproducir(texto, MF.getVoz(), function () { esperandoIA = false; hablando = true; refrescarOrbe(); }, function () {
+        esperandoIA = false; hablando = false; refrescarOrbe();
         if (alTerminar) alTerminar();
       });
       refrescarOrbe();
+    },
+    iniciar: function () {
+      var cola = crearCola(MF.getVoz(), function () { esperandoIA = false; hablando = true; refrescarOrbe(); });
+      return {
+        agregar: cola.agregar,
+        terminar: function (alTerminar) {
+          cola.cerrar(function () {
+            esperandoIA = false; hablando = false; refrescarOrbe();
+            if (alTerminar) alTerminar();
+          });
+        }
+      };
     },
     cancelar: cancelarAudio
   });

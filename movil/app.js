@@ -592,6 +592,16 @@
     var recientes = todosLosMovimientos().slice(0, 25).map(function (r) {
       return { id: r.mv.id, mes: r.mesKey, fecha: r.mv.fecha, categoria: r.mv.categoria, fila: r.mv.fila || null, monto: Number(r.mv.monto) || 0, nota: r.mv.nota || null };
     });
+    // Rankings ya armados (categorías de mayor a menor, filas y gasto individual más grandes): así
+    // preguntas como "¿en qué gasté más?" se responden bien sin que la IA tenga que ordenar ni sumar
+    var ranking = CATEGORIAS.map(function (c) { return { categoria: c.id, nombre: getCatNombre(c.id), gastado: porCat[c.id] || 0 }; })
+      .filter(function (x) { return x.gastado > 0; })
+      .sort(function (a, b) { return b.gastado - a.gastado; })
+      .map(function (x) { x.porcentaje = gas > 0 ? Math.round((x.gastado / gas) * 100) : 0; return x; });
+    var filasGrandes = (m.gastos || []).filter(function (g) { return Number(g.monto) > 0; })
+      .sort(function (a, b) { return (Number(b.monto) || 0) - (Number(a.monto) || 0); }).slice(0, 5)
+      .map(function (g) { return { categoria: g.categoria, fila: g.nombre, monto: Number(g.monto) || 0 }; });
+    var movMes = (m.movimientos || []).slice().sort(function (a, b) { return (Number(b.monto) || 0) - (Number(a.monto) || 0); })[0];
     return {
       hoy: isoHoyApp(),
       mesActivo: mesKeyLabel(mesActivo),
@@ -603,6 +613,9 @@
       ingresos: (m.ingresos || []).map(function (i) { return { nombre: i.nombre, monto: Number(i.monto) || 0 }; }),
       filasPorCategoria: filasPorCategoria,
       gastosPorCategoria: porCat,
+      rankingCategorias: ranking,
+      filasMasGrandes: filasGrandes,
+      movimientoMasGrande: movMes ? { fecha: movMes.fecha, categoria: movMes.categoria, fila: movMes.fila || null, monto: Number(movMes.monto) || 0, nota: movMes.nota || null } : null,
       totalIngresos: totalIngresos(mesActivo),
       totalGastos: gas,
       cuotasPagadasEsteMes: cuotasPagadas(mesActivo),
@@ -1030,14 +1043,30 @@
     // Al armar el historial para la IA, mandamos SOLO lo que ella misma dijo
     // (sin el "✅ ..." que agrega el cliente) — si no, la IA ve sus propias
     // confirmaciones viejas en el historial y tiende a repetirlas/recontarlas.
-    var historialParaIA = chatHistorial.slice(0, -1).map(function (h) {
+    // Los avisos de falla ("No entendí…", "No pude responder…") no se le mandan: solo la confundirían
+    var historialParaIA = chatHistorial.slice(0, -1).filter(function (h) {
+      return !(h.rol === 'assistant' && /^(No entendí bien|No pude responder ahora|Perdón, se me trabó)/.test(h.texto || ''));
+    }).map(function (h) {
       return { rol: h.rol, texto: h.textoIA || h.texto };
     });
-    sbClient.functions.invoke('chat-ia', {
-      body: { mensaje: texto, historial: historialParaIA, contexto: contextoFinancieroParaChat(), modo: (opciones && opciones.modo === 'voz') ? 'voz' : 'texto' }
-    }).then(function (res) {
+    // La respuesta llega de a pedazos (stream): el texto se ve en vivo y la voz empieza con la primera frase
+    var textoVivo = '';
+    var vozSesion = null;
+    function alParcial(trozo) {
+      textoVivo += trozo;
+      var el = document.querySelector('#chatMensajes .chat-typing, #chatMensajes .chat-vivo');
+      if (el) { el.textContent = textoVivo; el.classList.remove('chat-typing'); el.classList.add('chat-vivo'); chatScrollAbajo(); }
+    }
+    function alFrase(frase) {
+      if (!chatVozActivada || !chatVozExterna || !chatVozExterna.iniciar) return;
+      if (!vozSesion) vozSesion = chatVozExterna.iniciar();
+      vozSesion.agregar(frase);
+    }
+    llamarChatIA({ mensaje: texto, historial: historialParaIA, contexto: contextoFinancieroParaChat(), modo: (opciones && opciones.modo === 'voz') ? 'voz' : 'texto' },
+      alParcial, alFrase).then(function (res) {
       chatEnviando = false;
       if (res.error || !res.data || res.data.error) {
+        if (vozSesion) vozSesion.terminar(null);
         chatHistorial.push({ rol: 'assistant', texto: 'No pude responder ahora, intentá de nuevo en un rato.' });
         chatPersistirLog();
         renderChatMensajes(true);
@@ -1114,14 +1143,67 @@
       // `cards` y `snap` viven solo en memoria (chatPersistirLog no los guarda): no cambia el modelo de datos
       chatHistorial.push({ rol: 'assistant', texto: textoMostrado, textoIA: textoIA, cards: tarjetas.length ? tarjetas : undefined, snap: snap || undefined });
       chatPersistirLog();
-      renderChatMensajes(true);
-      chatHablar(textoIA, function () { if (alTerminar) alTerminar(textoIA); });
+      // Si el texto ya se fue viendo en vivo, no se vuelve a "tipear" desde cero
+      renderChatMensajes(!textoVivo);
+      if (vozSesion) {
+        // Ya se está hablando por frases: se suma lo que falte (por ejemplo si cambió la respuesta tras buscar en la web) y se cierra
+        var yaDicho = textoVivo.trim();
+        if (yaDicho && textoIA.trim().indexOf(yaDicho) !== 0) vozSesion.agregar(textoIA);
+        vozSesion.terminar(function () { if (alTerminar) alTerminar(textoIA); });
+      } else {
+        chatHablar(textoIA, function () { if (alTerminar) alTerminar(textoIA); });
+      }
     }).catch(function () {
       chatEnviando = false;
+      if (vozSesion) vozSesion.terminar(null);
       chatHistorial.push({ rol: 'assistant', texto: 'No pude responder ahora, intentá de nuevo en un rato.' });
       chatPersistirLog();
       renderChatMensajes(true);
       if (alTerminar) alTerminar(null);
+    });
+  }
+
+  // Pide la respuesta al asistente. Primero por STREAM (llegan frases a medida que la IA las arma: se puede
+  // mostrar y hablar sin esperar el final); si el stream no anda, cae al pedido normal.
+  // Devuelve una promesa con { data, error }, igual que supabase.functions.invoke.
+  function llamarChatIA(cuerpo, alParcial, alFrase) {
+    var recibioAlgo = false;
+    return sbClient.auth.getSession().then(function (r) {
+      var s = r.data && r.data.session;
+      if (!s) throw new Error('sin sesión');
+      return fetch(CUENTA_URL + '/functions/v1/chat-ia', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + s.access_token, 'apikey': CUENTA_ANON_KEY },
+        body: JSON.stringify(Object.assign({}, cuerpo, { stream: true }))
+      });
+    }).then(function (res) {
+      if (!res.ok || !res.body || !res.body.getReader) throw new Error('sin stream');
+      var lector = res.body.getReader(), dec = new TextDecoder(), buf = '', resultado = null, errorMsg = null;
+      function procesar(linea) {
+        var ev; try { ev = JSON.parse(linea); } catch (e) { return; }
+        if (ev.t === 'd') { recibioAlgo = true; if (alParcial) alParcial(ev.s || ''); }
+        else if (ev.t === 'frase') { recibioAlgo = true; if (alFrase) alFrase(ev.texto || ''); }
+        else if (ev.t === 'fin') resultado = ev.data;
+        else if (ev.t === 'error') errorMsg = ev.error || 'error';
+        else if (ev.respuesta !== undefined) resultado = ev; // el servidor contestó sin stream (versión vieja)
+      }
+      function leer() {
+        return lector.read().then(function (x) {
+          if (x.done) { if (buf.trim()) procesar(buf.trim()); return; }
+          buf += dec.decode(x.value, { stream: true });
+          var idx;
+          while ((idx = buf.indexOf('\n')) !== -1) { var linea = buf.slice(0, idx).trim(); buf = buf.slice(idx + 1); if (linea) procesar(linea); }
+          return leer();
+        });
+      }
+      return leer().then(function () {
+        if (resultado) return { data: resultado, error: null };
+        throw new Error(errorMsg || 'el stream se cortó');
+      });
+    }).catch(function (e) {
+      // Si ya se mostró o habló algo, NO se repite el pedido (saldría duplicado): se informa el error
+      if (recibioAlgo) return { data: null, error: e };
+      return sbClient.functions.invoke('chat-ia', { body: cuerpo });
     });
   }
 

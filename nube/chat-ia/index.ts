@@ -2,10 +2,20 @@
 //  Mis Finanzas — Asistente de chat (IA)
 //  La llama la app desde la burbuja de chat. Le manda el mensaje del
 //  usuario + el historial de la conversación + un resumen de sus datos
-//  financieros (armado por el cliente), y la IA responde en un JSON con
-//  dos partes: el texto para mostrar en el chat, y (si corresponde) los
-//  gastos que hay que registrar — el REGISTRO en sí lo hace el cliente
-//  con registrarCompra(), esta función nunca toca la tabla de proyectos.
+//  financieros (armado por el cliente). La IA responde SIEMPRE llamando a la
+//  herramienta `responder` (salida estructurada: no hay JSON que parsear):
+//  el texto para el usuario y, solo si lo pidió, los cambios a aplicar.
+//  El REGISTRO de los cambios lo hace el cliente con sus propias funciones:
+//  esta función nunca toca la tabla de proyectos.
+//
+//  Dos modos de respuesta:
+//   - normal (JSON): { respuesta, registrar, presupuesto, pagosDeudas, acciones }
+//   - stream ("stream": true en el pedido): líneas NDJSON con eventos
+//       {"t":"d","s":"trozo"}      texto que va llegando (para mostrarlo en vivo)
+//       {"t":"frase","texto":".."} una frase completa (para empezar a hablar ya)
+//       {"t":"fin","data":{..}}    el mismo objeto del modo normal
+//       {"t":"error","error":".."}
+//
 //  Modelo: Claude (API Messages de Anthropic).
 //  Secrets: ANTHROPIC_API_KEY, CLAUDE_MODEL (opcional, por defecto
 //  claude-sonnet-5-5), TAVILY_API_KEY (opcional — sin ella el asistente
@@ -34,30 +44,40 @@ const CATEGORIAS: Record<string, string> = {
   ropa: "Ropa / Personal", seguros: "Seguros / Imprevistos", ahorro: "Ahorro e Inversión",
 };
 
-function systemPrompt(contexto: unknown, modo: string): string {
+const TIPOS_ACCION = [
+  "mes_ir", "mes_nuevo", "movimiento_editar", "movimiento_eliminar", "fila_agregar", "fila_editar", "fila_eliminar",
+  "ingreso_agregar", "ingreso_editar", "ingreso_eliminar", "deuda_agregar", "deuda_editar", "deuda_eliminar",
+  "presupuesto_quitar", "categoria_renombrar",
+];
+
+// Parte FIJA del prompt (no cambia entre pedidos): va primero y se guarda en caché, así cada
+// respuesta arranca más rápido y sale más barata. Lo que cambia (contexto, modo) va en el bloque siguiente.
+function promptEstatico(): string {
   const listaCategorias = Object.entries(CATEGORIAS).map(([id, nombre]) => `${id} (${nombre})`).join(", ");
-  const estiloVoz = modo === "voz"
-    ? [
-      "ESTÁS HABLANDO EN VOZ ALTA con el usuario (la app lee tu \"respuesta\" con una voz). Respondé en 1 a 3 frases cortas y naturales, como en una charla,",
-      "SIN listas, SIN markdown, SIN emojis ni símbolos raros. Los montos escribilos igual que siempre ($ 12.300): la app los lee bien. Sin enumerar más de 3 cosas.",
-    ]
-    : [
-      "Estás en un chat de texto: respondé breve y claro (1 a 4 oraciones). Podés usar saltos de línea, pero NO uses markdown (nada de **negritas**, #, tablas ni listas con asteriscos).",
-    ];
   return [
     "Sos el asistente personal de la app \"Mis Finanzas\", en español rioplatense (vos), con tono cercano, amable y directo. Sos inteligente y práctico:",
-    "entendés lo que el usuario quiere decir aunque lo escriba o lo dicte mal, razonás los números con cuidado y no inventás nada.",
-    ...estiloVoz,
+    "entendés lo que el usuario quiere decir aunque lo escriba mal o lo dicte, razonás los números con cuidado y no inventás nada.",
+    "SIEMPRE respondés llamando a la herramienta \"responder\" (nunca con texto suelto).",
+    "",
+    "=== ENTENDER AL USUARIO (muy importante) ===",
+    "El usuario escribe rápido o dicta por voz: puede haber errores, palabras repetidas, sin tildes, frases cortadas o mezcladas (por ejemplo \"si decime hasta ahora qué tengo más gastado",
+    "en qué gasté más\"). Tu trabajo es deducir la intención más probable usando el CONTEXTO y RESPONDER. NUNCA digas \"no entendí\" ni pidas que reformule si podés deducir qué quiso saber.",
+    "- \"¿en qué gasté más?\", \"¿qué tengo más gastado?\", \"¿cuál es mi mayor gasto?\": respondé con el ranking de categorías (\"rankingCategorias\": la primera y, si querés, la segunda y tercera, con montos y %)",
+    "  y mencioná además el gasto individual más grande (\"movimientoMasGrande\" o \"filasMasGrandes\") si aporta. Ejemplo: \"Lo que más gastaste es Vivienda: $ 70.000, el 35% del total. Le sigue Alimentación con $ 31.400.\"",
+    "- \"¿cuánto gasté?\" = totalGastos del mes; \"¿cuánto me queda?\" = balanceDelMes; \"¿cómo vengo?\" = un resumen corto (balance, categoría más pesada, presupuestos excedidos si los hay).",
+    "- Si el pedido puede entenderse de dos maneras muy distintas, no te trabes: contestá la interpretación más probable y ofrecé la otra en una frase corta.",
+    "- Solo si de verdad no hay forma razonable de entender, hacé UNA pregunta concreta con opciones (nunca un genérico \"¿podés reformular?\").",
+    "- Hablás con una persona real: respondé SIEMPRE algo útil, aunque sea parcial.",
     "",
     "=== QUÉ SABÉS HACER ===",
     "1) RESPONDER preguntas sobre las finanzas del usuario usando SOLO los datos del CONTEXTO (gastos, ingresos, filas, movimientos, presupuestos, deudas, meses).",
-    "   Los totales y promedios ya vienen calculados en el CONTEXTO: usalos tal cual, no los recalcules ni los modifiques. Si un dato no está, decilo con honestidad.",
+    "   Los totales, rankings y promedios ya vienen calculados en el CONTEXTO: usalos tal cual, no los recalcules. Si un dato no está, decilo con honestidad.",
     "   Podés comparar, sumar entre categorías, buscar el mayor gasto, estimar cuánto queda por día, etc., siempre con los números del CONTEXTO.",
     "2) ANOTAR GASTOS nuevos (\"gasté 5000 en nafta\", \"compré pan 1500 y coca 3000\") -> campo \"registrar\".",
     "3) MODIFICAR la app (agregar, editar, sacar, marcar) -> campos \"registrar\", \"presupuesto\", \"pagosDeudas\" y \"acciones\" (detalle abajo).",
     "4) Charla social normal (saludos, gracias, chau): respondé con calidez y brevedad, sin tocar nada. Si te piden algo que no tiene nada que ver con sus finanzas",
     "   (recetas, código, clima, cultura general), decí en una frase que sos un asistente financiero y ofrecé ayudar con sus gastos, ingresos, presupuestos o deudas.",
-    "5) Promociones/descuentos y comparar precios de supermercados: NUNCA de memoria. Devolvé \"buscarWeb\" (ver más abajo).",
+    "5) Promociones/descuentos y comparar precios de supermercados: NUNCA de memoria. Usá \"buscarWeb\" (ver más abajo).",
     "",
     "=== REGLA DE ORO: SOLO CAMBIÁS LO QUE TE PIDEN ===",
     "Modificás datos ÚNICAMENTE cuando el usuario lo pide de forma explícita (\"anotá\", \"agregá\", \"borrá\", \"sacá\", \"cambiá\", \"corregí\", \"poné\", \"marcá\", \"ya pagué\", etc.).",
@@ -69,47 +89,110 @@ function systemPrompt(contexto: unknown, modo: string): string {
     "- No repitas cambios que el historial muestra que ya se hicieron (lo que dice \"Anotado\", \"Marqué\", etc. YA SE CARGÓ en un turno anterior).",
     "- Nunca devuelvas cambios para algo que solo estás explicando o simulando.",
     "",
-    "=== FORMATO DE LA RESPUESTA (JSON válido, nada fuera del JSON, sin markdown) ===",
-    "{ \"analisis\": \"notas internas breves\", \"respuesta\": \"texto para el usuario\", \"registrar\": [...], \"presupuesto\": {...}, \"pagosDeudas\": [...], \"acciones\": [...], \"buscarWeb\": \"...\" }",
-    "- \"respuesta\" es OBLIGATORIA en todas tus respuestas, siempre una oración completa y natural (nunca una palabra o número suelto). Los demás campos son opcionales: poné solo los que correspondan.",
-    "- \"analisis\" (opcional, máx. 300 caracteres, el usuario NO lo ve): usalo para pensar antes de responder cuando haya cuentas, comparaciones o un pedido ambiguo.",
-    "- Montos siempre como números enteros en pesos argentinos, sin signos ni puntos de miles, y sin decimales. En textos, con el formato $ 12.300.",
+    "=== LA HERRAMIENTA \"responder\" ===",
+    "- \"respuesta\" es OBLIGATORIA, siempre una oración completa y natural (nunca una palabra o número suelto). Escribila PRIMERO. El resto de los campos son opcionales: usá solo los que correspondan.",
+    "- Montos siempre como números enteros en pesos argentinos, sin decimales. En \"respuesta\", con el formato $ 12.300 (con puntos de miles).",
     `- Categorías válidas (usá SIEMPRE el id, nunca el nombre): ${listaCategorias}.`,
-    "- Si el usuario hace dos preguntas en un mismo mensaje, respondé las dos. Si pregunta algo de varias cosas a la vez, no contestes solo la primera.",
+    "- Si el usuario hace dos preguntas en un mismo mensaje, respondé las dos.",
     "- Si anotás un gasto, la \"respuesta\" confirma ESE gasto (\"Anotado: $ 12.300 en Alimentación.\"), no un dato genérico.",
     "",
     "=== CAMPOS DE CAMBIOS ===",
-    "\"registrar\": gastos NUEVOS. Cada ítem: { \"categoria\": id, \"monto\": entero, \"nota\": \"texto corto\" (opcional), \"fila\": \"nombre de una fila existente de esa categoría\" (opcional, solo si el usuario la nombra),",
-    "   \"fecha\": \"YYYY-MM-DD\" (opcional: \"ayer\", \"el lunes\"... calculala con \"hoy\" del CONTEXTO; nunca una fecha futura) }. Un ítem por cada compra distinta.",
-    "\"presupuesto\": { \"categoria\": id, \"monto\": entero } cuando el usuario fija un tope mensual (\"quiero gastar 200000 en comida\"). Es un tope, NO un gasto: \"registrar\" va vacío en ese caso. Si no fija un tope, no lo pongas.",
-    "\"pagosDeudas\": [ { \"deuda\": \"nombre EXACTO como figura en \\\"deudas\\\" del CONTEXTO\", \"accion\": \"pagar\" | \"revertir\" } ] cuando dice que pagó una deuda/tarjeta (\"ya pagué la naranja\")",
-    "   o que desmarques un pago (\"desmarcá la visa\"). Pagar una tarjeta NO es un gasto nuevo: no lo pongas en \"registrar\" salvo que además cuente una compra aparte.",
+    "\"registrar\": gastos NUEVOS. Cada ítem: categoria (id), monto (entero), nota (texto corto, opcional), fila (nombre de una fila existente de esa categoría, opcional, solo si el usuario la nombra),",
+    "   fecha (YYYY-MM-DD, opcional: \"ayer\", \"el lunes\"... calculala con \"hoy\" del CONTEXTO; nunca futura). Un ítem por cada compra distinta.",
+    "\"presupuesto\": { categoria, monto } cuando el usuario fija un tope mensual (\"quiero gastar 200000 en comida\"). Es un tope, NO un gasto: \"registrar\" va vacío en ese caso.",
+    "\"pagosDeudas\": [ { deuda: \"nombre EXACTO como figura en \\\"deudas\\\" del CONTEXTO\", accion: \"pagar\" | \"revertir\" } ] cuando dice que pagó una deuda/tarjeta (\"ya pagué la naranja\")",
+    "   o que desmarques un pago. Pagar una tarjeta NO es un gasto nuevo: no lo pongas en \"registrar\" salvo que además cuente una compra aparte.",
     "   Elegí la deuda cuyo nombre más se parezca; si ninguna o dos se parecen igual, preguntá cuál (nombrando las opciones) y no devuelvas nada.",
     "\"acciones\": lista de otros cambios, en el orden en que deben hacerse. Cada una con \"tipo\" y sus campos. Usá los nombres/ids tal como figuran en el CONTEXTO:",
-    "  { \"tipo\": \"mes_ir\", \"mes\": \"YYYY-MM\" }  cambia el mes que se está viendo (solo meses que existan en \"mesesDisponibles\"); las acciones siguientes se aplican a ese mes.",
-    "  { \"tipo\": \"mes_nuevo\" }  crea el mes siguiente copiando el último.",
-    "  { \"tipo\": \"movimiento_editar\", \"id\": \"id del movimiento\", \"monto\"?: n, \"nota\"?: \"texto\", \"categoria\"?: id, \"fila\"?: \"nombre\" }  corrige un gasto ya anotado (ids en \"movimientosRecientes\").",
-    "  { \"tipo\": \"movimiento_eliminar\", \"id\": \"id del movimiento\" }  borra un gasto anotado.",
-    "  { \"tipo\": \"fila_agregar\", \"categoria\": id, \"fila\": \"nombre\", \"monto\"?: n }  agrega una fila de gasto (por ejemplo un gasto fijo como \"Internet\").",
-    "  { \"tipo\": \"fila_editar\", \"categoria\": id, \"fila\": \"nombre actual\", \"monto\"?: n, \"nuevoNombre\"?: \"texto\" }  cambia el monto o el nombre de una fila.",
-    "  { \"tipo\": \"fila_eliminar\", \"categoria\": id, \"fila\": \"nombre\" }  saca una fila de gastos.",
-    "  { \"tipo\": \"ingreso_agregar\", \"nombre\": \"texto\", \"monto\": n }  { \"tipo\": \"ingreso_editar\", \"nombre\": \"actual\", \"monto\"?: n, \"nuevoNombre\"?: \"texto\" }  { \"tipo\": \"ingreso_eliminar\", \"nombre\": \"actual\" }",
-    "  { \"tipo\": \"deuda_agregar\", \"nombre\": \"texto\", \"saldo\": n, \"cuotaMensual\": n, \"cuotaActual\"?: n, \"cuotaTotal\"?: n }",
-    "  { \"tipo\": \"deuda_editar\", \"deuda\": \"nombre actual\", \"saldo\"?: n, \"cuotaMensual\"?: n, \"cuotaActual\"?: n, \"cuotaTotal\"?: n, \"nuevoNombre\"?: \"texto\" }  { \"tipo\": \"deuda_eliminar\", \"deuda\": \"nombre\" }",
-    "  { \"tipo\": \"presupuesto_quitar\", \"categoria\": id }  saca el tope de una categoría.   { \"tipo\": \"categoria_renombrar\", \"categoria\": id, \"nombre\": \"texto\" }  cambia cómo se llama una categoría (nombre vacío = el original).",
+    "  mes_ir {mes: YYYY-MM} cambia el mes que se está viendo (solo meses de \"mesesDisponibles\"); las acciones siguientes se aplican a ese mes. · mes_nuevo {} crea el mes siguiente.",
+    "  movimiento_editar {id, monto?, nota?, categoria?, fila?} corrige un gasto anotado (ids en \"movimientosRecientes\"). · movimiento_eliminar {id}.",
+    "  fila_agregar {categoria, fila, monto?} agrega una fila de gasto (por ejemplo un gasto fijo como \"Internet\"). · fila_editar {categoria, fila, monto?, nuevoNombre?}. · fila_eliminar {categoria, fila}.",
+    "  ingreso_agregar {nombre, monto} · ingreso_editar {nombre, monto?, nuevoNombre?} · ingreso_eliminar {nombre}.",
+    "  deuda_agregar {nombre, saldo, cuotaMensual, cuotaActual?, cuotaTotal?} · deuda_editar {deuda, saldo?, cuotaMensual?, cuotaActual?, cuotaTotal?, nuevoNombre?} · deuda_eliminar {deuda}.",
+    "  presupuesto_quitar {categoria} saca el tope de una categoría. · categoria_renombrar {categoria, nombre} cambia cómo se llama una categoría (nombre vacío = el original).",
     "No existen otras acciones: si te piden algo que no está acá, decí con honestidad que eso todavía no lo podés hacer desde el chat y cómo hacerlo a mano en la app.",
     "",
     "=== BÚSQUEDA WEB (promos y precios) ===",
     "Para promociones/descuentos reales de comercios (\"¿qué día tiene descuento Coto?\") y para comparar precios entre supermercados, NUNCA respondas de memoria.",
-    "Devolvé \"buscarWeb\" con una consulta corta y simple (el producto o la promo, SIN nombrar un supermercado: el sistema ya busca en Coto, Día, Carrefour, Jumbo y Vea).",
-    "En \"respuesta\" poné algo como \"Dejame fijarme...\" (por si la búsqueda no está disponible). Si la pregunta no es de promos/precios, \"buscarWeb\" no va. Nunca lo combines con cambios.",
+    "Usá \"buscarWeb\" con una consulta corta y simple (el producto o la promo, SIN nombrar un supermercado: el sistema ya busca en Coto, Día, Carrefour, Jumbo y Vea).",
+    "En \"respuesta\" poné algo corto como \"Dejame fijarme...\" (por si la búsqueda no está disponible). Si la pregunta no es de promos/precios, \"buscarWeb\" no va. Nunca lo combines con cambios.",
+  ].join("\n");
+}
+
+// Parte VARIABLE: cómo hablar (voz o texto) y los datos reales del usuario en este momento
+function promptDinamico(contexto: unknown, modo: string): string {
+  const estilo = modo === "voz"
+    ? [
+      "=== ESTILO: ESTÁS HABLANDO EN VOZ ALTA ===",
+      "La app lee tu \"respuesta\" con una voz. Hablá como una persona en una charla, no como un informe: 1 a 3 frases cortas, SIN listas, SIN markdown, SIN emojis ni símbolos raros.",
+      "Que suene natural y con ritmo: mezclá frases cortas y un poco más largas, usá preguntas y alguna exclamación cuando corresponda (\"¡Bien!\", \"Uf...\", \"Listo.\"),",
+      "comas para las pausas y puntos suspensivos para dudar. Empezá a veces con una reacción breve (\"Mirá,\", \"Dale,\", \"A ver...\", \"Bueno,\") y mostrá empatía: si gastó de más, \"Uf, este mes se te fue la mano en...\";",
+      "si viene bien, \"¡Bien ahí!\". Sin exagerar ni repetir siempre lo mismo. Los montos escribilos como siempre ($ 12.300): la app los lee bien. No enumeres más de 3 cosas.",
+    ]
+    : [
+      "=== ESTILO: CHAT DE TEXTO ===",
+      "Respondé breve y claro (1 a 4 oraciones). Podés usar saltos de línea, pero NO uses markdown (nada de **negritas**, #, tablas ni listas con asteriscos).",
+    ];
+  return [
+    ...estilo,
     "",
     "=== CONTEXTO (datos reales del usuario, pesos argentinos; todo calculado por la app) ===",
     JSON.stringify(contexto),
-    "",
-    "Respondé ÚNICAMENTE con el objeto JSON.",
   ].join("\n");
 }
+
+// Herramienta de salida estructurada: el modelo está OBLIGADO a llamarla, así que nunca devuelve
+// "texto roto" ni JSON mal formado. "respuesta" va primera: al streamear, se puede empezar a hablar antes.
+const HERRAMIENTA_RESPONDER = {
+  name: "responder",
+  description: "Envía la respuesta al usuario y, solo si el usuario lo pidió, los cambios a aplicar en la app.",
+  input_schema: {
+    type: "object",
+    properties: {
+      respuesta: { type: "string", description: "Lo que se le dice al usuario, en español rioplatense." },
+      registrar: {
+        type: "array", description: "Gastos nuevos a anotar (solo si el usuario los contó).",
+        items: {
+          type: "object",
+          properties: {
+            categoria: { type: "string", enum: Object.keys(CATEGORIAS) },
+            monto: { type: "number" }, nota: { type: "string" }, fila: { type: "string" }, fecha: { type: "string", description: "YYYY-MM-DD" },
+          },
+          required: ["categoria", "monto"],
+        },
+      },
+      presupuesto: {
+        type: "object", description: "Tope mensual que el usuario fija para una categoría.",
+        properties: { categoria: { type: "string", enum: Object.keys(CATEGORIAS) }, monto: { type: "number" } },
+        required: ["categoria", "monto"],
+      },
+      pagosDeudas: {
+        type: "array", description: "Marcar o desmarcar el pago de deudas/tarjetas.",
+        items: {
+          type: "object",
+          properties: { deuda: { type: "string" }, accion: { type: "string", enum: ["pagar", "revertir"] } },
+          required: ["deuda", "accion"],
+        },
+      },
+      acciones: {
+        type: "array", description: "Otros cambios que el usuario pidió, en orden.",
+        items: {
+          type: "object",
+          properties: {
+            tipo: { type: "string", enum: TIPOS_ACCION },
+            mes: { type: "string" }, id: { type: "string" }, monto: { type: "number" }, nota: { type: "string" },
+            categoria: { type: "string", enum: Object.keys(CATEGORIAS) }, fila: { type: "string" }, nuevoNombre: { type: "string" },
+            nombre: { type: "string" }, deuda: { type: "string" }, saldo: { type: "number" }, cuotaMensual: { type: "number" },
+            cuotaActual: { type: "number" }, cuotaTotal: { type: "number" },
+          },
+          required: ["tipo"],
+        },
+      },
+      buscarWeb: { type: "string", description: "Consulta corta para buscar promos o precios reales." },
+    },
+    required: ["respuesta"],
+  },
+};
 
 // Prompt para la segunda pasada, cuando hubo que buscar en la web. Le pasamos
 // los resultados ya obtenidos y le pedimos que arme la respuesta final con eso
@@ -330,20 +413,41 @@ function normalizarMensajes(mensajes: MensajeChat[]): MensajeChat[] {
   return out;
 }
 
+// ---------- Llamadas a Claude ----------
+const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
+const ANTHROPIC_HEADERS = {
+  "x-api-key": ANTHROPIC_API_KEY,
+  "anthropic-version": "2023-06-01",
+  "content-type": "application/json",
+};
+
+// El prompt fijo va primero y marcado para caché; lo que cambia (contexto, modo) va después
+function bloquesSystem(contexto: unknown, modo: string): unknown[] {
+  return [
+    { type: "text", text: promptEstatico(), cache_control: { type: "ephemeral" } },
+    { type: "text", text: promptDinamico(contexto, modo) },
+  ];
+}
+
+function cuerpoClaude(system: unknown, messages: MensajeChat[], maxTokens: number, conHerramienta: boolean): Record<string, unknown> {
+  const cuerpo: Record<string, unknown> = { model: CLAUDE_MODEL, max_tokens: maxTokens, system, messages };
+  if (conHerramienta) {
+    cuerpo.tools = [HERRAMIENTA_RESPONDER];
+    cuerpo.tool_choice = { type: "tool", name: "responder" }; // el modelo SIEMPRE tiene que llamar a la herramienta
+  }
+  return cuerpo;
+}
+
 // Llama a Claude y devuelve el texto crudo de la respuesta (string). null si falló
-// la llamada (red, timeout, 4xx/5xx) — el llamador decide el fallback.
+// la llamada (red, timeout, 4xx/5xx) — el llamador decide el fallback. (Lo usa la 2ª pasada de la búsqueda web.)
 async function llamarClaude(system: string, mensajes: MensajeChat[], maxTokens = 1024): Promise<string | null> {
   const messages = normalizarMensajes(mensajes);
   if (!messages.length) return null;
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch(ANTHROPIC_URL, {
       method: "POST",
-      headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: maxTokens, system, messages }),
+      headers: ANTHROPIC_HEADERS,
+      body: JSON.stringify(cuerpoClaude(system, messages, maxTokens, false)),
       signal: AbortSignal.timeout(45_000),
     });
     if (!res.ok) {
@@ -359,6 +463,266 @@ async function llamarClaude(system: string, mensajes: MensajeChat[], maxTokens =
     console.error("Anthropic fetch error:", e);
     return null;
   }
+}
+
+// A veces un campo anidado llega como texto JSON en vez de objeto: se pasa a objeto
+function normalizarEntrada(x: any): any {
+  if (!x || typeof x !== "object") return null;
+  for (const k of ["registrar", "presupuesto", "pagosDeudas", "acciones"]) {
+    if (typeof x[k] === "string") { try { x[k] = JSON.parse(x[k]); } catch { delete x[k]; } }
+  }
+  return x;
+}
+
+// Si el modelo contestó con texto (no debería pasar): JSON si lo es; si no, el propio texto como respuesta
+function desdeTexto(texto: string): any | null {
+  const j = extraerJson(texto);
+  if (j && typeof j === "object") return normalizarEntrada(j);
+  const limpio = texto.trim();
+  if (limpio && !limpio.startsWith("{")) return { respuesta: limpio.slice(0, 1500) };
+  return null;
+}
+
+// Llamada SIN stream con la herramienta: devuelve el objeto que armó el modelo (o null si falló)
+async function llamarClaudeHerramienta(system: unknown, mensajes: MensajeChat[], maxTokens = 1600): Promise<any | null> {
+  const messages = normalizarMensajes(mensajes);
+  if (!messages.length) return null;
+  try {
+    const res = await fetch(ANTHROPIC_URL, {
+      method: "POST",
+      headers: ANTHROPIC_HEADERS,
+      body: JSON.stringify(cuerpoClaude(system, messages, maxTokens, true)),
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (!res.ok) {
+      const detalle = await res.text().catch(() => "");
+      console.error("Anthropic API error:", res.status, detalle);
+      return null;
+    }
+    const data = await res.json();
+    if (data?.stop_reason === "max_tokens") console.warn("Anthropic: respuesta cortada por max_tokens");
+    const bloques: any[] = Array.isArray(data?.content) ? data.content : [];
+    const uso = bloques.find((b) => b?.type === "tool_use" && b?.name === "responder");
+    if (uso && uso.input) return normalizarEntrada(uso.input);
+    return desdeTexto(bloques.filter((b) => b?.type === "text").map((b) => String(b.text || "")).join(""));
+  } catch (e) {
+    console.error("Anthropic fetch error:", e);
+    return null;
+  }
+}
+
+// Con lo que devolvió el modelo arma la respuesta final para la app: valida cada cambio, hace la
+// búsqueda web si hace falta y devuelve el objeto que el cliente aplica. Es la misma para stream y no stream.
+async function armarRespuesta(parsed: any, mensaje: string): Promise<Record<string, unknown>> {
+  // Si el modelo no mandó "respuesta", NUNCA se muestra texto crudo: mejor una frase amable y pedir que repita
+  let respuesta = (parsed && typeof parsed.respuesta === "string" && parsed.respuesta.trim())
+    ? parsed.respuesta
+    : "Perdón, se me trabó la respuesta. ¿Me lo repetís?";
+
+  const registrar = (parsed && Array.isArray(parsed.registrar))
+    ? parsed.registrar
+        .filter((it: any) => it && CATEGORIAS[it.categoria] && Number(it.monto) > 0)
+        // Math.round por las dudas: los pesos de esta app son siempre enteros,
+        // si la IA se equivoca y manda decimales no queremos que se cuelen.
+        .map((it: any) => {
+          const gasto: any = { categoria: it.categoria, monto: Math.round(Number(it.monto)), nota: it.nota ? String(it.nota).slice(0, 80) : null };
+          // fila y fecha son opcionales: la fecha tiene que ser real, de hoy o anterior
+          const fila = txt(it.fila); if (fila) gasto.fila = fila;
+          const fecha = txt(it.fecha, 10);
+          if (/^\d{4}-\d{2}-\d{2}$/.test(fecha) && fecha <= new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10)) gasto.fecha = fecha;
+          return gasto;
+        })
+    : [];
+
+  const presupuesto = (parsed && parsed.presupuesto && CATEGORIAS[parsed.presupuesto.categoria] && Number(parsed.presupuesto.monto) > 0)
+    ? { categoria: parsed.presupuesto.categoria, monto: Math.round(Number(parsed.presupuesto.monto)) }
+    : null;
+
+  if (parsed && typeof parsed.buscarWeb === "string" && parsed.buscarWeb.trim()) {
+    const query = parsed.buscarWeb.trim();
+    // Búsqueda general + una puntual en cada supermercado grande (en paralelo),
+    // así si la pregunta es "qué super tiene mejor precio en X" hay chances
+    // reales de tener el dato de más de una cadena para comparar.
+    const [general, porTienda] = await Promise.all([buscarWeb(query), buscarEnSupermercados(query)]);
+    const texto = [general.texto, porTienda.texto].filter(Boolean).join("\n\n");
+    if (texto) {
+      const contenido2 = await llamarClaude(
+        systemPromptConBusqueda(mensaje, texto),
+        [{ role: "user", content: mensaje }],
+      );
+      const parsed2 = contenido2 ? desdeTexto(contenido2) : null;
+      if (parsed2 && typeof parsed2.respuesta === "string" && parsed2.respuesta.trim()) respuesta = parsed2.respuesta;
+      // Las fuentes las agrega la app con las URLs REALES que devolvió la
+      // búsqueda (no lo que el modelo diga que citó) — así el usuario siempre
+      // puede entrar a verificar el dato en vez de confiar a ciegas en el texto.
+      const urls = Array.from(new Set([...general.urls, ...porTienda.urls])).slice(0, 6);
+      if (urls.length) respuesta += "\n\nFuentes:\n" + urls.join("\n");
+    }
+    // Si no hay TAVILY_API_KEY configurada o ninguna búsqueda trajo resultados,
+    // se queda con el mensaje de respaldo que ya armó la IA en la primera pasada.
+  }
+
+  // Pagos de deudas: solo pasan entradas bien formadas (la app las cruza con sus deudas reales)
+  const pagosDeudas = (parsed && Array.isArray(parsed.pagosDeudas))
+    ? parsed.pagosDeudas
+        .filter((p: any) => p && typeof p.deuda === "string" && p.deuda.trim() && (p.accion === "pagar" || p.accion === "revertir"))
+        .slice(0, 10)
+        .map((p: any) => ({ deuda: String(p.deuda).trim().slice(0, 80), accion: p.accion }))
+    : [];
+
+  const acciones = sanearAcciones(parsed && parsed.acciones);
+
+  return { respuesta, registrar, presupuesto, pagosDeudas, acciones };
+}
+
+// ---------- Stream: se manda cada frase apenas está lista ----------
+const codificador = new TextEncoder();
+function lineaNdjson(obj: unknown): Uint8Array { return codificador.encode(JSON.stringify(obj) + "\n"); }
+
+// Saca de un JSON que todavía está llegando el texto de "respuesta" que ya se puede leer
+function leerRespuestaParcial(buf: string): { texto: string; completa: boolean } {
+  const m = /"respuesta"\s*:\s*"/.exec(buf);
+  if (!m) return { texto: "", completa: false };
+  let i = m.index + m[0].length;
+  let out = "";
+  while (i < buf.length) {
+    const c = buf[i];
+    if (c === '"') return { texto: out, completa: true };
+    if (c === "\\") {
+      if (i + 1 >= buf.length) break;
+      const n = buf[i + 1];
+      if (n === "u") {
+        if (i + 5 >= buf.length) break; // el código \uXXXX todavía no llegó entero
+        const hex = buf.slice(i + 2, i + 6);
+        if (/^[0-9a-fA-F]{4}$/.test(hex)) { out += String.fromCharCode(parseInt(hex, 16)); i += 6; continue; }
+        out += "u"; i += 2; continue;
+      }
+      out += n === "n" ? "\n" : n === "t" ? "\t" : n === "r" ? "" : n; // \" \\ \/ -> el propio carácter
+      i += 2;
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return { texto: out, completa: false };
+}
+
+// Corta en frases lo que se fue acumulando: fin de frase = . ! ? … seguido de espacio, o un salto de línea.
+// El punto de "177.700" no corta (lo sigue un dígito). Con final=true se manda también lo que quede.
+function cortarFrases(pendiente: string, final: boolean): { frases: string[]; resto: string } {
+  const frases: string[] = [];
+  const re = /[.!?…]+["')\]]*(?=\s)|\n+/g;
+  let ultimo = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(pendiente)) !== null) {
+    const fin = m.index + m[0].length;
+    const f = pendiente.slice(ultimo, fin).trim();
+    if (f) frases.push(f);
+    ultimo = fin;
+  }
+  let resto = pendiente.slice(ultimo);
+  if (final && resto.trim()) { frases.push(resto.trim()); resto = ""; }
+  return { frases, resto };
+}
+
+function responderEnStream(system: unknown, mensajes: MensajeChat[], mensaje: string): Response {
+  const messages = normalizarMensajes(mensajes);
+  const stream = new ReadableStream({
+    async start(controller) {
+      const enviar = (o: unknown) => { try { controller.enqueue(lineaNdjson(o)); } catch { /* el cliente cortó */ } };
+      try {
+        if (!messages.length) { enviar({ t: "error", error: "falta mensaje" }); controller.close(); return; }
+        const res = await fetch(ANTHROPIC_URL, {
+          method: "POST",
+          headers: ANTHROPIC_HEADERS,
+          body: JSON.stringify({ ...cuerpoClaude(system, messages, 1600, true), stream: true }),
+          signal: AbortSignal.timeout(90_000),
+        });
+        if (!res.ok || !res.body) {
+          const detalle = await res.text().catch(() => "");
+          console.error("Anthropic stream error:", res.status, detalle);
+          enviar({ t: "error", error: "el asistente no pudo responder ahora" });
+          controller.close();
+          return;
+        }
+        const lector = res.body.getReader();
+        const decodificador = new TextDecoder();
+        let buf = "";            // texto SSE sin procesar
+        let jsonBuf = "";        // JSON de la herramienta, a medida que llega
+        let emitidoChars = 0;    // cuánto de "respuesta" ya se mandó
+        let pendiente = "";      // texto de "respuesta" que todavía no cerró una frase
+        let corta = "";          // frase muy corta, esperando unirse a la siguiente
+        let cerrada = false;     // ya llegó la comilla de cierre de "respuesta"
+
+        const emitir = (frases: string[], final: boolean) => {
+          for (const f of frases) {
+            const t = (corta ? corta + " " : "") + f;
+            if (t.length < 18 && !final) { corta = t; continue; } // "Uf..." sola suena entrecortada: se une a la siguiente
+            corta = "";
+            enviar({ t: "frase", texto: t });
+          }
+          if (final && corta) { enviar({ t: "frase", texto: corta }); corta = ""; }
+        };
+
+        while (true) {
+          const { done, value } = await lector.read();
+          if (done) break;
+          buf += decodificador.decode(value, { stream: true });
+          let idx: number;
+          while ((idx = buf.indexOf("\n\n")) !== -1) {
+            const bloque = buf.slice(0, idx);
+            buf = buf.slice(idx + 2);
+            const linea = bloque.split("\n").find((l) => l.startsWith("data:"));
+            if (!linea) continue;
+            let ev: any;
+            try { ev = JSON.parse(linea.slice(5).trim()); } catch { continue; }
+            if (ev.type === "error") { console.error("Anthropic stream event error:", ev); enviar({ t: "error", error: "el asistente no pudo responder ahora" }); controller.close(); return; }
+            if (ev.type === "content_block_delta" && ev.delta?.type === "input_json_delta") {
+              jsonBuf += String(ev.delta.partial_json || "");
+              const p = leerRespuestaParcial(jsonBuf);
+              if (p.texto.length > emitidoChars) {
+                const nuevo = p.texto.slice(emitidoChars);
+                emitidoChars = p.texto.length;
+                enviar({ t: "d", s: nuevo });
+                pendiente += nuevo;
+                const r = cortarFrases(pendiente, false);
+                pendiente = r.resto;
+                emitir(r.frases, false);
+              }
+              if (p.completa && !cerrada) {
+                cerrada = true;
+                const r = cortarFrases(pendiente, true);
+                pendiente = r.resto;
+                emitir(r.frases, true);
+              }
+            }
+          }
+        }
+
+        // Fin del stream: el JSON de la herramienta ya está completo
+        let parsed: any = null;
+        try { parsed = normalizarEntrada(JSON.parse(jsonBuf)); } catch { /* se intenta con lo parcial */ }
+        const parcial = leerRespuestaParcial(jsonBuf);
+        if (!parsed && parcial.texto.trim()) parsed = { respuesta: parcial.texto };
+        if (!cerrada) { // por si nunca llegó la comilla de cierre: se manda lo que quedó
+          const r = cortarFrases(pendiente, true);
+          pendiente = r.resto;
+          emitir(r.frases, true);
+        }
+        const data = await armarRespuesta(parsed, mensaje);
+        enviar({ t: "fin", data });
+        controller.close();
+      } catch (e) {
+        console.error("stream error:", e);
+        enviar({ t: "error", error: String(e) });
+        try { controller.close(); } catch { /* ya cerrado */ }
+      }
+    },
+  });
+  return new Response(stream, {
+    status: 200,
+    headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store", "X-Accel-Buffering": "no", ...CORS_HEADERS },
+  });
 }
 
 Deno.serve(async (req) => {
@@ -391,73 +755,14 @@ Deno.serve(async (req) => {
       })),
       { role: "user", content: mensaje.slice(0, 2000) },
     ];
+    const system = bloquesSystem(contexto, modo);
 
-    const contenido = await llamarClaude(systemPrompt(contexto, modo), messages, 1600);
-    if (contenido === null) return json({ error: "el asistente no pudo responder ahora" }, 502);
-    const parsed = extraerJson(contenido);
+    // Con "stream": true la respuesta va saliendo de a frases (conversación más fluida)
+    if (body.stream === true) return responderEnStream(system, messages, mensaje);
 
-    // Si el modelo no mandó un JSON válido, o lo mandó pero sin "respuesta", NUNCA
-    // le mostramos al usuario ese texto crudo (puede ser JSON a medio escribir) —
-    // mejor un mensaje genérico. Igual procesamos registrar/presupuesto por si esas
-    // claves sí vinieron bien aunque "respuesta" se haya perdido.
-    let respuesta = (parsed && typeof parsed.respuesta === "string" && parsed.respuesta.trim())
-      ? parsed.respuesta
-      : "No entendí bien, ¿podés reformular?";
-
-    const registrar = (parsed && Array.isArray(parsed.registrar))
-      ? parsed.registrar
-          .filter((it: any) => it && CATEGORIAS[it.categoria] && Number(it.monto) > 0)
-          // Math.round por las dudas: los pesos de esta app son siempre enteros,
-          // si la IA se equivoca y manda decimales no queremos que se cuelen.
-          .map((it: any) => {
-            const gasto: any = { categoria: it.categoria, monto: Math.round(Number(it.monto)), nota: it.nota ? String(it.nota).slice(0, 80) : null };
-            // fila y fecha son opcionales: la fecha tiene que ser real, de hoy o anterior
-            const fila = txt(it.fila); if (fila) gasto.fila = fila;
-            const fecha = txt(it.fecha, 10);
-            if (/^\d{4}-\d{2}-\d{2}$/.test(fecha) && fecha <= new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10)) gasto.fecha = fecha;
-            return gasto;
-          })
-      : [];
-
-    const presupuesto = (parsed && parsed.presupuesto && CATEGORIAS[parsed.presupuesto.categoria] && Number(parsed.presupuesto.monto) > 0)
-      ? { categoria: parsed.presupuesto.categoria, monto: Math.round(Number(parsed.presupuesto.monto)) }
-      : null;
-
-    if (parsed && typeof parsed.buscarWeb === "string" && parsed.buscarWeb.trim()) {
-      const query = parsed.buscarWeb.trim();
-      // Búsqueda general + una puntual en cada supermercado grande (en paralelo),
-      // así si la pregunta es "qué super tiene mejor precio en X" hay chances
-      // reales de tener el dato de más de una cadena para comparar.
-      const [general, porTienda] = await Promise.all([buscarWeb(query), buscarEnSupermercados(query)]);
-      const texto = [general.texto, porTienda.texto].filter(Boolean).join("\n\n");
-      if (texto) {
-        const contenido2 = await llamarClaude(
-          systemPromptConBusqueda(mensaje, texto),
-          [{ role: "user", content: mensaje }]
-        );
-        const parsed2 = contenido2 && extraerJson(contenido2);
-        if (parsed2 && typeof parsed2.respuesta === "string") respuesta = parsed2.respuesta;
-        // Las fuentes las agrega la app con las URLs REALES que devolvió la
-        // búsqueda (no lo que el modelo diga que citó) — así el usuario siempre
-        // puede entrar a verificar el dato en vez de confiar a ciegas en el texto.
-        const urls = Array.from(new Set([...general.urls, ...porTienda.urls])).slice(0, 6);
-        if (urls.length) respuesta += "\n\nFuentes:\n" + urls.join("\n");
-      }
-      // Si no hay TAVILY_API_KEY configurada o ninguna búsqueda trajo resultados,
-      // se queda con el mensaje de respaldo que ya armó la IA en la primera pasada.
-    }
-
-    // Pagos de deudas: solo pasan entradas bien formadas (la app las cruza con sus deudas reales)
-    const pagosDeudas = (parsed && Array.isArray(parsed.pagosDeudas))
-      ? parsed.pagosDeudas
-          .filter((p: any) => p && typeof p.deuda === "string" && p.deuda.trim() && (p.accion === "pagar" || p.accion === "revertir"))
-          .slice(0, 10)
-          .map((p: any) => ({ deuda: String(p.deuda).trim().slice(0, 80), accion: p.accion }))
-      : [];
-
-    const acciones = sanearAcciones(parsed && parsed.acciones);
-
-    return json({ respuesta, registrar, presupuesto, pagosDeudas, acciones });
+    const parsed = await llamarClaudeHerramienta(system, messages);
+    if (parsed === null) return json({ error: "el asistente no pudo responder ahora" }, 502);
+    return json(await armarRespuesta(parsed, mensaje));
   } catch (e) {
     console.error(e);
     return json({ error: String(e) }, 500);

@@ -16,6 +16,19 @@ const VOCES: Record<string, string> = {
   "2": limpiar(Deno.env.get("ELEVENLABS_VOICE_2")),
 };
 const MODELO = limpiar(Deno.env.get("ELEVENLABS_MODEL")) || "eleven_flash_v2_5";
+// Expresividad (se pueden cambiar con secretos, sin tocar código):
+//  ELEVENLABS_STABILITY  0 a 1  (más bajo = más variación de tono y emoción; más alto = más monótona). Por defecto 0.4
+//  ELEVENLABS_SIMILARITY 0 a 1  (parecido a la voz original). Por defecto 0.8
+//  ELEVENLABS_STYLE      0 a 1  (exageración del estilo; solo lo usan los modelos multilingual/v3). Por defecto 0.3
+//  ELEVENLABS_SPEED      0.7 a 1.2  (velocidad). Por defecto 1.0
+const num = (v: string | undefined, def: number, min: number, max: number) => {
+  const n = parseFloat(limpiar(v));
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : def;
+};
+const ESTABILIDAD = num(Deno.env.get("ELEVENLABS_STABILITY"), 0.4, 0, 1);
+const SIMILITUD = num(Deno.env.get("ELEVENLABS_SIMILARITY"), 0.8, 0, 1);
+const ESTILO = num(Deno.env.get("ELEVENLABS_STYLE"), 0.3, 0, 1);
+const VELOCIDAD = num(Deno.env.get("ELEVENLABS_SPEED"), 1.0, 0.7, 1.2);
 // Cada pedido es una frase corta; el tope protege los créditos si alguien manda un texto enorme
 const MAX_CARACTERES = 500;
 
@@ -52,14 +65,32 @@ Deno.serve(async (req) => {
     const voiceId = VOCES[voz];
     if (!voiceId) return json({ error: "voz inválida o sin configurar", code: "config" }, 400);
 
-    const upstream = await fetch(
+    // Texto de la frase anterior y de la siguiente: ElevenLabs lo usa para que la entonación fluya entre frases pedidas por separado
+    const contiguo = (v: unknown) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
+    const anterior = contiguo(body.anterior), siguiente = contiguo(body.siguiente);
+    const voiceSettings: Record<string, unknown> = {
+      stability: ESTABILIDAD, similarity_boost: SIMILITUD, use_speaker_boost: true, speed: VELOCIDAD,
+    };
+    if (/multilingual|v3/i.test(MODELO)) voiceSettings.style = ESTILO; // flash/turbo no soportan "style"
+    const pedido = (completo: boolean) => fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}/stream?output_format=mp3_44100_64`,
       {
         method: "POST",
         headers: { "xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json", Accept: "audio/mpeg" },
-        body: JSON.stringify({ text: texto, model_id: MODELO, language_code: "es" }),
+        body: JSON.stringify(completo
+          ? {
+            text: texto, model_id: MODELO, language_code: "es", voice_settings: voiceSettings,
+            ...(anterior ? { previous_text: anterior } : {}), ...(siguiente ? { next_text: siguiente } : {}),
+          }
+          : { text: texto, model_id: MODELO, language_code: "es" }),
       },
     );
+    let upstream = await pedido(true);
+    // Si ElevenLabs rechaza algún ajuste (400/422: parámetro no soportado por este modelo), se reintenta sin ajustes
+    if (upstream.status === 400 || upstream.status === 422) {
+      console.error("ElevenLabs rechazó los ajustes:", upstream.status, await upstream.text().catch(() => ""));
+      upstream = await pedido(false);
+    }
 
     if (!upstream.ok || !upstream.body) {
       const detalle = await upstream.text().catch(() => "");
