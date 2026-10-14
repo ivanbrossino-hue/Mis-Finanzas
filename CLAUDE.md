@@ -14,7 +14,7 @@ Dos versiones de la misma app + backend en Supabase:
 
 - Cada `app.js` es un único IIFE `'use strict'`, funciones planas, sin módulos. `render()` re-renderiza todo; `actualizarCalculos()` es la liviana (no pierde foco de inputs).
 - `datos-iniciales.js` **debe quedar siempre vacío** (`{meses:{}, deudas:[]}`): la app está en una URL pública (GitHub Pages) y antes tenía datos reales.
-- `movil/sw.js`: cachea solo el cascarón estático; **subir `CACHE_VERSION` (hoy `v64`) y los `?v=` de `app.js` (`44`) / `styles.css` (`36`) / `asistente.js` (`7`) en `ASSETS` e `index.html` cada vez que se cambie algo**. También maneja Web Push (`push`, `notificationclick`).
+- `movil/sw.js`: cachea solo el cascarón estático; **subir `CACHE_VERSION` (hoy `v65`) y los `?v=` de `app.js` (`45`) / `styles.css` (`37`) / `asistente.js` (`7`) en `ASSETS` e `index.html` cada vez que se cambie algo**. También maneja Web Push (`push`, `notificationclick`).
 - Categorías fijas (`CATEGORIAS` en `app.js`): vivienda, trabajo, alimentacion, transporte, salud, educacion, mascota, entretenimiento, ropa, seguros, ahorro. Están **duplicadas** en `nube/telegram-bot/index.ts` y `nube/chat-ia/index.ts` — si se agrega una, tocar los tres.
 
 ### Modelo de datos (`estado`)

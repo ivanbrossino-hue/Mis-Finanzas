@@ -21,3 +21,18 @@ Documento en construcción; la versión completa (endpoints, ejemplos, cómo pro
 - Reglas: bajas respetadas (no resucitan), edición gana a baja ajena, `monto` de filas de `gastos` por delta, texto en conflicto gana lo local,
   campos desconocidos se conservan, mes creado a la vez en dos lados se unifica por categoría+nombre.
 - Pruebas: `node tests/sync-merge.test.js`.
+
+## Fase 2: función `gasto-rapido` (deployada, verify_jwt apagado)
+
+Ver el encabezado de `nube/gasto-rapido/index.ts` (endpoints, alcances, límites). Pruebas simuladas: `node tests/gasto-rapido.test.js`.
+`proyectos.updated_by` es `text` (nube/4-proyectos-y-colaboradores.sql): la función escribe `atajo:<8 caracteres del id del token>`.
+
+## Fase 3: interfaz (movil/)
+
+- **Ajustes > Atajos del celular** (solo dueño/editor con sesión): "Conectar un celular" elige iPhone (alcance `gasto`) o Android (`detector`),
+  genera en el navegador un token `mfa_<43 caracteres>`, sube solo su SHA-256 a `tokens_atajo` y muestra el token UNA vez (con la URL base).
+  La lista muestra cada dispositivo con su último uso y el botón **Revocar**.
+- **Pendientes** (ícono en el encabezado con contador, se refresca cada 20 s): para cada propuesta se puede cambiar categoría y fila y
+  **Registrar** o **Ignorar**. Registrar usa el id `rp_<id de la propuesta>`, guarda en la nube y recién entonces marca la propuesta
+  como registrada (si algo falla, repetir no duplica).
+- **Historial**: los movimientos con `origen` muestran la marca "📲 iPhone/Android".
