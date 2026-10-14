@@ -630,7 +630,7 @@
       totalDeuda: totalDeuda(),
       totalCuotasMensuales: totalCuotasDeuda(),
       movimientosRecientes: recientes,
-      listaDeCompras: { supermercado: superNombre(listaCompra().super), total: totalLista(),
+      listaDeCompras: { supermercado: superNombre(listaCompra().super), sucursal: sucursalActual() ? sucursalActual().nombre : null, total: totalLista(),
         articulos: listaCompra().items.map(function (it) { return { nombre: it.nombre, monto: it.monto, cantidad: it.cantidad || 1 }; }) },
       mesAnterior: hayMesAnterior
         ? { nombre: mesKeyLabel(mAnt), totalIngresos: totalIngresos(mAnt), totalGastos: totalGastos(mAnt), gastosPorCategoria: gastosPorCategoria(mAnt) }
@@ -1289,6 +1289,7 @@
       '<div class="lc-head"><button type="button" class="lc-toggle" data-lc="toggle" aria-expanded="' + listaAbierta + '">🛒 Lista · ' + l.items.length + (l.items.length === 1 ? ' artículo' : ' artículos') + '</button>' +
       '<select class="lc-super" data-lc="super" aria-label="Supermercado">' + opciones + '</select>' +
       '<b class="lc-total">' + fmt(totalLista()) + '</b></div>' +
+      (sucursalActual() ? '<div class="lc-suc">📍 ' + escapeHtml(sucursalActual().nombre) + '</div>' : '') +
       (listaAbierta
         ? '<div class="lc-items">' + l.items.map(function (it) {
           return '<div class="lc-item"><span class="lc-n">' + escapeHtml(it.nombre) + ((it.cantidad || 1) > 1 ? ' <i>×' + it.cantidad + '</i>' : '') + '</span><span class="lc-m">' + fmt(it.monto) + '</span>' +
@@ -1338,10 +1339,49 @@
     bcEsperarCodigo();
   }
   function bcEsperarCodigo(aviso) {
+    var suc = sucursalActual();
     bcMsg('<div class="bc-hint">' + escapeHtml(aviso || 'Apuntá al código de barras del producto') + '</div>' +
+      '<div class="bc-suc"><span>📍 ' + escapeHtml(suc ? suc.nombre : 'Sin sucursal elegida') + '</span><button type="button" class="chip" id="bcSucBtn">' + (suc ? 'Cambiar' : 'Sucursal cercana') + '</button></div>' +
       '<div class="bc-manual"><input type="text" inputmode="numeric" id="bcEan" placeholder="o escribí el código" autocomplete="off"><button type="button" class="chip" id="bcEanOk">Buscar</button></div>');
     document.getElementById('bcEanOk').onclick = function () { var v = document.getElementById('bcEan').value.replace(/\D/g, ''); if (v.length >= 8) bcManejarCodigo(v); else toast('El código tiene entre 8 y 14 números.'); };
+    document.getElementById('bcSucBtn').onclick = bcElegirSucursal;
     bcIniciarCamara();
+  }
+  // Sucursal elegida para el supermercado actual de la lista (si se cambió de supermercado, ya no vale)
+  function sucursalActual() {
+    var l = listaCompra();
+    return (l.sucursal && l.sucursal.super === l.super) ? l.sucursal : null;
+  }
+  // Pide la ubicación, busca las sucursales más cercanas del supermercado elegido y deja elegir una
+  function bcElegirSucursal() {
+    var sup = listaCompra().super;
+    if (!navigator.geolocation) { toast('Este navegador no permite ubicación.'); return; }
+    bcDetener();
+    bcMsg('<div class="bc-hint">Buscando tu ubicación…</div>');
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      bcMsg('<div class="bc-hint">Buscando sucursales de ' + escapeHtml(superNombre(sup)) + ' cerca tuyo…</div>');
+      sbClient.functions.invoke('precio-producto', { body: { accion: 'sucursales', super: sup, lat: pos.coords.latitude, lng: pos.coords.longitude } }).then(function (res) {
+        var d = res && res.data;
+        if (res.error || !d || d.error || !d.sucursales || !d.sucursales.length) {
+          bcEsperarCodigo((d && d.error) || 'No encontré sucursales de ' + superNombre(sup) + ' con consulta online.'); return;
+        }
+        window.__sucursalesCercanas = d.sucursales;
+        bcMsg('<div class="bc-hint">Elegí la sucursal (' + escapeHtml(superNombre(sup)) + ')</div>' + d.sucursales.map(function (s, i) {
+          return '<button type="button" class="bc-suc-op" data-i="' + i + '"><b>' + escapeHtml(s.nombre) + '</b><span>' + escapeHtml(s.direccion) + ' · ' + s.distanciaKm.toString().replace('.', ',') + ' km</span></button>';
+        }).join('') + '<button type="button" class="chip" id="bcSucNo">Volver</button>');
+        document.getElementById('bcSucNo').onclick = function () { bcEsperarCodigo(); };
+        document.querySelectorAll('.bc-suc-op').forEach(function (b) {
+          b.onclick = function () {
+            var s = window.__sucursalesCercanas[parseInt(b.getAttribute('data-i'), 10)];
+            listaCompra().sucursal = { super: sup, sellerId: s.sellerId, nombre: s.nombre, cp: s.cp };
+            guardar();
+            bcEsperarCodigo('Sucursal elegida: ' + s.nombre);
+          };
+        });
+      }, function () { bcEsperarCodigo('No pude buscar sucursales ahora.'); });
+    }, function (err) {
+      bcEsperarCodigo(err && err.code === 1 ? 'Sin permiso de ubicación. Podés activarlo en los ajustes del navegador.' : 'No pude obtener tu ubicación.');
+    }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 });
   }
   function bcIniciarCamara() {
     bcDetener();
@@ -1401,13 +1441,19 @@
     bcDetener();
     var sup = listaCompra().super;
     bcMsg('<div class="bc-hint">Código ' + escapeHtml(ean) + ' · buscando precio en ' + escapeHtml(superNombre(sup)) + '…</div>');
-    sbClient.functions.invoke('precio-producto', { body: { ean: ean, super: sup } }).then(function (res) {
+    sbClient.functions.invoke('precio-producto', { body: { ean: ean, super: sup, sucursal: sucursalActual() } }).then(function (res) {
       var d = res && res.data;
       var nombre = '', precio = 0, aviso = '';
       if (res.error || !d || (d.error && d.code !== 'no_soportado')) aviso = 'No pude consultar el precio ahora. Cargalo a mano.';
       else if (d.code === 'no_soportado') aviso = superNombre(sup) + ' no tiene consulta automática de precios. Cargá el precio a mano.';
       else if (!d.encontrado) aviso = 'No encontré ese código en ' + superNombre(sup) + '. Cargá el nombre y el precio a mano.';
-      else { nombre = d.nombre; precio = d.precio; if (!d.disponible) aviso = 'Ojo: figura sin stock en la tienda online, revisá el precio.'; else aviso = 'Precio de la tienda online de ' + d.tienda + '; puede diferir del de la góndola.'; }
+      else {
+        nombre = d.nombre; precio = d.precio;
+        var sucA = sucursalActual();
+        if (d.sucursal && sucA) aviso = d.sucursal.disponible ? 'Disponible en ' + sucA.nombre + '. Precio de la web para esa sucursal; en góndola puede variar.' : 'Sin stock en ' + sucA.nombre + ' según la web. Precio de referencia: revisalo.';
+        else if (!d.disponible) aviso = 'Ojo: figura sin stock en la tienda online, revisá el precio.';
+        else aviso = 'Precio de la tienda online de ' + d.tienda + '; puede diferir del de la góndola.';
+      }
       bcFormulario(ean, nombre, precio, aviso);
     }, function () { bcFormulario(ean, '', 0, 'No pude consultar el precio ahora. Cargalo a mano.'); });
   }
@@ -4226,7 +4272,7 @@
     lcBox.addEventListener('change', function (e) {
       if (e.target.getAttribute('data-lc') !== 'super') return;
       if (miRol === 'lector') { toast('Tu cuenta es de solo lectura.'); renderListaCompra(); return; }
-      listaCompra().super = e.target.value; guardar();
+      listaCompra().super = e.target.value; guardar(); document.getElementById('bcSuper').textContent = superNombre(e.target.value);
     });
     document.getElementById('chatFab').onclick = function () { abrirChat(); };
     document.getElementById('chatClose').onclick = cerrarChat;

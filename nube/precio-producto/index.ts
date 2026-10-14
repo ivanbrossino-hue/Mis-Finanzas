@@ -34,6 +34,7 @@ function resumir(p: any, tienda: string) {
     nombre: String(p.productName || "").slice(0, 120),
     marca: String(p.brand || "").slice(0, 60),
     ean: String(item.ean || ""),
+    itemId: String(item.itemId || ""),
     precio: Math.round(precio),
     precioLista: Math.round(Number(oferta.ListPrice) || 0),
     disponible: (Number(oferta.AvailableQuantity) || 0) > 0 && precio > 0,
@@ -55,6 +56,26 @@ Deno.serve(async (req) => {
     const tienda = TIENDAS[clave];
     if (!tienda) return json({ error: "Ese supermercado no tiene consulta de precios automática.", code: "no_soportado" }, 200);
 
+    // Sucursales más cercanas a unas coordenadas (puntos de retiro de la tienda online = sucursales reales)
+    if (body.accion === "sucursales") {
+      const lat = Number(body.lat), lng = Number(body.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return json({ error: "ubicación inválida" }, 400);
+      const pr = await fetch(`${tienda.host}/api/checkout/pub/pickup-points?geoCoordinates=${lng};${lat}&pageSize=12`, { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(9000) });
+      if (!pr.ok) return json({ error: "la tienda no respondió", code: "upstream" }, 200);
+      const pj = await pr.json().catch(() => ({}));
+      // deno-lint-ignore no-explicit-any
+      const sucursales = ((pj.items || []) as any[]).filter((i) => i.pickupPoint && i.pickupPoint.isActive !== false).slice(0, 5).map((i) => {
+        const pp = i.pickupPoint, ad = pp.address || {};
+        const calle = [ad.street, ad.number].filter(Boolean).join(" ");
+        return {
+          sellerId: String(pp.id || "").split("_")[0], nombre: String(pp.friendlyName || calle).slice(0, 60),
+          direccion: `${calle}${ad.neighborhood ? ", " + ad.neighborhood : ""}${ad.city ? " (" + ad.city + ")" : ""}`.slice(0, 120),
+          cp: String(ad.postalCode || ""), distanciaKm: Math.round((Number(i.distance) || 0) * 10) / 10,
+        };
+      });
+      return json({ sucursales, tienda: tienda.nombre }, 200);
+    }
+
     const ean = String(body.ean || "").replace(/\D/g, "");
     const texto = String(body.texto || "").replace(/\s+/g, " ").trim().slice(0, 80);
     let url: string;
@@ -73,7 +94,27 @@ Deno.serve(async (req) => {
     // deno-lint-ignore no-explicit-any
     const productos = (Array.isArray(lista) ? lista : []).map((p: any) => resumir(p, tienda.nombre));
     if (!productos.length) return json({ encontrado: false, tienda: tienda.nombre, ean }, 200);
-    return json({ encontrado: true, ...productos[0], otros: productos.slice(1, 4) }, 200);
+    const res: Record<string, unknown> = { encontrado: true, ...productos[0], otros: productos.slice(1, 4) };
+    // Con sucursal elegida: se simula agregar el producto con el vendedor de esa sucursal, para ver su stock y precio ahí
+    const suc = body.sucursal;
+    if (suc && typeof suc.sellerId === "string" && /^[\w-]{3,40}$/.test(suc.sellerId) && productos[0].itemId) {
+      try {
+        const cp = String(suc.cp || "").replace(/\D/g, "").slice(0, 8);
+        const sr = await fetch(`${tienda.host}/api/checkout/pub/orderForms/simulation`, {
+          method: "POST", headers: { "User-Agent": "Mozilla/5.0", "Content-Type": "application/json" },
+          body: JSON.stringify({ items: [{ id: productos[0].itemId, quantity: 1, seller: suc.sellerId }], country: "ARG", ...(cp ? { postalCode: cp } : {}) }),
+          signal: AbortSignal.timeout(9000),
+        });
+        const sj = await sr.json().catch(() => ({}));
+        const li = (sj.items || [])[0];
+        if (li) {
+          const ok = li.availability === "available" && Number(li.sellingPrice) > 0;
+          res.sucursal = { disponible: ok, precio: ok ? Math.round(Number(li.sellingPrice) / 100) : 0 };
+          if (ok) res.precio = res.sucursal && (res.sucursal as { precio: number }).precio;
+        }
+      } catch (_e) { /* si falla la simulación queda el precio de la web */ }
+    }
+    return json(res, 200);
   } catch (e) {
     console.error(e);
     return json({ error: "no pude consultar el precio", code: "upstream" }, 200);
