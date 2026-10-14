@@ -50,8 +50,14 @@ BASE=https://iivjrpfkwkxgxzgyzrvq.supabase.co/functions/v1/gasto-rapido
 
 # Categorías, conceptos (filas) del mes sin montos, y comercios conocidos
 curl -s "$BASE/config" -H "Authorization: Bearer $TOKEN"
+# Además (pensado para armar menús en el atajo del iPhone):
+#   "lista_categorias": ["Vivienda","Trabajo","Alimentación",…]   nombres tal como se ven en la app, en orden
+#   "conceptos_por_nombre": {"Alimentación":["Supermercado / almacén","Verdulería"],…}   filas del mes actual, sin duplicados, máx. 40
+#   "id_por_nombre": {"Alimentación":"alimentacion",…}
+# (y siguen "categorias", "conceptos" y "comercios" como antes). Si dos categorías tuvieran el mismo nombre, se les agrega el id: "Comida (salud)".
 
-# Registrar un gasto. monto puede ser número o cuenta ("200+120", "(1500+300)*2", "1.500,50"); concepto null = fila general de la categoría
+# Registrar un gasto. "categoria" acepta el id ("alimentacion") o el nombre visible ("Alimentación"), sin importar mayúsculas ni tildes
+# (también en /propuesta/:id/confirmar). monto puede ser número o cuenta ("200+120", "(1500+300)*2", "1.500,50"); concepto null = fila general de la categoría
 curl -s -X POST "$BASE/gasto" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"categoria":"alimentacion","concepto":null,"monto":"200+120","nota":"verdulería","idem":"unico-123456"}'
 # 201 {"ok":true,"id":"rq_unico-123456","categoria":"alimentacion","concepto":"Supermercado / almacén","monto":320,"fecha":"2026-10-14","totalCategoriaMes":320}
@@ -77,7 +83,8 @@ curl -s -X POST "$BASE/deshacer" -H "Authorization: Bearer $TOKEN" -H 'Content-T
 
 ### Códigos de error
 
-Las respuestas de error son `{"error":"<código>","mensaje":"…"}`.
+Todas las respuestas de error son `{"error":"<código>","mensaje":"<texto legible en español>"}` (el atajo puede mostrar `mensaje` tal cual).
+`categoria_invalida` agrega además `"validas":[…nombres visibles…]` y el mensaje las lista: no hay coincidencia única, o el nombre es ambiguo.
 
 | Estado | `error` | Cuándo |
 |---|---|---|
@@ -138,7 +145,7 @@ Cada uno se puede borrar desde la app (Historial → papelera), que también res
 | Qué | Cómo |
 |---|---|
 | Fusión de tres vías (13 pruebas) | `node tests/sync-merge.test.js` |
-| La función contra un Supabase y un Claude **simulados** (37 pruebas: auth, alcances, tope de 60/h, `/gasto`, idem, meses, concurrencia, propuestas, duplicados, deshacer, logs) | `node tests/gasto-rapido.test.js` |
+| La función contra un Supabase y un Claude **simulados** (45 pruebas: auth, alcances, tope de 60/h, `/gasto`, idem, meses, concurrencia, propuestas, duplicados, deshacer, logs) | `node tests/gasto-rapido.test.js` |
 | Un servidor local con la función simulada, para ensayar los scripts sin tocar nada | `node tests/servidor-simulado.js` (imprime tokens falsos) |
 | El bot de Telegram (10 pruebas: conflicto de rev, no dice "cargado" si no guardó, fila nueva, nota) | `node tests/telegram-bot.test.js` (con `BOT_FILE=<ruta>` prueba otra versión del bot) |
 | La función **real** de punta a punta con curl | `TOKEN='mfa_…' bash scripts/prueba-gasto-rapido.sh` (sin `TOKEN` solo comprueba los 401). Usa 1 peso y lo deshace |
