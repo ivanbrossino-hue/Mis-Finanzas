@@ -44,10 +44,9 @@ create policy "crear mi token de atajo" on public.tokens_atajo for insert
   with check (
     user_id = auth.uid()
     and revocado = false
-    and exists (
-      select 1 from public.miembros m
-      where m.proyecto_id = tokens_atajo.proyecto_id and m.user_id = auth.uid()
-        and m.estado = 'aceptado' and m.rol in ('dueno', 'editor')
+    and (
+      proyecto_id in (select public.mi_proyecto_como('dueno'))
+      or proyecto_id in (select public.mi_proyecto_como('editor'))
     )
   );
 
@@ -62,14 +61,18 @@ create policy "revocar mi token de atajo" on public.tokens_atajo for update
 
 -- Permisos por columna: el cliente puede insertar solo estos datos y solo puede cambiar el estado de revocación.
 -- No puede tocar ultimo_uso, el cupo ni el hash de uno existente.
-revoke all on public.tokens_atajo from anon, authenticated;
+revoke all on public.tokens_atajo from anon, authenticated;       -- incluye UPDATE a nivel tabla
+revoke update on public.tokens_atajo from anon, authenticated;
 grant select on public.tokens_atajo to authenticated;
 grant insert (user_id, proyecto_id, token_hash, dispositivo, alcance) on public.tokens_atajo to authenticated;
 grant update (revocado, revocado_en) on public.tokens_atajo to authenticated;
 
 -- Una vez revocado no se puede "des-revocar".
 create or replace function public.tokens_atajo_no_desrevocar()
-returns trigger language plpgsql as $$
+returns trigger
+language plpgsql
+set search_path = public
+as $$
 begin
   if old.revocado and not new.revocado then
     raise exception 'un token revocado no se puede reactivar';
@@ -79,6 +82,8 @@ begin
   end if;
   return new;
 end $$;
+
+revoke all on function public.tokens_atajo_no_desrevocar() from public, anon, authenticated;   -- el trigger dispara igual: solo hace falta EXECUTE al crearlo
 
 drop trigger if exists tokens_atajo_no_desrevocar on public.tokens_atajo;
 create trigger tokens_atajo_no_desrevocar before update on public.tokens_atajo
@@ -136,11 +141,18 @@ create table if not exists public.movimientos_pendientes (
   creado_en           timestamptz not null default now(),
   resuelto_en         timestamptz,
   resuelto_por        uuid references auth.users(id) on delete set null,
-  -- Evita duplicados: la misma huella (monto + comercio + ventana de tiempo) no entra dos veces en un proyecto.
+  -- Anti-duplicados, en dos capas (ventana de 3 minutos):
+  --   a) la función busca antes una propuesta del mismo proyecto, tipo, monto y comercio_norm creada en los últimos 3 minutos
+  --      (ventana móvil, sin el problema del corte de un balde); si existe, responde "ya existe" con esa propuesta (no es un error);
+  --   b) la huella = sha256(proyecto|tipo|monto|comercio_norm|floor(epoch/180)) y esta restricción única son la red de seguridad
+  --      si dos pedidos iguales llegan en el mismo instante: el INSERT que choca también se resuelve como "ya existe".
+  -- Dos compras reales idénticas en menos de 3 minutos se tomarían como una: por eso solo se aplica a los orígenes
+  -- automáticos (android-notif, ios-comprobante), no a los registros manuales.
   constraint movimientos_pendientes_huella_unica unique (proyecto_id, huella)
 );
 
 create index if not exists movimientos_pendientes_estado_idx on public.movimientos_pendientes (proyecto_id, estado, creado_en desc);
+create index if not exists movimientos_pendientes_ventana_idx on public.movimientos_pendientes (proyecto_id, tipo, monto, comercio_norm, creado_en desc);
 create index if not exists movimientos_pendientes_comercio_idx on public.movimientos_pendientes (proyecto_id, comercio_norm) where comercio_norm is not null;
 
 alter table public.movimientos_pendientes enable row level security;
@@ -157,10 +169,9 @@ create policy "resolver pendientes de mi proyecto" on public.movimientos_pendien
   to authenticated
   using (
     estado = 'pendiente'
-    and exists (
-      select 1 from public.miembros m
-      where m.proyecto_id = movimientos_pendientes.proyecto_id and m.user_id = auth.uid()
-        and m.estado = 'aceptado' and m.rol in ('dueno', 'editor')
+    and (
+      proyecto_id in (select public.mi_proyecto_como('dueno'))
+      or proyecto_id in (select public.mi_proyecto_como('editor'))
     )
   )
   with check (
@@ -181,3 +192,15 @@ begin
 exception when duplicate_object then null;
           when undefined_object then null;
 end $$;
+
+-- ============================================================
+--  CÓMO DESHACER TODO (copiar y correr en el SQL Editor; borra también los datos de estas dos tablas)
+--
+--    alter publication supabase_realtime drop table public.movimientos_pendientes;   -- si da error "not part of the publication", ignorarlo
+--    drop table if exists public.movimientos_pendientes;
+--    drop table if exists public.tokens_atajo;                      -- borra también sus triggers y policies
+--    drop function if exists public.consumir_cupo_atajo(uuid, integer);
+--    drop function if exists public.tokens_atajo_no_desrevocar();
+--
+--  Antes de borrar, revocá los atajos en la app (Ajustes > Atajos del celular) o las funciones dejarán de aceptar los tokens igualmente.
+-- ============================================================
