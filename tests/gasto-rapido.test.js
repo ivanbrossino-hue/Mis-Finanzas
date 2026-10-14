@@ -513,6 +513,32 @@ async function prueba(nombre, fn) {
     assert.ok(!lineas.join('\n').includes('COMERCIO-SECRETO') && !lineas.join('\n').includes(token));
   });
 
+  await prueba('updated_by: proyectos.updated_by es text (nube/4-proyectos-y-colaboradores.sql), igual que "app" y "bot": se escribe una marca de texto, no un uuid', async () => {
+    const sql = fs.readFileSync(path.join(__dirname, '..', 'nube', '4-proyectos-y-colaboradores.sql'), 'utf8');
+    assert.match(sql, /updated_by\s+text/, 'el esquema debería declarar updated_by como text');
+    const { token } = crearToken('gasto');
+    await llamar('POST', '/gasto', token, { categoria: 'salud', monto: 10 });
+    assert.equal(typeof db.proyectos[PROY].updated_by, 'string');
+    assert.match(db.proyectos[PROY].updated_by, /^atajo:[0-9a-f]{8}$/);
+  });
+  await prueba('Huella: orígenes NO automáticos (manual) -> aleatoria: dos propuestas idénticas seguidas no se unifican', async () => {
+    const { token } = crearToken('gasto');
+    db.anthropic = () => pago();
+    const a = await llamar('POST', '/propuesta', token, { origen: 'manual', texto: 'x' });
+    const b = await llamar('POST', '/propuesta', token, { origen: 'manual', texto: 'x' });
+    assert.equal(a.status, 201); assert.equal(b.status, 201); assert.notEqual(a.json.id, b.json.id);
+    assert.equal(db.pendientes.length, 2);
+    assert.notEqual(db.pendientes[0].huella, db.pendientes[1].huella);
+  });
+  await prueba('Huella: orígenes automáticos (ios-comprobante) siguen sin duplicarse', async () => {
+    const { token } = crearToken('gasto');
+    db.anthropic = () => pago();
+    const a = await llamar('POST', '/propuesta', token, { origen: 'ios-comprobante', texto: 'x' });
+    const b = await llamar('POST', '/propuesta', token, { origen: 'ios-comprobante', texto: 'x' });
+    assert.equal(a.status, 201); assert.equal(b.status, 200); assert.equal(b.json.ya_existe, true);
+    assert.equal(db.pendientes.length, 1);
+  });
+
   console.log(`\n${ok} bien, ${fallos} con falla`);
   process.exit(fallos ? 1 : 0);
 })();

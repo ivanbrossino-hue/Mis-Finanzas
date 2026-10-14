@@ -572,7 +572,7 @@ async function manejar(req: Request, ruta: string[]): Promise<Response> {
 
     const { fila, duplicado } = await guardarPendiente(s, {
       origen, tipo, monto, comercio, comercio_norm: comercioNorm, fecha, categoria_sugerida: sug.categoria, fila_sugerida: sug.concepto, confianza,
-    }, false);
+    }, !ORIGENES_AUTOMATICOS.includes(origen));     // huella aleatoria: el anti-duplicados solo vale para los orígenes automáticos
     return json({ ...respuestaPropuesta(fila, duplicado), comercio_conocido: conocido }, duplicado ? 200 : 201);
   }
 
