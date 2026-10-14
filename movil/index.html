@@ -38,7 +38,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-<link rel="stylesheet" href="styles.css?v=34">
+<link rel="stylesheet" href="styles.css?v=35">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
   /* Íconos de tema: sol en oscuro, luna en claro (lo que vas a activar al tocar) */
@@ -434,6 +434,17 @@
   <div class="qr-scan-hint" id="qrScanHint">Encuadrá el QR del pie del ticket dentro del cuadro</div>
 </div>
 
+<!-- Escáner de códigos de barra (lista de compras) -->
+<div class="qr-scan-back bc-back" id="bcScanBack">
+  <div class="qr-scan-topbar">
+    <span>Código de barras · <span id="bcSuper"></span></span>
+    <button type="button" id="bcClose" class="qr-scan-close" aria-label="Cerrar el escáner"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <video id="bcVideo" playsinline autoplay muted></video>
+  <div class="qr-scan-frame bc-frame"></div>
+  <div class="bc-sheet" id="bcSheet"></div>
+</div>
+
 <!-- Modal -->
 <div class="modal-back" id="modalBack">
   <div class="modal" id="modal" role="dialog" aria-modal="true"></div>
@@ -517,6 +528,7 @@
     <div class="chat-mensajes" id="chatMensajes"></div>
     <div class="chat-hist-backdrop" id="chatHistBackdrop"></div>
     <div class="chat-historial-lista" id="chatHistorialLista"></div>
+    <div class="lista-compra" id="listaCompra" style="display:none"></div>
     <div class="chat-chips" id="chatChips">
       <button class="chip" type="button" data-q="¿Cuánto gasté este mes?">¿Cuánto gasté?</button>
       <button class="chip" type="button" data-q="¿En qué categoría gasto más?">¿En qué gasto más?</button>
@@ -525,6 +537,9 @@
     </div>
     <div class="chat-input-bar" id="chatForm">
       <input type="text" id="chatInput" placeholder="Escribile al asistente" aria-label="Mensaje para el asistente" autocomplete="one-time-code" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true">
+      <button type="button" class="chat-cam" id="chatCamBtn" aria-label="Escanear código de barras">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5a1 1 0 011-1h2M17 4h2a1 1 0 011 1v2M20 17v2a1 1 0 01-1 1h-2M7 20H5a1 1 0 01-1-1v-2M8 8v8M11 8v8M14 8v8M17 8v8"/></svg>
+      </button>
       <button type="button" class="chat-send" id="chatSendBtn" aria-label="Enviar mensaje">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3L10 14M21 3l-7 18-4-7-7-4z"/></svg>
       </button>
@@ -539,7 +554,7 @@
 <input type="file" id="importFile" accept="application/json" style="display:none">
 
 <script src="datos-iniciales.js"></script>
-<script src="app.js?v=41"></script>
+<script src="app.js?v=42"></script>
 <script src="asistente.js?v=7"></script>
 <script>
   if ('serviceWorker' in navigator) {

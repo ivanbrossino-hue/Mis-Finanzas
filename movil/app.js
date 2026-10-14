@@ -630,6 +630,8 @@
       totalDeuda: totalDeuda(),
       totalCuotasMensuales: totalCuotasDeuda(),
       movimientosRecientes: recientes,
+      listaDeCompras: { supermercado: superNombre(listaCompra().super), total: totalLista(),
+        articulos: listaCompra().items.map(function (it) { return { nombre: it.nombre, monto: it.monto, cantidad: it.cantidad || 1 }; }) },
       mesAnterior: hayMesAnterior
         ? { nombre: mesKeyLabel(mAnt), totalIngresos: totalIngresos(mAnt), totalGastos: totalGastos(mAnt), gastosPorCategoria: gastosPorCategoria(mAnt) }
         : null,
@@ -709,6 +711,33 @@
     if (!r) return { aviso: '⚠️ No encontré “' + nombre + '”' + (donde ? ' en ' + donde : '') + '. No toqué nada.' };
     if (r.ambigua) return { aviso: '⚠️ “' + nombre + '” puede ser ' + r.ambigua.join(' o ') + '. Decime cuál.' };
     return { item: r.item };
+  }
+
+  // ---- Lista de compras (se arma por chat o con el escáner de códigos de barra) ----
+  // Vive en estado.lista = { super, items: [{ id, nombre, monto, cantidad, ean? }] }; se anota como UN gasto al terminar.
+  var SUPERMERCADOS = [
+    { id: 'carrefour', nombre: 'Carrefour' }, { id: 'dia', nombre: 'Día' }, { id: 'jumbo', nombre: 'Jumbo' },
+    { id: 'vea', nombre: 'Vea' }, { id: 'disco', nombre: 'Disco' }, { id: 'coto', nombre: 'Coto' }
+  ];
+  function listaCompra() {
+    if (!estado.lista || !Array.isArray(estado.lista.items)) estado.lista = { super: (estado.lista && estado.lista.super) || 'carrefour', items: [] };
+    return estado.lista;
+  }
+  function superNombre(id) {
+    var s = SUPERMERCADOS.filter(function (x) { return x.id === id; })[0];
+    return s ? s.nombre : String(id || '');
+  }
+  function superIdDeTexto(txt) {
+    var t = normalizarTexto(txt);
+    var s = SUPERMERCADOS.filter(function (x) { return x.id === t || normalizarTexto(x.nombre) === t; })[0];
+    return s ? s.id : String(txt || '').trim().slice(0, 30);
+  }
+  function totalLista() {
+    return listaCompra().items.reduce(function (s, it) { return s + (Number(it.monto) || 0); }, 0);
+  }
+  function agregarALista(nombre, monto, cantidad, ean) {
+    var l = listaCompra();
+    l.items.push({ id: uid(), nombre: String(nombre).slice(0, 60), monto: Math.max(0, Math.round(Number(monto) || 0)), cantidad: Math.max(1, Math.round(Number(cantidad) || 1)), ean: ean || null });
   }
 
   function ejecutarAccionChat(a) {
@@ -825,13 +854,49 @@
         else estado.catNombres[a.categoria] = a.nombre;
         return '✏️ La categoría “' + nombreAnterior + '” ahora se llama “' + getCatNombre(a.categoria) + '”.';
       }
+      case 'lista_agregar':
+        agregarALista(a.nombre, a.monto, a.cantidad);
+        return '🛒 ' + a.nombre + (a.cantidad > 1 ? ' ×' + a.cantidad : '') + ' ' + fmt(a.monto) + ' · van ' + fmt(totalLista()) + '.';
+      case 'lista_quitar': {
+        var lq = listaCompra();
+        e = elegirUno(buscarPorNombre(lq.items, a.nombre), a.nombre, 'la lista');
+        if (e.aviso) return e.aviso;
+        var itQ = e.item;
+        lq.items = lq.items.filter(function (x) { return x.id !== itQ.id; });
+        return '🗑️ Saqué ' + itQ.nombre + ' (' + fmt(itQ.monto) + ') · van ' + fmt(totalLista()) + '.';
+      }
+      case 'lista_quitar_ultimo': {
+        var lu = listaCompra();
+        if (!lu.items.length) return 'ℹ️ La lista está vacía.';
+        var ult = lu.items.pop();
+        return '🗑️ Saqué el último: ' + ult.nombre + ' (' + fmt(ult.monto) + ') · van ' + fmt(totalLista()) + '.';
+      }
+      case 'lista_vaciar': {
+        var lv = listaCompra(), cant = lv.items.length;
+        lv.items = [];
+        return cant ? '🗑️ Vacié la lista (' + cant + ' artículos).' : 'ℹ️ La lista ya estaba vacía.';
+      }
+      case 'lista_super': {
+        listaCompra().super = superIdDeTexto(a.nombre);
+        return '🏪 Supermercado de la lista: ' + superNombre(listaCompra().super) + '.';
+      }
+      case 'lista_registrar': {
+        var lr = listaCompra();
+        if (!lr.items.length) return 'ℹ️ La lista está vacía, no hay nada para anotar.';
+        var totalR = totalLista();
+        var catR = a.categoria || 'alimentacion';
+        var nombresR = lr.items.map(function (x) { return x.nombre; });
+        registrarCompra(catR, totalR, 'Compra en ' + superNombre(lr.super) + ': ' + nombresR.join(', ').slice(0, 140), lr.items.map(function (x) { return { nombre: x.nombre, precio: x.monto, cantidad: x.cantidad || 1 }; }), undefined, a.fila ? { nombre: a.fila } : null);
+        lr.items = [];
+        return '✅ Anoté la compra de ' + nombresR.length + ' artículos: ' + fmt(totalR) + ' en ' + getCatNombre(catR) + '.';
+      }
       default:
         return null;
     }
   }
   function aplicarAccionesChat(acciones) {
     var lineas = [];
-    (acciones || []).slice(0, 12).forEach(function (a) {
+    (acciones || []).slice(0, 30).forEach(function (a) {
       if (!a || !a.tipo) return;
       try {
         var l = ejecutarAccionChat(a);
@@ -998,6 +1063,7 @@
     if (!estado.meses[mesActivo]) mesActivo = asegurarMesActual();
     m.snap = null;
     m.deshecho = true;
+    renderListaCompra();
     (m.cards || []).forEach(function (c) {
       c.deshecho = true;
       var ix = chatYaRegistrados.indexOf(c.clave);
@@ -1022,6 +1088,7 @@
     if (panel) panel.classList.remove('modo-historial');
     document.getElementById('chatBack').classList.add('open');
     renderChatMensajes();
+    renderListaCompra();
     if (window.MFAsis) window.MFAsis.alAbrir(vista);
     else if (panel) { panel.classList.add('on'); document.getElementById('chatBack').classList.add('modo-chat'); }
   }
@@ -1145,6 +1212,7 @@
       chatPersistirLog();
       // Si el texto ya se fue viendo en vivo, no se vuelve a "tipear" desde cero
       renderChatMensajes(!textoVivo);
+      renderListaCompra();
       if (vozSesion) {
         // Ya se está hablando por frases: se suma lo que falte (por ejemplo si cambió la respuesta tras buscar en la web) y se cierra
         var yaDicho = textoVivo.trim();
@@ -1205,6 +1273,160 @@
       if (recibioAlgo) return { data: null, error: e };
       return sbClient.functions.invoke('chat-ia', { body: cuerpo });
     });
+  }
+
+  // ---------- Lista de compras: panel del chat ----------
+  var listaAbierta = true;
+  function renderListaCompra() {
+    var box = document.getElementById('listaCompra');
+    if (!box) return;
+    var l = listaCompra();
+    if (!l.items.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    box.style.display = '';
+    var opciones = SUPERMERCADOS.map(function (s) { return '<option value="' + s.id + '"' + (s.id === l.super ? ' selected' : '') + '>' + escapeHtml(s.nombre) + '</option>'; }).join('');
+    if (!SUPERMERCADOS.some(function (s) { return s.id === l.super; })) opciones += '<option value="' + escapeAttr(l.super) + '" selected>' + escapeHtml(l.super) + '</option>';
+    box.innerHTML =
+      '<div class="lc-head"><button type="button" class="lc-toggle" data-lc="toggle" aria-expanded="' + listaAbierta + '">🛒 Lista · ' + l.items.length + (l.items.length === 1 ? ' artículo' : ' artículos') + '</button>' +
+      '<select class="lc-super" data-lc="super" aria-label="Supermercado">' + opciones + '</select>' +
+      '<b class="lc-total">' + fmt(totalLista()) + '</b></div>' +
+      (listaAbierta
+        ? '<div class="lc-items">' + l.items.map(function (it) {
+          return '<div class="lc-item"><span class="lc-n">' + escapeHtml(it.nombre) + ((it.cantidad || 1) > 1 ? ' <i>×' + it.cantidad + '</i>' : '') + '</span><span class="lc-m">' + fmt(it.monto) + '</span>' +
+            '<button type="button" class="lc-x" data-lc="quitar" data-id="' + escapeAttr(it.id) + '" aria-label="Sacar ' + escapeAttr(it.nombre) + ' de la lista">✕</button></div>';
+        }).join('') + '</div>' +
+        '<div class="lc-acc"><button type="button" class="chip" data-lc="vaciar">Vaciar</button><button type="button" class="chip lc-ok" data-lc="anotar">Anotar como gasto</button></div>'
+        : '');
+    var cont = box.querySelector('.lc-items');
+    if (cont) cont.scrollTop = cont.scrollHeight;
+  }
+  function listaCompraClick(e) {
+    var b = e.target.closest('[data-lc]');
+    if (!b) return;
+    var acc = b.getAttribute('data-lc');
+    if (acc === 'toggle') { listaAbierta = !listaAbierta; renderListaCompra(); return; }
+    if (acc === 'super') return;
+    if (miRol === 'lector') { toast('Tu cuenta es de solo lectura.'); return; }
+    var l = listaCompra();
+    if (acc === 'quitar') {
+      l.items = l.items.filter(function (x) { return x.id !== b.getAttribute('data-id'); });
+    } else if (acc === 'vaciar') {
+      if (!confirm('¿Vaciar la lista de compras?')) return;
+      l.items = [];
+    } else if (acc === 'anotar') {
+      var linea = ejecutarAccionChat({ tipo: 'lista_registrar' });
+      toast(linea.replace(/^\S+\s/, ''));
+      render(false);
+    }
+    guardar();
+    renderListaCompra();
+  }
+
+  // ---------- Escáner de códigos de barra (para sumar un producto con su precio a la lista) ----------
+  // Lee EAN-13/EAN-8/UPC con BarcodeDetector (Chrome/Android) o, si el navegador no lo tiene, con la librería ZXing.
+  // El precio sale de la tienda online del supermercado elegido (función `precio-producto`); es el precio de la web,
+  // no siempre igual al de la góndola. Siempre se puede corregir el nombre y el precio antes de agregar.
+  var bcStream = null, bcRAF = null, bcZx = null, bcSigue = false;
+  function bcMsg(html) { var s = document.getElementById('bcSheet'); if (s) s.innerHTML = html; }
+  function parseMontoInput(v) { var n = Number(String(v || '').replace(/\./g, '').replace(',', '.').replace(/[^\d.]/g, '')); return Number.isFinite(n) ? n : 0; }
+
+  function abrirEscanerBarras() {
+    if (!(modoCuenta && miProyectoId)) { toast('Iniciá sesión primero.'); return; }
+    if (miRol === 'lector') { toast('Tu cuenta es de solo lectura.'); return; }
+    var back = document.getElementById('bcScanBack');
+    back.classList.add('open');
+    document.getElementById('bcSuper').textContent = superNombre(listaCompra().super);
+    bcEsperarCodigo();
+  }
+  function bcEsperarCodigo(aviso) {
+    bcMsg('<div class="bc-hint">' + escapeHtml(aviso || 'Apuntá al código de barras del producto') + '</div>' +
+      '<div class="bc-manual"><input type="text" inputmode="numeric" id="bcEan" placeholder="o escribí el código" autocomplete="off"><button type="button" class="chip" id="bcEanOk">Buscar</button></div>');
+    document.getElementById('bcEanOk').onclick = function () { var v = document.getElementById('bcEan').value.replace(/\D/g, ''); if (v.length >= 8) bcManejarCodigo(v); else toast('El código tiene entre 8 y 14 números.'); };
+    bcIniciarCamara();
+  }
+  function bcIniciarCamara() {
+    bcDetener();
+    var video = document.getElementById('bcVideo');
+    bcSigue = true;
+    if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) { bcMsg('<div class="bc-hint">Este navegador no deja usar la cámara. Escribí el código a mano.</div><div class="bc-manual"><input type="text" inputmode="numeric" id="bcEan" placeholder="código de barras"><button type="button" class="chip" id="bcEanOk">Buscar</button></div>'); document.getElementById('bcEanOk').onclick = function () { var v = document.getElementById('bcEan').value.replace(/\D/g, ''); if (v.length >= 8) bcManejarCodigo(v); }; return; }
+    if ('BarcodeDetector' in window) {
+      var det;
+      try { det = new window.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e'] }); } catch (e) { det = null; }
+      if (det) {
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(function (stream) {
+          if (!bcSigue) { stream.getTracks().forEach(function (t) { t.stop(); }); return; }
+          bcStream = stream; video.srcObject = stream; video.play();
+          (function tick() {
+            if (!bcSigue) return;
+            det.detect(video).then(function (r) {
+              if (r && r.length && r[0].rawValue) { bcManejarCodigo(r[0].rawValue); return; }
+              bcRAF = requestAnimationFrame(tick);
+            }, function () { bcRAF = requestAnimationFrame(tick); });
+          })();
+        }).catch(function () { toast('No pude acceder a la cámara.'); });
+        return;
+      }
+    }
+    // Sin BarcodeDetector (Safari, Firefox, Chrome de escritorio en Windows): ZXing por CDN
+    function usarZX() {
+      try {
+        bcZx = new window.ZXing.BrowserMultiFormatReader();
+        bcZx.decodeFromVideoDevice(undefined, video, function (res) {
+          if (res && bcSigue) { var t = res.getText ? res.getText() : res.text; if (t) bcManejarCodigo(t); }
+        }).catch(function () { toast('No pude acceder a la cámara.'); });
+      } catch (e) { toast('No se pudo iniciar el lector. Escribí el código a mano.'); }
+    }
+    if (window.ZXing) { usarZX(); return; }
+    var sc = document.createElement('script');
+    sc.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
+    sc.onload = function () { if (bcSigue) usarZX(); };
+    sc.onerror = function () { toast('No se pudo cargar el lector. Escribí el código a mano.'); };
+    document.head.appendChild(sc);
+  }
+  function bcDetener() {
+    bcSigue = false;
+    if (bcRAF) { cancelAnimationFrame(bcRAF); bcRAF = null; }
+    if (bcZx) { try { bcZx.reset(); } catch (e) {} bcZx = null; }
+    if (bcStream) { bcStream.getTracks().forEach(function (t) { t.stop(); }); bcStream = null; }
+    var v = document.getElementById('bcVideo');
+    if (v) v.srcObject = null;
+  }
+  function cerrarEscanerBarras() {
+    bcDetener();
+    document.getElementById('bcScanBack').classList.remove('open');
+    renderListaCompra();
+  }
+  function bcManejarCodigo(ean) {
+    ean = String(ean).replace(/\D/g, '');
+    if (ean.length < 8) return;
+    bcDetener();
+    var sup = listaCompra().super;
+    bcMsg('<div class="bc-hint">Código ' + escapeHtml(ean) + ' · buscando precio en ' + escapeHtml(superNombre(sup)) + '…</div>');
+    sbClient.functions.invoke('precio-producto', { body: { ean: ean, super: sup } }).then(function (res) {
+      var d = res && res.data;
+      var nombre = '', precio = 0, aviso = '';
+      if (res.error || !d || (d.error && d.code !== 'no_soportado')) aviso = 'No pude consultar el precio ahora. Cargalo a mano.';
+      else if (d.code === 'no_soportado') aviso = superNombre(sup) + ' no tiene consulta automática de precios. Cargá el precio a mano.';
+      else if (!d.encontrado) aviso = 'No encontré ese código en ' + superNombre(sup) + '. Cargá el nombre y el precio a mano.';
+      else { nombre = d.nombre; precio = d.precio; if (!d.disponible) aviso = 'Ojo: figura sin stock en la tienda online, revisá el precio.'; else aviso = 'Precio de la tienda online de ' + d.tienda + '; puede diferir del de la góndola.'; }
+      bcFormulario(ean, nombre, precio, aviso);
+    }, function () { bcFormulario(ean, '', 0, 'No pude consultar el precio ahora. Cargalo a mano.'); });
+  }
+  function bcFormulario(ean, nombre, precio, aviso) {
+    bcMsg('<div class="bc-hint">' + escapeHtml(aviso) + '</div>' +
+      '<div class="bc-form"><input type="text" id="bcNombre" placeholder="Producto" value="' + escapeAttr(nombre) + '">' +
+      '<div class="bc-fila"><input type="text" inputmode="decimal" id="bcPrecio" placeholder="Precio $" value="' + (precio ? precio : '') + '"><input type="number" id="bcCant" min="1" max="99" value="1" aria-label="Cantidad"></div>' +
+      '<div class="bc-fila"><button type="button" class="chip" id="bcOtro">Cancelar</button><button type="button" class="chip lc-ok" id="bcAdd">Agregar a la lista</button></div></div>');
+    document.getElementById('bcOtro').onclick = function () { bcEsperarCodigo(); };
+    document.getElementById('bcAdd').onclick = function () {
+      var n = document.getElementById('bcNombre').value.trim() || ('Producto ' + ean);
+      var cant = Math.max(1, parseInt(document.getElementById('bcCant').value, 10) || 1);
+      var unit = parseMontoInput(document.getElementById('bcPrecio').value);
+      if (!(unit > 0)) { toast('Poné el precio.'); return; }
+      agregarALista(n, unit * cant, cant, ean);
+      guardar(); renderListaCompra();
+      toast('Agregado: ' + n + ' · van ' + fmt(totalLista()));
+      bcEsperarCodigo('Listo. Escaneá el siguiente o cerrá.');
+    };
   }
 
   // ---------- Persistencia ----------
@@ -3997,6 +4219,15 @@
       if (e.target === this) cerrarModal();
     });
     document.getElementById('qrScanClose').onclick = cerrarEscanerQR;
+    document.getElementById('bcClose').onclick = cerrarEscanerBarras;
+    document.getElementById('chatCamBtn').onclick = abrirEscanerBarras;
+    var lcBox = document.getElementById('listaCompra');
+    lcBox.addEventListener('click', listaCompraClick);
+    lcBox.addEventListener('change', function (e) {
+      if (e.target.getAttribute('data-lc') !== 'super') return;
+      if (miRol === 'lector') { toast('Tu cuenta es de solo lectura.'); renderListaCompra(); return; }
+      listaCompra().super = e.target.value; guardar();
+    });
     document.getElementById('chatFab').onclick = function () { abrirChat(); };
     document.getElementById('chatClose').onclick = cerrarChat;
     (function () {

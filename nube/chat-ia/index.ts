@@ -48,6 +48,7 @@ const TIPOS_ACCION = [
   "mes_ir", "mes_nuevo", "movimiento_editar", "movimiento_eliminar", "fila_agregar", "fila_editar", "fila_eliminar",
   "ingreso_agregar", "ingreso_editar", "ingreso_eliminar", "deuda_agregar", "deuda_editar", "deuda_eliminar",
   "presupuesto_quitar", "categoria_renombrar",
+  "lista_agregar", "lista_quitar", "lista_quitar_ultimo", "lista_vaciar", "lista_registrar", "lista_super",
 ];
 
 // Parte FIJA del prompt (no cambia entre pedidos): va primero y se guarda en caché, así cada
@@ -110,6 +111,12 @@ function promptEstatico(): string {
     "  ingreso_agregar {nombre, monto} · ingreso_editar {nombre, monto?, nuevoNombre?} · ingreso_eliminar {nombre}.",
     "  deuda_agregar {nombre, saldo, cuotaMensual, cuotaActual?, cuotaTotal?} · deuda_editar {deuda, saldo?, cuotaMensual?, cuotaActual?, cuotaTotal?, nuevoNombre?} · deuda_eliminar {deuda}.",
     "  presupuesto_quitar {categoria} saca el tope de una categoría. · categoria_renombrar {categoria, nombre} cambia cómo se llama una categoría (nombre vacío = el original).",
+    "LISTA DE COMPRAS (el usuario va comprando y te va dictando o escribiendo lo que lleva; la app mantiene la lista y su total, ver \"listaDeCompras\" del CONTEXTO):",
+    "  lista_agregar {nombre, monto, cantidad?} suma un artículo a la lista. \"monto\" es el precio total de esa línea (si dice \"2 a 1500 cada uno\", monto = 3000 y cantidad = 2). Si no dice el precio, preguntalo (no inventes).",
+    "  lista_quitar {nombre} saca un artículo por nombre (\"sacá el arroz\"). · lista_quitar_ultimo {} saca el último agregado (\"borrá lo anterior\", \"no, ese no\"). · lista_vaciar {} vacía todo (pedí confirmación antes).",
+    "  lista_super {nombre} fija el supermercado de la lista (carrefour, dia, jumbo, vea, disco, coto u otro texto). · lista_registrar {categoria?, fila?} anota la lista ENTERA como UN gasto (categoría por defecto: alimentacion) y la vacía; solo cuando el usuario diga que terminó o pida anotarla.",
+    "  Mientras arma la lista NO uses \"registrar\" para esos artículos: van a la lista. Respondé corto (\"Listo, arroz $ 1.800. Van $ 12.400.\") usando el total de \"listaDeCompras\" + lo que agregás ahora (el total ya incluye lo previo; sumá solo lo nuevo).",
+    "  Si el usuario dice un artículo ya presente (igual nombre), agregalo igual salvo que diga \"corregí\"; para corregir un precio, quitá el artículo y agregalo de nuevo con el monto bueno.",
     "No existen otras acciones: si te piden algo que no está acá, decí con honestidad que eso todavía no lo podés hacer desde el chat y cómo hacerlo a mano en la app.",
     "",
     "=== BÚSQUEDA WEB (promos y precios) ===",
@@ -183,7 +190,7 @@ const HERRAMIENTA_RESPONDER = {
             mes: { type: "string" }, id: { type: "string" }, monto: { type: "number" }, nota: { type: "string" },
             categoria: { type: "string", enum: Object.keys(CATEGORIAS) }, fila: { type: "string" }, nuevoNombre: { type: "string" },
             nombre: { type: "string" }, deuda: { type: "string" }, saldo: { type: "number" }, cuotaMensual: { type: "number" },
-            cuotaActual: { type: "number" }, cuotaTotal: { type: "number" },
+            cuotaActual: { type: "number" }, cuotaTotal: { type: "number" }, cantidad: { type: "number" },
           },
           required: ["tipo"],
         },
@@ -302,7 +309,7 @@ function catValida(v: unknown): string { return typeof v === "string" && CATEGOR
 function sanearAcciones(lista: unknown): any[] {
   if (!Array.isArray(lista)) return [];
   const out: any[] = [];
-  for (const a of lista.slice(0, 12) as any[]) {
+  for (const a of lista.slice(0, 30) as any[]) {
     if (!a || typeof a !== "object") continue;
     const tipo = txt(a.tipo, 40);
     const it: any = { tipo };
@@ -379,6 +386,23 @@ function sanearAcciones(lista: unknown): any[] {
       case "categoria_renombrar": {
         it.categoria = catValida(a.categoria); if (!it.categoria) break;
         it.nombre = txt(a.nombre, 40);
+        out.push(it);
+        break;
+      }
+      case "lista_agregar": {
+        it.nombre = txt(a.nombre, 60); const monto = ent(a.monto);
+        if (!it.nombre || monto === undefined || monto < 0) break;
+        it.monto = monto;
+        const cant = ent(a.cantidad); if (cant !== undefined && cant > 0 && cant < 1000) it.cantidad = cant;
+        out.push(it);
+        break;
+      }
+      case "lista_quitar": { it.nombre = txt(a.nombre, 60); if (it.nombre) out.push(it); break; }
+      case "lista_quitar_ultimo": case "lista_vaciar": out.push(it); break;
+      case "lista_super": { it.nombre = txt(a.nombre, 30); if (it.nombre) out.push(it); break; }
+      case "lista_registrar": {
+        const cat = catValida(a.categoria); if (cat) it.categoria = cat;
+        const fila = txt(a.fila); if (fila) it.fila = fila;
         out.push(it);
         break;
       }

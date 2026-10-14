@@ -636,3 +636,31 @@ svg { flex-shrink: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }
+
+/* Lista de compras del chat + escaner de codigos de barra */
+.chat-cam { width: 40px; height: 40px; border-radius: 20px; border: 0; flex: none; display: flex; align-items: center; justify-content: center; padding: 0; background: transparent; color: var(--muted); }
+.lista-compra { flex: none; margin: 0 16px 10px; padding: 10px 12px; border-radius: 18px; background: var(--card, rgba(255,255,255,.06)); border: 1px solid var(--line, rgba(255,255,255,.12)); }
+.lc-head { display: flex; align-items: center; gap: 8px; }
+.lc-toggle { flex: 1; min-width: 0; text-align: left; border: 0; background: transparent; color: var(--text); font-weight: 700; font-size: 14px; padding: 4px 0; }
+.lc-super { border: 1px solid var(--line, rgba(255,255,255,.15)); background: transparent; color: var(--text); border-radius: 12px; padding: 4px 6px; font-size: 13px; max-width: 110px; }
+.lc-super option { color: #111; }
+.lc-total { font-size: 15px; color: var(--accent); white-space: nowrap; }
+.lc-items { max-height: 132px; overflow-y: auto; margin-top: 6px; display: flex; flex-direction: column; gap: 2px; }
+.lc-item { display: flex; align-items: center; gap: 8px; font-size: 14px; min-height: 32px; }
+.lc-n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-n i { color: var(--muted); font-style: normal; }
+.lc-m { color: var(--muted); white-space: nowrap; }
+.lc-x { width: 32px; height: 32px; border: 0; background: transparent; color: var(--muted); font-size: 15px; border-radius: 16px; flex: none; }
+.lc-acc { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.lc-ok { background: var(--accent); color: var(--onaccent); border-color: transparent; }
+.bc-back { z-index: 400; }
+.bc-back.open { display: flex; }
+.bc-frame { width: min(84vw, 340px); height: min(36vw, 150px); border-radius: 16px; top: 38%; }
+.bc-sheet { position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 16px calc(20px + env(safe-area-inset-bottom)); background: rgba(10,20,15,.92); color: #fff; border-radius: 22px 22px 0 0; display: flex; flex-direction: column; gap: 10px; max-height: 60%; overflow-y: auto; }
+.bc-hint { font-size: 13px; font-weight: 600; text-align: center; opacity: .9; }
+.bc-manual, .bc-fila { display: flex; gap: 8px; }
+.bc-sheet input { flex: 1; min-width: 0; height: 44px; border-radius: 14px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: #fff; padding: 0 12px; font-size: 16px; }
+.bc-sheet input[type=number] { flex: none; width: 76px; }
+.bc-form { display: flex; flex-direction: column; gap: 8px; }
+.bc-fila .chip { flex: 1; justify-content: center; height: 44px; }
+@media (min-width: 900px) { .lista-compra { margin: 0 24px 10px; } }
