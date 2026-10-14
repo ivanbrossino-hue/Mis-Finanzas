@@ -9,7 +9,8 @@ Un único backend (la Edge Function `gasto-rapido`) para tres clientes:
 | **App web** (`movil/`) | Muestra las propuestas pendientes para registrarlas o ignorarlas; administra los tokens | (usa la sesión de Google, no tokens) |
 
 Estado de las fases: 0 diseño ✔ · 1 SQL 12 ✔ (aplicado) · 1b sincronización segura ✔ · 2 función ✔ (deployada) · 3 interfaz ✔ · 4 pruebas y documentación ✔ ·
-**Pendiente:** SQL 13, auditoría de escritores (ver más abajo), atajo del iPhone, app de Android. Nada de esto está en `main` todavía.
+bot de Telegram con escritura segura ✔ (sin deployar) · app de la raíz cerrada ✔ · SQL 13 escrito, opcional, sin aplicar.
+**Pendiente:** atajo del iPhone y app de Android. Nada de esto está en `main` todavía.
 
 ## 1. Cómo se escribe sin pisar a nadie
 
@@ -139,6 +140,7 @@ Cada uno se puede borrar desde la app (Historial → papelera), que también res
 | Fusión de tres vías (13 pruebas) | `node tests/sync-merge.test.js` |
 | La función contra un Supabase y un Claude **simulados** (37 pruebas: auth, alcances, tope de 60/h, `/gasto`, idem, meses, concurrencia, propuestas, duplicados, deshacer, logs) | `node tests/gasto-rapido.test.js` |
 | Un servidor local con la función simulada, para ensayar los scripts sin tocar nada | `node tests/servidor-simulado.js` (imprime tokens falsos) |
+| El bot de Telegram (10 pruebas: conflicto de rev, no dice "cargado" si no guardó, fila nueva, nota) | `node tests/telegram-bot.test.js` (con `BOT_FILE=<ruta>` prueba otra versión del bot) |
 | La función **real** de punta a punta con curl | `TOKEN='mfa_…' bash scripts/prueba-gasto-rapido.sh` (sin `TOKEN` solo comprueba los 401). Usa 1 peso y lo deshace |
 | Concurrencia contra la base **real** con 2 tokens | ver 6.1 |
 
@@ -155,59 +157,67 @@ Los simuladores reproducen el comportamiento esperado de la base; no reemplazan 
 4. Resultado esperado: `RESULTADO: OK`. Es normal que algún pedido dé `503 ocupado` si hay muchísima actividad (no se guarda y se reintenta); lo que **no** puede pasar es que el total sea menor al esperado.
 5. **Revocá** los dos tokens de prueba.
 
-## 7. Auditoría de escritores de `proyectos` y SQL 13 (estado)
+## 7. Quién escribe `proyectos.data` (auditoría) y SQL 13 (opcional)
 
-Quién escribe `proyectos.data`:
-
-| Escritor | Cómo escribe hoy | Estado |
+| Escritor | Cómo escribe | Estado |
 |---|---|---|
-| `movil/app.js` (v44 en adelante) | Condicional por `rev` + fusión de tres vías | ✔ protegido |
+| `movil/app.js` (desde la v44) | Condicional por `rev` + fusión de tres vías | ✔ protegido |
 | `gasto-rapido` | Condicional por `rev` + reintentos | ✔ protegido |
-| **`nube/telegram-bot`** (`writeState`) | `PATCH ?id=eq.X` con `rev+1` de lo que leyó, **sin condición y sin mirar el resultado** | ⚠ ventana corta en la que puede pisar |
-| **`app.js` de la raíz** (versión de escritorio, modo cuenta de Google) | `update … .eq('id')` con `rev = local+1`, **sin condición**; el poll usa `<=` | ⚠ **escritor a ciegas** si se usa la URL de la raíz con Google |
-| `unirse-por-link` | Solo borra un proyecto propio sin usar o con confirmación | sin riesgo de pisar |
+| `nube/telegram-bot` (versión de esta rama) | Condicional por `rev`, relee y reaplica hasta 3 veces; si no puede, **no dice "cargado"**, avisa que no se guardó y deja la compra en curso para reintentar | ✔ protegido (hay que deployarlo: ver checklist b) |
+| `app.js` de la raíz (versión de escritorio vieja) | Con sesión de Google **redirige a `/movil/`** (conserva `?invite=`) y nunca escribe en `proyectos`. El modo local (`file://`, `localStorage`) no cambia | ✔ cerrado |
+| `unirse-por-link` | Solo borra un proyecto propio sin usar (o con confirmación) | sin riesgo de pisar |
 | `resumen-semanal`, `enviar-notificacion`, `chat-ia`, `leer-ticket`, `tts`, `precio-producto`, `invitar-colaborador` | Solo leen o no tocan `proyectos` | — |
-| `app.js` de la raíz y `movil/app.js` al crear el proyecto (`insert`) | Alta inicial | — |
+| Alta del proyecto (`insert`) en las dos apps | Creación inicial | — |
 
-**SQL 13 (trigger que exige `rev = anterior + 1`): NO está escrito ni aplicado.** Sería una red de seguridad en la base: cualquier `UPDATE` de `proyectos` cuyo `rev` nuevo no sea exactamente el anterior más 1 se rechaza. Antes de aplicarlo hay que resolver los dos escritores marcados ⚠, porque con el trigger:
-* el **bot** recibiría un error que hoy ignora y le diría "✅ cargado" a una persona cuyo gasto no se guardó;
-* la **app de la raíz** perdería el cambio local de alguien con datos viejos.
+**Por qué la raíz redirige en vez de incorporar `sync-merge.js`:** es la opción de menor riesgo. Esa app es una copia vieja y aparte (100 KB) que no usa el estado nuevo (lista de compras, movimientos con `origen`, etc.): sumarle la fusión de tres vías era mantener dos pilas de sincronización y arriesgar romper un archivo que ya no se desarrolla. Con la redirección es imposible que guarde a ciegas, el link de invitación sigue funcionando (la sesión de Google y el token viven en el mismo `localStorage`) y `/movil/` ya trae el diseño para PC. Además `guardarEnProyecto` quedó con un guard que nunca escribe en modo cuenta.
 
-Orden recomendado: (1) pasar el bot a escritura condicional con reintentos (cambio chico, igual que `gasto-rapido`), (2) hacer lo mismo con la app de la raíz o dejarla de usar (redirigir a `/movil/`), (3) con los dos celulares ya en la versión nueva, recién ahí escribir y aplicar el SQL 13.
+### SQL 13 — `nube/13-exigir-rev.sql` (OPCIONAL, no aplicado)
+
+Trigger que rechaza (error 40001) cualquier `UPDATE` que cambie `proyectos.data` sin que `rev` suba exactamente en 1. Es una red de seguridad **más adelante**, no hace falta para el registro rápido ni está en el checklist obligatorio. Tiene su bloque para apagarlo (`drop trigger` + `drop function`) y las condiciones previas en el encabezado del archivo (bot nuevo deployado, todos en la versión 46 o superior, respaldo hecho).
 
 ## 8. Checklist de despliegue
 
-En este orden. No generes tokens antes del paso **d**.
+En este orden. No generes tokens antes del paso **e**. Cada paso con deploy o merge se hace solo con tu OK explícito.
 
 **a. Respaldos**
 - [ ] En la app (cada uno): Ajustes → Respaldar y restaurar → **Descargar copia** (JSON). Guardarla fuera del teléfono.
 - [ ] En Supabase → SQL Editor: `select id, rev, updated_by, updated_at, data from public.proyectos;` → **Download CSV/JSON**. Guardarlo.
-- [ ] Anotar los hashes: tag de vuelta atrás `pre-sync-change` (commit `f16a875`) y el último commit de `registro-rapido`.
+- [ ] Anotar el tag de vuelta atrás `pre-sync-change` (commit `f16a875`) y el último commit de `registro-rapido`.
 
-**b. Mezclar a `main` y publicar**
+**b. Bot de Telegram nuevo** (es el que usan todos los días: probarlo con calma)
+- [ ] Guardar el código actual del bot por si hay que volver (`git show pre-sync-change:nube/telegram-bot/index.ts`).
+- [ ] Deployar **solo** `telegram-bot` desde la carpeta temporal `supabase/functions/telegram-bot` (conserva `verify_jwt` apagado y el secreto del webhook; no cambia ningún secreto).
+- [ ] Probar por Telegram: mandar `2000 arroz`, tocar **Sumar al total**, categoría, fila → tiene que decir "✅ Sumado" y verse en la app. Probar también **fila nueva** y `/nota`. Borrar el gasto de prueba desde el Historial.
+- [ ] Si algo falla: volver a deployar el código guardado en el primer punto.
+
+**c. Mezclar a `main` y publicar**
 - [ ] `git checkout main && git merge --no-ff registro-rapido && git push origin main` (lo hago yo cuando me des el OK).
 - [ ] Esperar 1–3 minutos a que GitHub Pages publique y comprobar que sirve lo nuevo, por ejemplo: `curl -s https://ivanbrossino-hue.github.io/Mis-Finanzas/movil/index.html | grep -o 'app.js?v=[0-9]*'` (ajustar el dominio si es otro) → tiene que decir `app.js?v=46` (o la versión actual).
 
-**c. Los dos celulares abren la app nueva (dos veces cada uno)**
+**d. Los dos celulares abren la app nueva (dos veces cada uno)**
 - [ ] 1.ª apertura: la app todavía usa lo viejo guardado en el celular y baja la versión nueva en segundo plano.
 - [ ] 2.ª apertura (cerrar del todo y volver a abrir): ya corre la nueva.
 - [ ] Ajustes → abajo de todo tiene que decir **`Versión 46 · sincronización segura activa`**. Si dice otra versión o "sin sincronización segura", cerrarla del todo y abrirla de nuevo (o reinstalar el acceso directo). **Los dos** celulares (y la PC) tienen que decirlo antes de seguir.
-- [ ] Usar la app de la raíz (versión de escritorio vieja) **no** es seguro mientras no esté resuelto el punto ⚠ de la sección 7: en la PC usar `/movil/`.
+- [ ] Si alguien abre la URL vieja de la raíz con su cuenta de Google, la app lo lleva sola a `/movil/`.
 
-**d. Recién ahora, tu token (Android) y la prueba de 1 peso**
+**e. Recién ahora, tu token (Android) y la prueba de 1 peso**
 - [ ] Ajustes → Atajos del celular → Conectar un celular → **Android** → copiar el código (no se vuelve a mostrar).
 - [ ] Probar: `TOKEN='mfa_…' bash scripts/prueba-gasto-rapido.sh` (usa 1 peso en Alimentación y lo deshace). Con token de Android prueba el flujo de propuestas (el texto de ejemplo es un supuesto).
-- [ ] Ver en la app: la propuesta/gasto aparece (Pendientes o Historial con la marca del teléfono) y desaparece al deshacer.
+- [ ] Ver en la app: la propuesta o el gasto aparece (Pendientes o Historial con la marca del teléfono) y desaparece al deshacer.
 
-**e. Tu pareja ve el movimiento y todo sigue sincronizado**
+**f. Tu pareja ve el movimiento y todo sigue sincronizado**
 - [ ] Repetir un registro de 1 peso **sin** deshacer; en el celular de tu pareja (con la app abierta) tiene que aparecer en unos segundos ("Actualizado ☁️") en Historial.
 - [ ] Que cada uno cargue un gasto a mano a la vez (mismo momento) y verificar que **ambos** aparecen en los dos celulares y en `select data from proyectos`.
+- [ ] Que uno cargue por Telegram mientras el otro carga en la app y verificar que no se pierde ninguno.
 - [ ] Deshacer o borrar los de prueba. Opcional: `TOKEN_A=… TOKEN_B=… bash scripts/prueba-concurrencia.sh` (sección 6.1).
 
-**f. Volver atrás**
+**g. Volver atrás**
 - [ ] **Revocar tokens** (sección 4): app o SQL.
 - [ ] **Código:** `git revert -m 1 <hash del merge>` en `main` y `git push` (Pages vuelve a publicar la versión anterior). El tag `pre-sync-change` apunta al último commit de `main` antes de todo esto, para comparar o crear una rama de rescate: `git checkout -b rescate pre-sync-change`. Cada celular recupera la versión anterior con la misma regla de dos aperturas.
-- [ ] **Función:** se puede dejar deployada (sin tokens vigentes no responde a nadie) o borrarla desde el panel de Supabase → Edge Functions.
+- [ ] **Bot:** volver a deployar el código anterior (paso b).
+- [ ] **Función `gasto-rapido`:** se puede dejar deployada (sin tokens vigentes no responde a nadie) o borrarla desde el panel de Supabase → Edge Functions.
 - [ ] **SQL 12:** sección 5 (después de revocar tokens).
 - [ ] **Datos que ya escribió la función:** quedan en `proyectos.data` (movimientos con `rq_`/`rp_`, meses con `creadoPor:"atajo"`). Las versiones viejas de la app los muestran como cualquier movimiento (ignoran los campos extra). Para listarlos usar la consulta de solo lectura de la sección 5 y borrarlos desde el Historial si hace falta. Si se quiere volver exactamente al estado previo, restaurar el respaldo del paso **a** (Ajustes → Respaldar y restaurar), sabiendo que se pierde todo lo cargado después.
-- [ ] Una app vieja (anterior a la v44) que quede abierta en algún celular vuelve a guardar "a ciegas": después de volver atrás, abrir la app dos veces en cada celular.
+- [ ] Una app vieja (anterior a la v44) que quede abierta en algún celular vuelve a guardar "a ciegas": después de volver atrás, abrirla dos veces en cada celular.
+
+**Opcional, más adelante:** SQL 13 (sección 7). No hace falta para nada de lo anterior.

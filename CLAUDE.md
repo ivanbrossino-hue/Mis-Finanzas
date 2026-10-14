@@ -8,7 +8,7 @@ Dos versiones de la misma app + backend en Supabase:
 
 | Carpeta | Qué es |
 |---|---|
-| raíz (`index.html`, `app.js` ~100 KB, `styles.css`, `datos-iniciales.js`) | Versión **escritorio**. Se abre con doble clic (`file://`) o hosteada. |
+| raíz (`index.html`, `app.js` ~100 KB, `styles.css`, `datos-iniciales.js`) | Versión **escritorio**. Se abre con doble clic (`file://`) o hosteada. **Con sesión de Google redirige a `/movil/`** (nunca guarda en `proyectos`: guardaba a ciegas); el modo local no cambia. |
 | `movil/` | Versión **móvil / PWA**, con el **rediseño "verde profundo + vidrio" (oscuro/claro)** ya implementado en local (ver `docs/REDISENO.md`): `index.html` (shell, 6 páginas, nav de 5 pestañas, overlay del asistente), `styles.css` (tokens + componentes), `app.js` (lógica, un IIFE), `asistente.js` (pantalla de voz, elegir voz, reproductor ElevenLabs/navegador), `manifest.json`, `sw.js`, `icons/`. Chart.js, jsQR y supabase-js por CDN; sin Tailwind. Tiene chat IA, escáner de tickets, push y login. |
 | `nube/` | Código fuente SQL + Edge Functions (Deno). **Nunca lo ejecuta el navegador**: se pega a mano en el dashboard de Supabase. No hay Deno instalado acá para tipar `*.ts`. |
 

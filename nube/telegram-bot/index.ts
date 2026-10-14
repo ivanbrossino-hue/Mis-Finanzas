@@ -94,14 +94,35 @@ async function readState(proyectoId: string): Promise<{ data: any; rev: number }
   if (rows[0]) return { data: rows[0].data ?? {}, rev: rows[0].rev ?? 0 };
   return { data: { version: 1, meses: {}, deudas: [], catNombres: {} }, rev: 0 };
 }
-async function writeState(proyectoId: string, data: any, rev: number) {
-  const r = await fetch(`${SB_URL}/rest/v1/proyectos?id=eq.${proyectoId}`, {
-    method: "PATCH",
-    headers: sbHeaders({ Prefer: "return=minimal" }),
-    body: JSON.stringify({ data, rev: rev + 1, updated_by: "bot", updated_at: new Date().toISOString() }),
-  });
-  if (!r.ok) console.error("writeState fallo:", r.status, await r.text());
+// No se pudo guardar después de los reintentos: el llamador NO debe decir que se cargó.
+class SinGuardar extends Error {}
+const MAX_REINTENTOS = 3;
+
+// Escritura segura: lee el estado, aplica `operacion` sobre esa copia y guarda con UPDATE condicional
+// (WHERE rev = el leído). Si otra persona (o la app, o el atajo) escribió antes, no actualiza nada: se vuelve a
+// leer y se REAPLICA la misma operación sobre lo recién leído (hasta 3 reintentos), así nunca se pisa lo de otro.
+// `operacion` puede devolver false para indicar que no hay nada que guardar, o tirar un error para abortar sin escribir.
+// Si no se logra guardar tira SinGuardar (nada quedó escrito).
+async function mutarProyecto(proyectoId: string, operacion: (data: any) => boolean | void): Promise<boolean> {
+  for (let intento = 0; intento <= MAX_REINTENTOS; intento++) {
+    const st = await readState(proyectoId);
+    if (operacion(st.data) === false) return false;
+    const r = await fetch(`${SB_URL}/rest/v1/proyectos?id=eq.${proyectoId}&rev=eq.${st.rev}&select=rev`, {
+      method: "PATCH",
+      headers: sbHeaders({ Prefer: "return=representation" }),
+      body: JSON.stringify({ data: st.data, rev: st.rev + 1, updated_by: "bot", updated_at: new Date().toISOString() }),
+    });
+    if (r.ok) {
+      const filas = await r.json().catch(() => []);
+      if (Array.isArray(filas) && filas.length === 1) return true;   // se actualizó 1 fila: sin conflicto
+    } else {
+      console.error("mutarProyecto: el guardado falló", r.status);
+    }
+    await new Promise((ok) => setTimeout(ok, 40 + Math.random() * 120 * (intento + 1)));   // conflicto: alguien escribió antes
+  }
+  throw new SinGuardar();
 }
+const AVISO_SIN_GUARDAR = "⚠️ No se guardó (hay mucha actividad en la cuenta en este momento). No se cargó nada: probá de nuevo.";
 async function getSesion(chat: number): Promise<Sesion> {
   const r = await fetch(`${SB_URL}/rest/v1/pending_bot?chat_id=eq.${chat}&select=sesion`, { headers: sbHeaders() });
   const rows = await r.json();
@@ -340,26 +361,40 @@ Deno.serve(async (req) => {
         const idx = parseInt(data.slice(4), 10);
         const filaId = s.filaIds[idx];
         const total = totalCarrito(s);
-        const st = await readState(proyectoId);
         const key = mesActualKey();
-        const m = st.data.meses?.[key];
-        const fila = m && (m.gastos || []).find((g: any) => g.id === filaId);
-        if (!fila) {
+        const movId = uidBot("tgm");
+        let filaNombre = "", filaMonto = 0, filaFalta = false;
+        try {
+          await mutarProyecto(proyectoId, (data) => {
+            const m = data.meses?.[key];
+            const fila = m && (m.gastos || []).find((g: any) => g.id === filaId);
+            if (!fila) { filaFalta = true; return false; }
+            filaFalta = false;
+            if (!m.movimientos) m.movimientos = [];
+            if (!m.movimientos.some((x: any) => x.id === movId)) {   // por si un reintento ya lo había alcanzado a guardar
+              fila.monto = (Number(fila.monto) || 0) + total;
+              m.movimientos.push({
+                id: movId, fecha: isoHoy(), categoria: s.catElegida, filaId: fila.id, fila: fila.nombre,
+                monto: total, nota: s.nota || null, items: s.items.length > 1 ? s.items : null,
+              });
+            }
+            filaNombre = fila.nombre; filaMonto = Number(fila.monto) || 0;
+          });
+        } catch (e) {
+          if (!(e instanceof SinGuardar)) throw e;
+          // No se guardó: no se dice "cargado", y la compra en curso queda como estaba para poder tocar la fila de nuevo
+          await tg("answerCallbackQuery", { callback_query_id: q.id, text: "⚠️ No se guardó. Tocá la fila de nuevo.", show_alert: true });
+          await tg("sendMessage", { chat_id: chat, text: AVISO_SIN_GUARDAR });
+          return new Response("ok");
+        }
+        if (filaFalta) {
           await tg("answerCallbackQuery", { callback_query_id: q.id, text: "Esa fila ya no existe, probá de nuevo" });
           return new Response("ok");
         }
-        fila.monto = (Number(fila.monto) || 0) + total;
-        if (!m.movimientos) m.movimientos = [];
-        const movId = uidBot("tgm");
-        m.movimientos.push({
-          id: movId, fecha: isoHoy(), categoria: s.catElegida, filaId: fila.id, fila: fila.nombre,
-          monto: total, nota: s.nota || null, items: s.items.length > 1 ? s.items : null,
-        });
-        await writeState(proyectoId, st.data, st.rev);
         const cat = CAT_MAP[s.catElegida];
         await tg("editMessageText", {
           chat_id: chat, message_id: mid, parse_mode: "HTML",
-          text: `✅ Sumado <b>${money(total)}</b> a <b>${fila.nombre}</b> (${cat.icon} ${cat.label})\nFila total ahora: <b>${money(fila.monto)}</b>\n\n📝 ¿Nota? mandá /nota · 📜 /historial`,
+          text: `✅ Sumado <b>${money(total)}</b> a <b>${filaNombre}</b> (${cat.icon} ${cat.label})\nFila total ahora: <b>${money(filaMonto)}</b>\n\n📝 ¿Nota? mandá /nota · 📜 /historial`,
         });
         await tg("answerCallbackQuery", { callback_query_id: q.id, text: "¡Cargado!" });
         await setSesion(chat, { ...sesionVacia(), ultimoGasto: { mes: key, movId } });
@@ -454,21 +489,29 @@ Deno.serve(async (req) => {
         return new Response("ok");
       }
       const total = totalCarrito(s);
-      const st = await readState(proyectoId);
       const key = mesActualKey();
-      if (!st.data.meses) st.data.meses = {};
-      if (!st.data.meses[key]) st.data.meses[key] = { ingresos: [], gastos: [] };
-      const m = st.data.meses[key];
       const gid = uidBot("tg");
-      const filaObj = { id: gid, categoria: s.catElegida, nombre, monto: total };
-      m.gastos.push(filaObj);
-      if (!m.movimientos) m.movimientos = [];
       const movId = uidBot("tgm");
-      m.movimientos.push({
-        id: movId, fecha: isoHoy(), categoria: s.catElegida, filaId: gid, fila: nombre,
-        monto: total, nota: s.nota || null, items: s.items.length > 1 ? s.items : null,
-      });
-      await writeState(proyectoId, st.data, st.rev);
+      try {
+        await mutarProyecto(proyectoId, (data) => {
+          if (!data.meses) data.meses = {};
+          if (!data.meses[key]) data.meses[key] = { ingresos: [], gastos: [] };
+          const m = data.meses[key];
+          if (!m.gastos) m.gastos = [];
+          if (!m.movimientos) m.movimientos = [];
+          if (m.movimientos.some((x: any) => x.id === movId)) return;   // por si un reintento ya lo había alcanzado a guardar
+          m.gastos.push({ id: gid, categoria: s.catElegida, nombre, monto: total });
+          m.movimientos.push({
+            id: movId, fecha: isoHoy(), categoria: s.catElegida, filaId: gid, fila: nombre,
+            monto: total, nota: s.nota || null, items: s.items.length > 1 ? s.items : null,
+          });
+        });
+      } catch (e) {
+        if (!(e instanceof SinGuardar)) throw e;
+        // La sesión queda esperando el nombre: con mandarlo de nuevo se reintenta
+        await tg("sendMessage", { chat_id: chat, text: AVISO_SIN_GUARDAR + "\nMandame de nuevo el nombre de la fila para reintentar." });
+        return new Response("ok");
+      }
       const cat = CAT_MAP[s.catElegida];
       await tg("sendMessage", {
         chat_id: chat, parse_mode: "HTML",
@@ -480,10 +523,19 @@ Deno.serve(async (req) => {
 
     // --- esperando la nota de un gasto ya cargado (/nota) ---
     if (s.await === "notaGasto") {
-      const st = await readState(proyectoId);
       const ug = s.ultimoGasto!;
-      const mv = (st.data.meses?.[ug.mes]?.movimientos || []).find((x: any) => x.id === ug.movId);
-      if (mv) { mv.nota = text; await writeState(proyectoId, st.data, st.rev); }
+      try {
+        await mutarProyecto(proyectoId, (data) => {
+          const mv = (data.meses?.[ug.mes]?.movimientos || []).find((x: any) => x.id === ug.movId);
+          if (!mv) return false;
+          mv.nota = text;
+        });
+      } catch (e) {
+        if (!(e instanceof SinGuardar)) throw e;
+        // La sesión sigue esperando la nota: con mandarla de nuevo se reintenta
+        await tg("sendMessage", { chat_id: chat, text: "⚠️ No se guardó la nota (hay mucha actividad en la cuenta). Mandámela de nuevo." });
+        return new Response("ok");
+      }
       s.await = null; await setSesion(chat, s);
       await tg("sendMessage", { chat_id: chat, parse_mode: "HTML", text: `📝 Nota agregada: <b>${text}</b>` });
       return new Response("ok");
